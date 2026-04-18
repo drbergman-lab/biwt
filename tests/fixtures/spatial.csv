@@ -1,0 +1,8 @@
+x,y,type
+100,200,T_cell
+150,250,T_cell
+-100,50,Tumor
+-150,-50,Tumor
+50,-200,Tumor
+200,-100,Macrophage
+-200,100,Macrophage

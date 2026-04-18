@@ -1,0 +1,71 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "biwt"
+version = "0.1.0"
+description = "BioInformatics WalkThrough: import single-cell data and generate agent-based model initial conditions"
+authors = [
+    { name = "Daniel Bergman", email = "dbergman1@som.umaryland.edu" },
+    { name = "Jeanette Johnson", email = "jjohn450@jhmi.edu" },
+    { name = "Randy Heiland", email = "heiland@iu.edu" },
+    { name = "Paul Macklin", email = "macklinp@iu.edu" },
+    { name = "Marwa Naji", email = "mnaji2@jh.edu"}
+]
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "BSD-3-Clause" }
+keywords = [
+    "PhysiCell",
+    "bioinformatics",
+    "single-cell",
+    "initial conditions",
+    "agent-based modeling",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: BSD License",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
+
+# Minimal hard dependencies — deliberately lean.
+# Optional data formats and GUI are declared below.
+dependencies = [
+    "numpy>=1.22",
+    "pandas>=1.4",
+]
+
+[project.optional-dependencies]
+# pip install biwt[anndata]  — enables .h5ad import
+anndata = ["anndata>=0.9"]
+
+# pip install biwt[seurat]   — enables .rds (Seurat / SingleCellExperiment) import
+seurat = ["anndata>=0.9", "anndata2ri>=1.1", "rpy2>=3.5"]
+
+# pip install biwt[gui]      — enables biwt.gui (PyQt5 walkthrough UI)
+gui = ["PyQt5>=5.15", "matplotlib>=3.5"]
+
+# pip install biwt[all]      — everything
+all = ["biwt[anndata,seurat,gui]"]
+
+# pip install biwt[dev]      — development / testing extras
+dev = ["pytest>=7", "pytest-qt", "biwt[anndata,gui]"]
+# TODO: add a CI job (or optional test marker) that installs biwt[seurat] and
+#       runs R-dependent tests once a strategy for provisioning R on CI is decided.
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+# Include any non-Python assets inside the package (e.g. default XML templates)
+"biwt.core.parameters" = ["*.xml", "*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v"
