@@ -155,9 +155,12 @@ def classify_domain_mismatch(
     None
         No significant mismatch.
     """
+    # Use a small tolerance (1e-6 µm ≈ sub-nanometer) to absorb floating-point
+    # noise from min/max computations on coordinate arrays.
+    tol = 1e-6
     fits_inside = (
-        data.xmin >= preferred.xmin and data.xmax <= preferred.xmax
-        and data.ymin >= preferred.ymin and data.ymax <= preferred.ymax
+        data.xmin >= preferred.xmin - tol and data.xmax <= preferred.xmax + tol
+        and data.ymin >= preferred.ymin - tol and data.ymax <= preferred.ymax + tol
     )
     if not fits_inside:
         return "outside"

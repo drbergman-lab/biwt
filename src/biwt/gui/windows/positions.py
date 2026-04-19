@@ -244,7 +244,7 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
         dlg = DomainEditorDialog(
             self, data_d, s.preferred_domain,
             context_message=msg,
-            initial_domain=s.user_domain,  # show prior values if revisiting
+            initial_domain=s.effective_domain,  # always pre-populate with current active domain
             host_name=host_name,
         )
         if dlg.exec_() == QDialog.Accepted:
@@ -2091,7 +2091,7 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
         dlg = DomainEditorDialog(
             self, data_d, s.preferred_domain,
             context_message="",
-            initial_domain=s.user_domain,  # show prior values if already set
+            initial_domain=s.effective_domain,  # always pre-populate with current active domain
             host_name=s.biwt_input.host_name,
         )
         if dlg.exec_() == QDialog.Accepted:
