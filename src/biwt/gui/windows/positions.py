@@ -409,8 +409,7 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
             QPushButton::checked { background-color: black; }
         """
 
-        icon_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..", "..",
-                                "..", "bin", "icon")
+        icon_dir = os.path.join(os.path.dirname(__file__), "..", "icons")
 
         hbox = QHBoxLayout()
         hbox.setContentsMargins(0, 0, 0, 0)
@@ -2149,12 +2148,14 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
         # Domain area changed → confluence-based cell counts are stale.
         self.walkthrough.session.cell_counts_confirmed = False
 
-        self.preview_patch = None
-        self.format_axis()
-        self.canvas.update()
-        self.canvas.draw()
+        # Replot all previously placed cells (restores visual state and legend);
+        # also re-enables checkboxes for any cell types that have no placed cells.
+        self._replot_all_after_undo()
         self._recompute_scatter_sizes()
-        self.sync_par_area()
+        # Restore Continue button if all cell types were already placed.
+        if all(not cb.isEnabled() for cb in self.checkbox_dict.values()):
+            self.continue_to_write_button.setEnabled(True)
+        self.canvas.update()
         self.canvas.draw()
 
     def _check_out_of_bounds_cells(self, new_domain) -> dict[str, int] | None:
@@ -2206,19 +2207,19 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
             for ct, count in sorted(out_of_bounds.items())
         )
         msg = (
-            f"\u26a0 Domain change orphans cells!\n\n"
+            f"The new domain excludes some placed cells:\n\n"
             f"{summary}\n\n"
-            f"These cells will spawn outside the simulation domain.\n"
-            f"Either undo these cell types or adjust the domain to encompass them.\n"
+            f"These cells would initialize outside the simulation domain.\n"
+            f"You can clear all placed cells now, or keep them as-is."
         )
 
-        reply = QMessageBox.warning(
-            self, "Out-of-Bounds Cells", msg,
-            QMessageBox.Ok | QMessageBox.Cancel,
-            QMessageBox.Cancel
-        )
+        box = QMessageBox(QMessageBox.Warning, "Out-of-Bounds Cells", msg, parent=self)
+        clear_btn = box.addButton("Clear All Placed Cells", QMessageBox.AcceptRole)
+        keep_btn  = box.addButton("Keep Placed Cells",      QMessageBox.RejectRole)
+        box.setDefaultButton(keep_btn)
+        box.exec_()
 
-        return reply == QMessageBox.Ok
+        return box.clickedButton() is clear_btn
 
     # ------------------------------------------------------------------
     # circles() helper — scatter with radii in data units

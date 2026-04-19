@@ -65,6 +65,7 @@ where = ["src"]
 [tool.setuptools.package-data]
 # Include any non-Python assets inside the package (e.g. default XML templates)
 "biwt.core.parameters" = ["*.xml", "*.json"]
+"biwt.gui" = ["icons/*.svg", "icons/*.png"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
