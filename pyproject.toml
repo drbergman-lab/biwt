@@ -49,7 +49,7 @@ anndata = ["anndata>=0.9"]
 seurat = ["anndata>=0.9", "anndata2ri>=1.1", "rpy2>=3.5"]
 
 # pip install biwt[gui]      — enables biwt.gui (PyQt5 walkthrough UI)
-gui = ["PyQt5>=5.15", "matplotlib>=3.5"]
+gui = ["PyQt5>=5.15", "matplotlib>=3.5", "tomli>=1.2; python_version < '3.11'"]
 
 # pip install biwt[all]      — everything
 all = ["biwt[anndata,seurat,gui]"]
@@ -64,7 +64,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 # Include any non-Python assets inside the package (e.g. default XML templates)
-"biwt.core.parameters" = ["*.xml", "*.json"]
+"biwt.core.parameters" = ["*.xml", "*.json", "*.toml"]
 "biwt.gui" = ["icons/*.svg", "icons/*.png"]
 
 [tool.pytest.ini_options]

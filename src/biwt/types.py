@@ -95,6 +95,9 @@ class BiwtInput:
     host_cell_type_names: list = field(default_factory=list)
     domain_accepted: bool = False   # True → skip auto domain-check at positions step
     host_name: str = "Host"         # used in domain editor UI ("Use <host_name> Domain")
+    extra_cell_template_paths: list = field(default_factory=list)
+    # Paths to .toml files, each mapping template_name = """<phenotype>...</phenotype>""".
+    # Loaded at the cell-parameters step; templates appear alongside built-ins in dropdowns.
 
 
 # ---------------------------------------------------------------------------

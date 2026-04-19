@@ -49,6 +49,18 @@ BIWT must be a seamless, pip-installable replacement for the legacy BIWT tab emb
 
 ---
 
+## Future Architecture: Framework-Specific Packages
+
+The long-term plan is to split `biwt` into:
+
+- **`biwt`** (this package) — framework-agnostic core: data import, domain inference, cell-type editing, coordinate placement, the Qt walkthrough UI skeleton.
+- **`biwt-physicell`** (future) — PhysiCell-specific layer: the 29 cell-parameter templates, PhysiCell XML assembly, `BiwtResult.cell_definitions_xml` population.
+- **`biwt-<framework>`** (future) — analogous packages for other ABM frameworks.
+
+The `BiwtInput.extra_cell_template_paths` mechanism (TOML files of `name = """<phenotype>...</phenotype>"""`) is the interim bridge: hosts or users can supply their own template databases without waiting for a `biwt-physicell` package. When `biwt-physicell` is released, the built-in templates will move there and the base `biwt` package will ship with no framework-coupled content.
+
+---
+
 ## F1: Data Import
 
 **One-line description:** Load single-cell data from common bioinformatics file formats.
