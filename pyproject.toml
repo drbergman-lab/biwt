@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "biwt"
-version = "0.1.0"
+version = "0.2.0"
 description = "BioInformatics WalkThrough: import single-cell data and generate agent-based model initial conditions"
 authors = [
     { name = "Daniel Bergman", email = "dbergman1@som.umaryland.edu" },

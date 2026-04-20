@@ -217,6 +217,37 @@ def _build_mismatch_message(
 
 
 # ---------------------------------------------------------------------------
+# XML helpers
+# ---------------------------------------------------------------------------
+
+def _patch_domain_xml(root, domain: "DomainSpec") -> None:
+    """Overwrite the <domain> child of *root* with values from *domain*."""
+    domain_elem = root.find("domain")
+    if domain_elem is None:
+        return
+    _set_text(domain_elem, "x_min", domain.xmin)
+    _set_text(domain_elem, "x_max", domain.xmax)
+    _set_text(domain_elem, "y_min", domain.ymin)
+    _set_text(domain_elem, "y_max", domain.ymax)
+    _set_text(domain_elem, "z_min", domain.zmin)
+    _set_text(domain_elem, "z_max", domain.zmax)
+    use_2d = domain_elem.find("use_2D")
+    dz_elem = domain_elem.find("dz")
+    if use_2d is not None and dz_elem is not None:
+        try:
+            dz = float(dz_elem.text)
+        except (TypeError, ValueError):
+            dz = 20.0
+        use_2d.text = "true" if (domain.zmax - domain.zmin) <= dz else "false"
+
+
+def _set_text(parent, tag: str, value) -> None:
+    el = parent.find(tag)
+    if el is not None:
+        el.text = str(value)
+
+
+# ---------------------------------------------------------------------------
 # Session — plain-data accumulator (no Qt)
 # ---------------------------------------------------------------------------
 
@@ -838,6 +869,7 @@ class BioinformaticsWalkthrough(QWidget):
             for key, xml_str in xml_defaults.items():
                 wrapped = f"<{key}>{xml_str.strip()}</{key}>"
                 root.append(ET.fromstring(wrapped))
+            _patch_domain_xml(root, s.effective_domain)
             cell_defs = ET.SubElement(root, "cell_definitions")
             for template_elem in s.cell_definitions_registry.values():
                 cell_defs.append(copy.deepcopy(template_elem))
@@ -853,7 +885,6 @@ class BioinformaticsWalkthrough(QWidget):
         )
 
         self.on_complete(result)
-        self.close()
 
 
 # ---------------------------------------------------------------------------
@@ -864,7 +895,10 @@ def create_biwt_widget(
     biwt_input: BiwtInput,
     on_complete: Optional[Callable[[Optional[BiwtResult]], None]] = None,
 ) -> BioinformaticsWalkthrough:
-    """Create and return a ready-to-show BIWT walkthrough popup.
+    """Create and return a BIWT walkthrough widget, suitable for embedding or use as a popup.
+
+    The widget does not close itself on completion — the host is responsible
+    for closing or resetting it if desired.
 
     Parameters
     ----------

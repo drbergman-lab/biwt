@@ -81,6 +81,15 @@ BIWT integrates with PhysiCell Studio as an optional installed dependency:
 - **Test classes**: `Test<Feature>` (e.g. `TestStepSequencing`)
 - **Test files**: `test_<module>.py`
 
+## Publishing a Release
+
+Pushing a version tag triggers CI (`.github/workflows/publish.yml`) to build and publish to PyPI automatically. No manual build or upload needed:
+
+```bash
+git tag v<version>
+git push origin v<version>
+```
+
 ## Branching Rules
 - Never modify `main` or `development` directly.
 - Default base branch is `development` unless the user specifies another base.

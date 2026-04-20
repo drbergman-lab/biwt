@@ -216,6 +216,7 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
         vbox.addLayout(hbox_write)
 
         self.setLayout(vbox)
+        self._plotter_changed()  # sync par area + enable plot button now that canvas exists
         self._maybe_show_domain_editor()
 
     # ------------------------------------------------------------------
@@ -336,7 +337,7 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
         self.checkbox_dict: dict[str, QCheckBox_custom] = {}
         for ct in s.cell_types_list_final:
             cb = QCheckBox_custom(ct)
-            cb.setChecked(False)
+            cb.setChecked(s.use_spatial_data)  # pre-select all when spatial plotter is default
             cb.setEnabled(True)
             vbox_checks.addWidget(cb)
             self.cell_type_button_group.addButton(cb)
@@ -528,7 +529,7 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
                 cb.setChecked(True)
 
     def is_any_cell_type_checked(self) -> bool:
-        return self.cell_type_button_group.checkedButton() is not None
+        return any(cb.isChecked() for cb in self.checkbox_dict.values())
 
     def _cell_type_cb(self) -> None:
         if self.is_any_cell_type_checked():

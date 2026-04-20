@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import copy
 import os
 import time
 from pathlib import Path
@@ -126,33 +125,6 @@ class WritePositionsWindow(BiwinformaticsWalkthroughWindow):
                 for ct, coords in s.coords_by_type.items():
                     for pos in coords:
                         f.write(f"{pos[0]},{pos[1]},{pos[2]},{ct}\n")
-
-        # Also write XML cell definitions to PhysiCell_new.xml
-        self._write_xml_cell_definitions()
-
-    def _write_xml_cell_definitions(self) -> None:
-        """Build cell-definitions XML and store in session (no disk write).
-
-        The host application (e.g. Studio) receives the XML via
-        ``BiwtResult.cell_definitions_xml`` and decides where / whether to
-        save it.
-        """
-        import xml.etree.ElementTree as ET
-        from biwt.core.parameters.xml_defaults import xml_defaults
-
-        root = ET.Element("PhysiCell_settings", version="devel-version")
-        for key, xml_str in xml_defaults.items():
-            wrapped = f"<{key}>{xml_str.strip()}</{key}>"
-            root.append(ET.fromstring(wrapped))
-
-        cell_defs = ET.SubElement(root, "cell_definitions")
-        s = self.walkthrough.session
-        for template_elem in s.cell_definitions_registry.values():
-            cell_defs.append(copy.deepcopy(template_elem))
-
-        s.cell_definitions_xml = ET.tostring(
-            root, encoding="unicode", xml_declaration=False
-        )
 
     # ------------------------------------------------------------------
 
