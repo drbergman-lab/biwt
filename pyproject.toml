@@ -46,7 +46,7 @@ dependencies = [
 anndata = ["anndata>=0.9"]
 
 # pip install biwt[seurat]   — enables .rds (Seurat / SingleCellExperiment) import
-seurat = ["anndata>=0.9", "anndata2ri>=1.1", "rpy2>=3.5"]
+seurat = ["anndata>=0.9", "anndata2ri>=1.1,<2", "rpy2>=3.5"]
 
 # pip install biwt[gui]      — enables biwt.gui (PyQt5 walkthrough UI)
 gui = ["PyQt5>=5.15", "matplotlib>=3.5", "tomli>=1.2; python_version < '3.11'"]
