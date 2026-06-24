@@ -678,16 +678,9 @@ class BioinformaticsWalkthrough(QWidget):
         # Reset session so stale state from a previous run doesn't survive reimport.
         self.session = WalkthroughSession(biwt_input=self.session.biwt_input)
         self.session.data = bdata
-                    
-        spatial = None
-        for key in ["spatial", "X_spatial"]:
-            if key in bdata.obsm:
-                spatial = bdata.obsm[key]
-                break
-        has_spatial = spatial is not None
-
-        self.session.spatial_data = spatial
-        self.session.use_spatial_data = None if has_spatial else False
+        # If the input has no spatial coordinates, force non-spatial mode so that
+        # downstream Qt widgets never receive a None for a boolean.
+        self.session.use_spatial_data = None if bdata.has_spatial else False
 
 
         # Infer domain — preferred always wins; otherwise use data metadata/range.
