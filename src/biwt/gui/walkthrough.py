@@ -678,6 +678,10 @@ class BioinformaticsWalkthrough(QWidget):
         # Reset session so stale state from a previous run doesn't survive reimport.
         self.session = WalkthroughSession(biwt_input=self.session.biwt_input)
         self.session.data = bdata
+        # If the input has no spatial coordinates, force non-spatial mode so that
+        # downstream Qt widgets never receive a None for a boolean.
+        self.session.use_spatial_data = None if bdata.has_spatial else False
+
 
         # Infer domain — preferred always wins; otherwise use data metadata/range.
         # microns_per_pixel is non-None only for platforms where we know the
@@ -738,6 +742,13 @@ class BioinformaticsWalkthrough(QWidget):
             return
         s = self.session
         for step in _STEP_ORDER[idx + 1:]:
+            if (
+                step == "SpatialQuery"
+                and s.data is not None
+                and not s.data.has_spatial
+            ):
+                continue
+
             for field_name, default in _STEP_FIELDS.get(step, []):
                 setattr(s, field_name, _copy.copy(default))
 
