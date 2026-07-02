@@ -14,6 +14,10 @@ pip install -e ".[dev]"             # + test dependencies
 ## Quick Start
 
 ```python
+import sys
+from PyQt5.QtWidgets import QApplication
+
+from biwt.gui.theme import apply_light_palette
 from biwt.gui.walkthrough import create_biwt_widget
 from biwt.types import BiwtInput, DomainSpec
 
@@ -24,8 +28,13 @@ def on_complete(result):
     # result.coordinates is a DataFrame with columns: x, y, z, type
     result.to_csv("config/cells.csv")
 
+app = QApplication(sys.argv)
+apply_light_palette(app) 
+
 widget = create_biwt_widget(biwt_input, on_complete=on_complete)
 widget.show()
+
+sys.exit(app.exec_())
 ```
 
 ## Running Tests
