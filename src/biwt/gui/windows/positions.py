@@ -926,6 +926,10 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
         self.ax0.set_ylabel("Y (\u03bcm)")
         if self.plot_is_2d:
             self.ax0.set_aspect(1.0)
+            # Force immediate recalculation of the axes' pixel bounding box so
+            # that transData is accurate for callers (e.g. _recompute_scatter_sizes)
+            # that run before the next canvas.draw().
+            self.ax0.apply_aspect()
         else:
             self.ax0.set_zlim(self.plot_zmin, self.plot_zmax)
             self.ax0.set_box_aspect([1, 1, 1])
