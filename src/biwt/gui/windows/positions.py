@@ -573,6 +573,11 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
         self.ax0.cla()
         self.preview_patch = None
         self.format_axis()
+        # Must happen before sync_par_area() below, since sync_par_area()
+        # invokes the current plotter (e.g. spatial_plotter), which reads
+        # self.scatter_sizes / self.cell_type_micron2_area_dict to size its
+        # preview markers.
+        self._recompute_scatter_sizes()
         self.legend_artists = []
         self.legend_labels = []
 
@@ -2155,8 +2160,9 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
 
         # Replot all previously placed cells (restores visual state and legend);
         # also re-enables checkboxes for any cell types that have no placed cells.
+        # (This also recomputes scatter marker sizes for the new domain, before
+        # sync_par_area() redraws the current plotter's preview.)
         self._replot_all_after_undo()
-        self._recompute_scatter_sizes()
         # Restore Continue button if all cell types were already placed.
         if all(not cb.isEnabled() for cb in self.checkbox_dict.values()):
             self.continue_to_write_button.setEnabled(True)

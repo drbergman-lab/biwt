@@ -38,6 +38,37 @@ Regression test added in `tests/test_positions_plot.py`, exercising
 (no `QApplication` needed, since the method only touches `self.ax0` and
 the `plot_x/y/zmin/max` bounds).
 
+### Follow-up: spot preview markers still stale after the above fix
+The `apply_aspect()` fix corrected `_recompute_scatter_sizes()`'s own math,
+but user testing (loading `tests/fixtures/spatial.csv`, opening "Domain
+Settings…", switching to the data domain) showed the spatial-plotter's
+gray "spot" preview markers still didn't resize until clicking "Select
+Remaining" or plotting cells.
+
+Root cause: `_apply_domain_change_and_redraw` called
+`self._replot_all_after_undo()` *before* `self._recompute_scatter_sizes()`.
+But `_replot_all_after_undo()` ends by calling `self.sync_par_area()`,
+which re-invokes `self.current_plotter` — for the spatial plotter, that's
+`spatial_plotter()`, which reads `self.scatter_sizes` to size the preview
+scatter it (re)creates. So the preview got redrawn using `scatter_sizes`
+from *before* the domain change, and `_recompute_scatter_sizes()` ran too
+late to matter — it updated `self.scatter_sizes` for next time, but never
+touched the already-created scatter artist. Clicking "Select Remaining"
+called `sync_par_area()` again, by which point `scatter_sizes` was
+already fresh, so it looked "fixed" once you interacted with the window.
+
+**Fix:** moved `self._recompute_scatter_sizes()` into
+`_replot_all_after_undo()`, right after `format_axis()` and before the
+per-cell-type replot loop / `sync_par_area()` call, and removed the
+now-redundant standalone call from `_apply_domain_change_and_redraw`.
+This guarantees scatter/marker sizes are always current *before* anything
+that might redraw a size-dependent preview.
+
+Verified the regression test (`TestReplotOrdering` in
+`tests/test_positions_plot.py`, asserting `_recompute_scatter_sizes` is
+called before `sync_par_area` inside `_replot_all_after_undo`) fails
+against the pre-fix code and passes against the fix.
+
 ---
 
 ## 2026-03-29: Domain editor dialog, CSV column rename, documentation

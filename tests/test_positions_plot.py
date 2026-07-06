@@ -5,6 +5,8 @@ QApplication needed) since it only touches self.ax0 and the plot_* bounds.
 """
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import matplotlib
 matplotlib.use("Agg")
 from matplotlib.figure import Figure
@@ -58,3 +60,26 @@ class TestFormatAxisAspect:
 
         assert wide_scale[0] == pytest.approx(wide_scale[1])
         assert wide_scale[0] != pytest.approx(square_scale[0])
+
+
+class TestReplotOrdering:
+    def test_scatter_sizes_recomputed_before_sync_par_area(self):
+        """sync_par_area() re-invokes the current plotter (e.g. spatial_plotter),
+        which reads self.scatter_sizes / self.cell_type_micron2_area_dict to size
+        its preview markers. _recompute_scatter_sizes() must run first, or the
+        preview gets created with stale, pre-domain-change sizes."""
+        calls: list[str] = []
+        d = SimpleNamespace(
+            walkthrough=SimpleNamespace(session=SimpleNamespace(coords_by_type={})),
+            ax0=SimpleNamespace(cla=lambda: calls.append("cla")),
+            preview_patch=None,
+            format_axis=lambda: calls.append("format_axis"),
+            _recompute_scatter_sizes=lambda: calls.append("recompute_scatter_sizes"),
+            update_legend_window=lambda: calls.append("update_legend_window"),
+            sync_par_area=lambda: calls.append("sync_par_area"),
+            continue_to_write_button=SimpleNamespace(setEnabled=lambda v: None),
+        )
+
+        PositionsWindow._replot_all_after_undo(d)
+
+        assert calls.index("recompute_scatter_sizes") < calls.index("sync_par_area")
