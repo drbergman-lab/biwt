@@ -103,6 +103,7 @@ tests/
 - [x] Overwrite/Append/Browse/Cancel dialog for CSV output
 - [x] Append handles extra columns in existing CSV
 - [x] Session reset on reimport
+- [x] `tomli` in core dependencies (fixes import crash on Python 3.9/3.10)
 - [x] Step predicate extraction for testability
 - [x] 57 passing tests
 

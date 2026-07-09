@@ -91,11 +91,11 @@ git push origin v<version>
 ```
 
 ## Branching Rules
-- Never modify `main` or `development` directly.
-- Default base branch is `development` unless the user specifies another base.
+- Never modify `main` directly.
+- The base branch is always `main` unless the user specifies another base.
 - For any task, create a feature branch:
 ```
-git checkout -b feature/<desc> <base-branch>
+git checkout -b feature/<desc> main
 ```
 
 ## Definition of Done
