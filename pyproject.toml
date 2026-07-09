@@ -40,6 +40,9 @@ classifiers = [
 dependencies = [
     "numpy>=1.22",
     "pandas>=1.4",
+    # cell_templates.py loads the built-in TOML at import time; the stdlib
+    # tomllib is only available on 3.11+, so 3.9/3.10 need the tomli backport.
+    "tomli>=1.2; python_version < '3.11'",
 ]
 
 [project.optional-dependencies]
@@ -50,7 +53,7 @@ anndata = ["anndata>=0.9"]
 seurat = ["anndata>=0.9", "anndata2ri>=1.1,<2", "rpy2>=3.5"]
 
 # pip install biwt[gui]      — enables biwt.gui (PyQt5 walkthrough UI)
-gui = ["PyQt5>=5.15", "matplotlib>=3.5", "tomli>=1.2; python_version < '3.11'"]
+gui = ["PyQt5>=5.15", "matplotlib>=3.5"]
 
 # pip install biwt[all]      — everything
 all = ["biwt[anndata,seurat,gui]"]
