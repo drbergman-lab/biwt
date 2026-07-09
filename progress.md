@@ -4,6 +4,27 @@ Session-level notes and decisions. Unlike the PRD (specification) and README (co
 
 ---
 
+## 2026-07-09: Fix `tomli` dependency classification (v0.3.2)
+
+### Bug: `ModuleNotFoundError` on import under Python 3.9/3.10
+`core/parameters/cell_templates.py` parses the built-in `cell_templates.toml`
+at *import time* (`CELL_TEMPLATES = load_templates_from_file(...)`). On Python
+< 3.11 there is no stdlib `tomllib`, so it falls back to the `tomli` backport.
+But `tomli` was declared only in the `[gui]` optional extra — even though the
+code that needs it lives in `biwt.core`, not the GUI.
+
+As a result, any non-`gui` install path (`pip install biwt`, `biwt[anndata]`,
+`biwt[seurat]`) crashed on import under 3.9/3.10. Only combinations that
+happened to pull in `gui` (e.g. `biwt[all]`) worked. This surfaced when
+launching in PhysiCell Studio on a Python 3.9 venv.
+
+**Fix:** moved `tomli>=1.2; python_version < '3.11'` from the `[gui]` extra
+into the base `dependencies`. The environment marker means 3.11+ still skips
+it (stdlib `tomllib` is used there). Version bumped to 0.3.2.
+
+Also updated `CLAUDE.md` Branching Rules: base branch is `main` (there is no
+`development` branch in this repo).
+
 ## 2026-07-03: Fix stale marker sizes after domain change
 
 ### Bug: spot/cell markers wrong size after switching domain settings
