@@ -78,6 +78,8 @@ class TestDataLoader:
         assert all(c.endswith("_probability") for c in data.probability_columns)
 
     def test_load_seurat(self):
+        pytest.importorskip("rpy2")
+        pytest.importorskip("anndata2ri")
         data = data_loader.load(SEURAT_RDS)
         assert data.n_cells == 1264
         assert not data.has_spatial
