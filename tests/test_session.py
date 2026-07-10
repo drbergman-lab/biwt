@@ -593,6 +593,7 @@ class TestStepSequencing:
         s.cell_counts_confirmed = True
         s.positions_set = True
         s.parameters_loaded = True
+        s.parameter_generation_done = True
         assert _next_step(s) is None
 
 

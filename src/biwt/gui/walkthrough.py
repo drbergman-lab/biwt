@@ -317,6 +317,9 @@ class WalkthroughSession:
     cell_definitions_registry: dict = field(default_factory=dict)
     parameters_loaded: bool = False
 
+    # ---- after generate-cell-parameters step ---------------------------------
+    parameter_generation_done: bool = False
+    
     # ---- legacy CellTypeConfig (new-style, not yet fully wired) ----------
     cell_type_config: CellTypeConfig = field(default_factory=CellTypeConfig)
 
@@ -899,6 +902,8 @@ class BioinformaticsWalkthrough(QWidget):
             s.cell_definitions_xml = ET.tostring(
                 root, encoding="unicode", xml_declaration=False
             )
+            with open("xml_debug/cell_definitions_debug.xml", "w") as f:
+                f.write(s.cell_definitions_xml)
 
         result = BiwtResult(
             coordinates=coords_df,
