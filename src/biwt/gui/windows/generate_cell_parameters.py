@@ -119,7 +119,6 @@ def _vary_element(elem: ET.Element, sigma: float) -> None:
 
     # Keep disabled parameters unchanged.
     if value <= 0:
-        print(elem.tag)
         return
 
     new_value = np.random.lognormal(
