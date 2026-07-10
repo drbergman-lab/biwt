@@ -6,6 +6,15 @@ Each test builds a WalkthroughSession, drives it through a sequence of
 session-method calls that mirror what the step windows do, and asserts
 on the resulting state — especially the coordinates DataFrame.
 
+Fixtures list:
+- nonspatial.csv
+- spatial.csv
+- spot_deconv.csv
+- test_SeuratObj.rds 
+    Seurat object version 4.1.3
+- test_AnnData.h5ad
+    AnnData object encoding version 0.1.0
+
 Run with:
     cd biwt && pytest tests/ -v
 """
@@ -32,6 +41,8 @@ FIXTURES = Path(__file__).parent / "fixtures"
 SPATIAL_CSV     = str(FIXTURES / "spatial.csv")
 NONSPATIAL_CSV  = str(FIXTURES / "nonspatial.csv")
 SPOT_DECONV_CSV = str(FIXTURES / "spot_deconv.csv")
+SEURAT_RDS = str(FIXTURES / "test_SeuratObj.rds")
+ANN_DATA = str(FIXTURES / "test_AnnData.h5ad")
 
 DOMAIN = DomainSpec(xmin=-500, xmax=500, ymin=-500, ymax=500)
 
@@ -65,6 +76,16 @@ class TestDataLoader:
         assert data.has_spatial
         assert len(data.probability_columns) == 3
         assert all(c.endswith("_probability") for c in data.probability_columns)
+
+    def test_load_seurat(self):
+        data = data_loader.load(SEURAT_RDS)
+        assert data.n_cells == 1264
+        assert not data.has_spatial
+
+    def test_load_ann_data(self):
+        data = data_loader.load(ANN_DATA)
+        assert data.n_cells == 3180
+        assert not data.has_spatial
 
 
 # ---------------------------------------------------------------------------
