@@ -28,3 +28,40 @@ jobs:
 
       - name: Run tests
         run: PYTHONPATH=src python -m pytest tests/ -v
+
+  # Separate job that provisions a full R stack from conda so the Seurat /
+  # .rds tests actually run (pip cannot install R). The matrix job above skips
+  # them because rpy2/R are absent.
+  seurat:
+    name: Seurat / .rds import (R via conda)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -el {0}   # login shell so the conda env stays activated
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up conda R stack (prebuilt binaries)
+        uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-name: biwt-seurat
+          # r-seurat pulls r-seuratobject; bioconductor-singlecellexperiment is
+          # needed by anndata2ri's SCE -> AnnData conversion.
+          create-args: >-
+            -c conda-forge -c bioconda
+            python=3.12
+            r-base
+            rpy2
+            r-seurat
+            bioconductor-singlecellexperiment
+
+      - name: Point rpy2 at the conda R (avoid any system R on the runner)
+        run: echo "R_HOME=$CONDA_PREFIX/lib/R" >> "$GITHUB_ENV"
+
+      - name: Install BIWT with dev + seurat extras
+        # rpy2 is already satisfied by conda; this adds anndata2ri (<2) and the
+        # dev/gui/test deps. Do not add biwt[gui] on top of conda PyQt5.
+        run: pip install -e ".[dev,seurat]"
+
+      - name: Run tests (Seurat / .rds no longer skipped)
+        run: PYTHONPATH=src python -m pytest tests/ -v
