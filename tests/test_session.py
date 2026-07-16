@@ -10,7 +10,7 @@ Fixtures list:
 - nonspatial.csv
 - spatial.csv
 - spot_deconv.csv
-- test_SeuratObj.rds 
+- test_SeuratObj.rds
     Seurat object version 4.1.3
 - test_AnnData.h5ad
     AnnData object encoding version 0.1.0

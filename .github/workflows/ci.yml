@@ -54,7 +54,7 @@ jobs:
           # needed by anndata2ri's SCE -> AnnData conversion.
           create-args: >-
             -c conda-forge -c bioconda
-            python=3.12
+            python=${{ matrix.python-version }}
             r-base
             rpy2
             r-seurat
