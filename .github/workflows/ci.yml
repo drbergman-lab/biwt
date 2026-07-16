@@ -51,8 +51,7 @@ jobs:
         with:
           environment-name: biwt-seurat
           # r-seurat pulls r-seuratobject; bioconductor-singlecellexperiment is
-          # needed by anndata2ri's SCE -> AnnData conversion; bioconductor-spatialexperiment
-          # is needed for the SpatialExperiment .rds import tests.
+          # needed by anndata2ri's SCE -> AnnData conversion.
           create-args: >-
             -c conda-forge -c bioconda
             python=${{ matrix.python-version }}
@@ -60,7 +59,6 @@ jobs:
             rpy2
             r-seurat
             bioconductor-singlecellexperiment
-            bioconductor-spatialexperiment
 
       - name: Point rpy2 at the conda R (avoid any system R on the runner)
         run: echo "R_HOME=$CONDA_PREFIX/lib/R" >> "$GITHUB_ENV"
@@ -71,11 +69,11 @@ jobs:
         run: pip install -e ".[dev,seurat]"
 
       - name: Generate R test fixtures
-        # Builds tiny toy Seurat / SCE / SpatialExperiment objects and writes
-        # them to tests/fixtures/toy_*.rds. Regenerated on every run (gitignored,
-        # not committed) so fixtures always match whatever R/Bioconductor
+        # Builds a tiny toy Seurat object and writes it to
+        # tests/fixtures/toy_seurat.rds. Regenerated on every run (gitignored,
+        # not committed) so the fixture always matches whatever R/Bioconductor
         # versions conda resolved above, rather than drifting against a stale
-        # binary blob. Must run before pytest so the .rds import tests find them.
+        # binary blob. Must run before pytest so the .rds import test finds it.
         run: Rscript tests/fixtures/make_fixtures.R
 
       - name: Run tests (Seurat / .rds no longer skipped)
