@@ -902,6 +902,8 @@ class BioinformaticsWalkthrough(QWidget):
             s.cell_definitions_xml = ET.tostring(
                 root, encoding="unicode", xml_declaration=False
             )
+
+            # TODO: remove this xml generation once we are confident.
             with open("xml_debug/cell_definitions_debug.xml", "w") as f:
                 f.write(s.cell_definitions_xml)
 
