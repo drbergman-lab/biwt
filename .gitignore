@@ -16,3 +16,6 @@ test_biwt.py
 
 # Miscellaneous
 *.DS_Store
+
+# R test fixtures regenerated on every CI run (see tests/fixtures/make_fixtures.R)
+tests/fixtures/toy_*.rds
