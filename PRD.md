@@ -68,7 +68,7 @@ The `BiwtInput.extra_cell_template_paths` mechanism (TOML files of `name = """<p
 **Behavioral specification:**
 - When the user clicks "Import file...", a file dialog offers `.h5ad`, `.rds`, `.rda`, `.rdata`, `.csv`.
 - When a `.h5ad` file is selected, BIWT reads it via `anndata.read_h5ad`.
-- When a `.rds` / `.rda` / `.rdata` file is selected, BIWT reads it via `rpy2` + `anndata2ri`, supporting Seurat and SingleCellExperiment objects.
+- When a `.rds` / `.rda` / `.rdata` file is selected, BIWT reads it via `rpy2` + `anndata2ri`, supporting Seurat, SingleCellExperiment, and SpatialExperiment objects.
 - When a `.csv` file is selected, BIWT reads it via `pandas.read_csv`.
 - On import failure, a critical error dialog is shown with an actionable message.
 - On successful import, the previous session state is fully reset.

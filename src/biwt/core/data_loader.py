@@ -4,7 +4,7 @@ Unified single-cell data loader.
 Supported formats
 -----------------
 .h5ad          AnnData (requires biwt[anndata])
-.rds           Seurat / SingleCellExperiment via rpy2 + anndata2ri (requires biwt[seurat])
+.rds           Seurat / SingleCellExperiment / SpatialExperiment via rpy2 + anndata2ri (requires biwt[seurat])
 .rda / .rdata  R workspace files (same rpy2 requirement; loaded with base::load())
 .csv           Flat tabular; spatial coordinates inferred from column names
 
@@ -176,7 +176,11 @@ def _load_r_file(file_path: str, suffix: str) -> BiwtData:
 
         classname = tuple(robj.rclass)[0]
 
-        if classname in ("SingleCellExperiment", "SummarizedExperiment"):
+        if classname in (
+            "SingleCellExperiment",
+            "SpatialExperiment",  # SCE subclass; anndata2ri converts it via the SCE path
+            "SummarizedExperiment",
+        ):
             adata = anndata2ri.rpy2py(robj)
         elif classname == "Seurat":
             reval("library(Seurat)")
@@ -191,7 +195,8 @@ def _load_r_file(file_path: str, suffix: str) -> BiwtData:
         else:
             raise LoadError(
                 f"R object class '{classname}' is not supported. "
-                "Expected: Seurat, SingleCellExperiment, or SummarizedExperiment."
+                "Expected: Seurat, SingleCellExperiment, SpatialExperiment, "
+                "or SummarizedExperiment."
             )
     except LoadError:
         raise
