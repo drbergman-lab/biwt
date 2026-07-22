@@ -79,6 +79,7 @@ tests/
 
 - [x] Data import: .h5ad, .rds/.rda/.rdata, .csv
 - [x] Spatial coordinate detection (obsm, obs columns, Visium scale factors)
+- [x] Pixel-coordinate fallback (Visium `imagecol`→x / `imagerow`→y, row-flipped) with µm/pixel prompt in Domain Settings when scale is unknown
 - [x] CSV spatial synthesis (x/y/z obs columns → obsm["spatial"])
 - [x] Domain inference with priority chain (preferred > platform > data_range > default)
 - [x] Domain mismatch: two-tier detection (classify_domain_mismatch: "outside" / "small" / None)

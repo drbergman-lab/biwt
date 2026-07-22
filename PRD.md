@@ -82,6 +82,7 @@ The `BiwtInput.extra_cell_template_paths` mechanism (TOML files of `name = """<p
 - Missing optional dependencies (`anndata`, `rpy2`) produce an install hint, not a traceback.
 - Empty CSV files produce a `LoadError`. *(not yet implemented — see [F1 open issue])*
 - CSV files with spatial columns (x, y, z) synthesize `obsm["spatial"]` for downstream plotting.
+- Spatial coordinates are resolved from obs/CSV columns in priority order: `x`/`y`/`z` candidates first, then — as a last resort — 10x Visium pixel columns `imagecol`/`imagerow` (`resolve_obs_coord_cols`). `imagecol` maps to x and `imagerow` maps to y; because image rows increase downward, `imagerow` is flipped (`y = rowmax - imagerow`) to produce a y-up coordinate system. Such data sets `BiwtData.coords_are_pixels = True`.
 
 ---
 
@@ -106,6 +107,7 @@ The `BiwtInput.extra_cell_template_paths` mechanism (TOML files of `name = """<p
 - `BiwtInput.domain_accepted = True` allows the host to pre-accept the domain and skip the auto-check entirely.
 - A "Skip domain validation on import" checkbox on the home screen has the same effect.
 - A **"Domain Settings…" button** in the positions plot window allows the user to open the domain editor at any time without a mismatch header.
+- **Pixel coordinates with unknown scale** (`coords_are_pixels` and `microns_per_pixel is None`): the domain editor auto-opens even when the raw bounds happen to fit, and exposes a **"µm per pixel"** field. Entering a positive factor rescales the (pixel) data domain's x/y bounds into microns (`_scale_domain`) and sets the units to `micron`; the user can then fine-tune the bounds. z bounds are left at the 2-D default. When the platform already supplies a scale (e.g. Visium `scalefactors`), `microns_per_pixel` is set and the field is not shown.
 - `DomainSpec.units` defaults to `"micron"` but can be set by the host for other ABM frameworks.
 - The `auto_scale_to_domain` flag is carried forward to the positions step:
   - When True: data coordinates are scaled to fill the simulation domain (aspect ratio preserved); placement origin and size reflect the scaled bounding box centered in the domain.
@@ -123,10 +125,14 @@ The `BiwtInput.extra_cell_template_paths` mechanism (TOML files of `name = """<p
 - [x] Auto-scale checkbox stored in `session.auto_scale_to_domain`.
 - [x] Positions step respects `auto_scale_to_domain` flag (scaled vs. raw bounding box centered in domain).
 - [x] Tests cover classify_domain_mismatch, units, effective_domain override, auto_scale default, domain_accepted default.
+- [x] Pixel data with unknown scale auto-opens the domain editor and shows a "µm per pixel" field.
+- [x] `_scale_domain(d, factor)` scales x/y bounds only, tags the result `user_edited`/`micron`.
+- [x] Tests cover pixel-column detection, imagecol→x / flipped imagerow→y mapping, and `_scale_domain`.
 
 **Edge cases:**
 - Data with no spatial coordinates: no data domain to compute, no dialog.
 - Data with `microns_per_pixel` (Visium): data domain is in converted microns.
+- Data with `imagerow`/`imagecol` but no known scale (`coords_are_pixels`, `microns_per_pixel is None`): domain in pixel units; domain editor auto-opens with a µm/pixel field so the user can convert.
 - Default fallback domain (no spatial data): no dialog (source == "default").
 - Auto-scale off: spatial plotter uses raw data bounding box (width/height = data extent) centered at domain center.
 

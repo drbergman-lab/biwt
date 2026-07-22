@@ -236,17 +236,28 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
         if data_d is None or data_d.source == "default":
             s.domain_accepted = True
             return
+        pixel_unknown = self._pixel_scale_unknown(s)
         mismatch = classify_domain_mismatch(data_d, s.effective_domain)
-        if mismatch is None:
+        # Pixel data with an unknown µm scale always warrants the dialog so the
+        # user can supply a conversion factor, even if the raw bounds happen to
+        # fall inside the preferred domain.
+        if mismatch is None and not pixel_unknown:
             s.domain_accepted = True
             return
         host_name = s.biwt_input.host_name
-        msg = _build_mismatch_message(mismatch, data_d, s.effective_domain, host_name)
+        if mismatch is None:
+            msg = (
+                "The imported coordinates are in pixels with no known physical "
+                "scale. Set a µm-per-pixel factor below to convert the domain."
+            )
+        else:
+            msg = _build_mismatch_message(mismatch, data_d, s.effective_domain, host_name)
         dlg = DomainEditorDialog(
             self, data_d, s.preferred_domain,
             context_message=msg,
             initial_domain=s.effective_domain,  # always pre-populate with current active domain
             host_name=host_name,
+            pixel_scale_unknown=pixel_unknown,
         )
         if dlg.exec_() == QDialog.Accepted:
             user_domain, auto_scale = dlg.result()
@@ -256,6 +267,16 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
             self._get_domain_dims(s)
             self._apply_domain_change_and_redraw(old_is_2d)
         s.domain_accepted = True
+
+    @staticmethod
+    def _pixel_scale_unknown(s) -> bool:
+        """True when spatial coords are pixel-space with no known µm scale."""
+        return bool(
+            s.use_spatial_data
+            and s.data is not None
+            and getattr(s.data, "coords_are_pixels", False)
+            and s.data.microns_per_pixel is None
+        )
 
     def _get_domain_dims(self, s) -> None:
         d = s.effective_domain
@@ -2103,6 +2124,7 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
             context_message="",
             initial_domain=s.effective_domain,  # always pre-populate with current active domain
             host_name=s.biwt_input.host_name,
+            pixel_scale_unknown=self._pixel_scale_unknown(s),
         )
         if dlg.exec_() == QDialog.Accepted:
             user_domain, auto_scale = dlg.result()

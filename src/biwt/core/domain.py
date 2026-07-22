@@ -72,13 +72,9 @@ def infer_domain(
             cols = list(obs.columns)
         except AttributeError:
             cols = []
-        x_col = _find_coord_col(cols, "x")
-        y_col = _find_coord_col(cols, "y")
+        x_col, y_col, z_col, _is_pixels = resolve_obs_coord_cols(cols)
         if x_col and y_col:
-            xy = np.column_stack([obs[x_col].values, obs[y_col].values]).astype(float)
-            z_col = _find_coord_col(cols, "z")
-            if z_col:
-                xy = np.column_stack([xy, obs[z_col].values])
+            xy = build_obs_coords(obs, x_col, y_col, z_col, _is_pixels)
             if microns_per_pixel is not None:
                 xy = xy * microns_per_pixel
                 source = "platform_microns"
@@ -124,6 +120,18 @@ _COORD_CANDIDATES: dict[str, list[str]] = {
     "z": ["z", "z_coord", "coord_z", "spatial_z", "z_centroid", "cell_z"],
 }
 
+# Pixel-space coordinate columns, consulted only as a last resort after the
+# x/y/z candidates above.  These come from 10x Visium tissue-position tables
+# (``imagerow`` / ``imagecol``, as exported by Space Ranger / VisiumSD).  By
+# that convention ``imagecol`` is the horizontal (x) axis and ``imagerow`` is
+# the vertical (y) axis, and image rows increase *downward* — so ``imagerow``
+# must be flipped when converting to a y-up coordinate system (see
+# ``build_obs_coords``).  There is no pixel z axis.
+_PIXEL_COORD_CANDIDATES: dict[str, list[str]] = {
+    "x": ["imagecol", "image_col"],
+    "y": ["imagerow", "image_row"],
+}
+
 
 def _find_coord_col(columns: list[str], axis: str) -> Optional[str]:
     """Case-insensitive search for a spatial axis column."""
@@ -132,6 +140,59 @@ def _find_coord_col(columns: list[str], axis: str) -> Optional[str]:
         if candidate in cols_lower:
             return cols_lower[candidate]
     return None
+
+
+def _find_pixel_coord_col(columns: list[str], axis: str) -> Optional[str]:
+    """Case-insensitive search for a pixel-space (imagerow/imagecol) axis column."""
+    cols_lower = {c.lower(): c for c in columns}
+    for candidate in _PIXEL_COORD_CANDIDATES.get(axis, []):
+        if candidate in cols_lower:
+            return cols_lower[candidate]
+    return None
+
+
+def resolve_obs_coord_cols(
+    columns: list[str],
+) -> tuple[Optional[str], Optional[str], Optional[str], bool]:
+    """Resolve which obs columns hold spatial coordinates.
+
+    Returns ``(x_col, y_col, z_col, is_pixels)``.
+
+    Standard ``x``/``y``/``z`` columns take priority.  Only when they are
+    absent do we fall back to pixel-space ``imagecol``/``imagerow`` columns
+    (``is_pixels=True``); the pixel fallback has no z axis, so ``z_col`` is
+    ``None`` in that case.  Returns ``(None, None, None, False)`` when no
+    usable coordinate columns are found.
+    """
+    x_col = _find_coord_col(columns, "x")
+    y_col = _find_coord_col(columns, "y")
+    if x_col and y_col:
+        return x_col, y_col, _find_coord_col(columns, "z"), False
+    px = _find_pixel_coord_col(columns, "x")   # imagecol → x
+    py = _find_pixel_coord_col(columns, "y")   # imagerow → y
+    if px and py:
+        return px, py, None, True
+    return None, None, None, False
+
+
+def build_obs_coords(obs, x_col: str, y_col: str,
+                     z_col: Optional[str], is_pixels: bool) -> np.ndarray:
+    """Build an ``(N, 2)`` or ``(N, 3)`` float coordinate array from obs columns.
+
+    When *is_pixels* is True the y column is an image row index (increasing
+    downward), so it is reflected about its maximum to produce a y-up
+    coordinate (top of the image → largest y).  The reflection keeps the
+    coordinate range identical while fixing the orientation.
+    """
+    x = np.asarray(obs[x_col].values, dtype=float)
+    y = np.asarray(obs[y_col].values, dtype=float)
+    if is_pixels:
+        # Image rows increase downward; flip to a y-up coordinate system.
+        y = y.max() - y
+    stacked = [x, y]
+    if z_col:
+        stacked.append(np.asarray(obs[z_col].values, dtype=float))
+    return np.column_stack(stacked)
 
 
 # ---------------------------------------------------------------------------
@@ -193,11 +254,11 @@ def _detect_spatial_location_from_obs(obs) -> Optional[str]:
         cols = list(obs.columns)
     except AttributeError:
         return None
-    x_col = _find_coord_col(cols, "x")
-    y_col = _find_coord_col(cols, "y")
-    if x_col and y_col:
-        z_col = _find_coord_col(cols, "z")
-        if z_col:
-            return f"obs columns '{x_col}', '{y_col}', '{z_col}'"
-        return f"obs columns '{x_col}', '{y_col}'"
-    return None
+    x_col, y_col, z_col, is_pixels = resolve_obs_coord_cols(cols)
+    if not (x_col and y_col):
+        return None
+    if is_pixels:
+        return f"obs columns '{x_col}', '{y_col}' (pixel coordinates)"
+    if z_col:
+        return f"obs columns '{x_col}', '{y_col}', '{z_col}'"
+    return f"obs columns '{x_col}', '{y_col}'"

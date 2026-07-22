@@ -4,6 +4,49 @@ Session-level notes and decisions. Unlike the PRD (specification) and README (co
 
 ---
 
+## 2026-07-22: Re-support `imagerow`/`imagecol` pixel coordinates
+
+### Motivation
+The legacy `biwt_tab.py` searched for Visium `imagerow`/`imagecol` columns as a
+last-resort spatial source. The package port left behind three
+`_find_coord_col(cols, "imagerow")` calls that were **dead code**:
+`_find_coord_col`'s second argument is an *axis key* looked up in
+`_COORD_CANDIDATES` (only `x`/`y`/`z`), so `"imagerow"`/`"imagecol"` never
+matched and `has_spatial` was always False for such data.
+
+### What changed
+- Added `_PIXEL_COORD_CANDIDATES` plus `resolve_obs_coord_cols()` /
+  `build_obs_coords()` in `core/domain.py` as the single place that resolves
+  spatial columns: standard `x`/`y`/`z` first, then pixel `imagecol`/`imagerow`.
+- **Axis mapping (decided with the user):** targeting Visium SD, `imagecol`→x
+  and `imagerow`→y. Since image rows increase *downward*, `imagerow` is flipped
+  (`y = rowmax - imagerow`) to a y-up system. This differs from the legacy
+  `biwt_tab.py`, which mapped `imagerow`→x / `imagecol`→y (mirrored the tissue).
+  The flip is a reflection, so it doesn't change the domain box width — only the
+  orientation/offset of plotted coordinates.
+- `BiwtData.coords_are_pixels` flag: True when spatial came from
+  `imagerow`/`imagecol` obs columns (not an obsm array). Combined with
+  `microns_per_pixel is None` this means "pixel units, physical scale unknown".
+- **Unknown scale handling (decided with the user):** the `DomainEditorDialog`
+  gains a "µm per pixel" field, shown only when `pixel_scale_unknown`. Entering
+  a factor rescales the pixel data domain's x/y via the new module-level
+  `_scale_domain()` and sets units to micron. For pixel data the editor
+  auto-opens even when raw bounds happen to fit, so the user always gets the
+  chance to convert. When a platform supplies a scale (Visium `scalefactors` →
+  `microns_per_pixel`), the field is not shown — existing behavior is unchanged.
+
+### Why the scale only affects the domain box
+The spatial plotter normalizes coordinates to [0,1] and rescales them to the
+domain, so `microns_per_pixel` (and the µm/pixel field) only ever affected the
+inferred *domain bounds*, never the plotted positions. The pixel path follows
+the exact same contract as the existing Visium path — kept scope tight.
+
+### Note
+The committed `test_AnnData.h5ad` fixture actually carries `imagerow`/`imagecol`
+columns, so its loader test flipped from `not has_spatial` to `has_spatial`
+(+ `coords_are_pixels`). That assertion was encoding the old broken behavior;
+updated it to reflect correct detection.
+
 ## 2026-07-09: Fix `tomli` dependency classification (v0.3.2)
 
 ### Bug: `ModuleNotFoundError` on import under Python 3.9/3.10

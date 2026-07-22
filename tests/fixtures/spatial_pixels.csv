@@ -1,0 +1,6 @@
+imagecol,imagerow,type
+10,0,T_cell
+20,10,T_cell
+30,20,Tumor
+40,30,Tumor
+50,40,Macrophage

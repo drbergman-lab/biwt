@@ -20,7 +20,12 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-from biwt.core.domain import _detect_spatial_location_from_obsm, _detect_spatial_location_from_obs
+from biwt.core.domain import (
+    _detect_spatial_location_from_obsm,
+    _detect_spatial_location_from_obs,
+    resolve_obs_coord_cols,
+    build_obs_coords,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -50,6 +55,11 @@ class BiwtData:
         Scale factor derived from platform metadata (e.g. 10x Visium
         ``scalefactors``).  ``None`` when not available; ``domain.py`` uses
         this to convert pixel-space coordinates to µm before domain inference.
+    coords_are_pixels:
+        ``True`` when the spatial coordinates were resolved from pixel-space
+        ``imagerow``/``imagecol`` columns.  Combined with a ``None``
+        ``microns_per_pixel`` this signals that the physical scale is unknown,
+        so the GUI should prompt the user for a µm/pixel conversion factor.
     """
     obs: pd.DataFrame
     obsm: dict = field(default_factory=dict)
@@ -57,6 +67,7 @@ class BiwtData:
     file_path: str = ""
     probability_columns: list = field(default_factory=list)
     microns_per_pixel: Optional[float] = None
+    coords_are_pixels: bool = False
 
     @property
     def column_names(self) -> list[str]:
@@ -217,19 +228,13 @@ def _load_csv(file_path: str) -> BiwtData:
 
     # Synthesize obsm["spatial"] from coordinate columns so the dim-red
     # plotter in EditCellTypesWindow can display the spatial scatter plot.
+    # Pixel-space (imagerow/imagecol) columns are the last-resort fallback and
+    # are flipped/mapped to a y-up coordinate system by build_obs_coords.
     obsm: dict = {}
-    if spatial_location is not None:
-        from biwt.core.domain import _find_coord_col
-        cols = list(df.columns)
-        x_col = _find_coord_col(cols, "x") or _find_coord_col(cols, "imagerow")
-        y_col = _find_coord_col(cols, "y") or _find_coord_col(cols, "imagecol")
-        if x_col and y_col:
-            z_col = _find_coord_col(cols, "z")
-            xy = np.column_stack([df[x_col].to_numpy(float), df[y_col].to_numpy(float)])
-            if z_col:
-                obsm["spatial"] = np.column_stack([xy, df[z_col].to_numpy(float)])
-            else:
-                obsm["spatial"] = xy
+    coords_are_pixels = False
+    x_col, y_col, z_col, coords_are_pixels = resolve_obs_coord_cols(list(df.columns))
+    if x_col and y_col:
+        obsm["spatial"] = build_obs_coords(df, x_col, y_col, z_col, coords_are_pixels)
 
     return BiwtData(
         obs=df,
@@ -237,6 +242,7 @@ def _load_csv(file_path: str) -> BiwtData:
         spatial_location=spatial_location,
         file_path=file_path,
         probability_columns=prob_cols,
+        coords_are_pixels=coords_are_pixels,
     )
 
 
@@ -256,10 +262,15 @@ def _from_anndata_object(
     except Exception as e:
         raise LoadError(f"Could not read obs/obsm from AnnData object: {e}") from e
 
-    spatial_loc = (
-        _detect_spatial_location_from_obsm(obsm)
-        or _detect_spatial_location_from_obs(obs)
-    )
+    obsm_loc = _detect_spatial_location_from_obsm(obsm)
+    spatial_loc = obsm_loc or _detect_spatial_location_from_obs(obs)
+
+    # Pixel-space fallback only applies when spatial data was resolved from obs
+    # columns (imagerow/imagecol), not from an obsm coordinate array.
+    coords_are_pixels = False
+    if obsm_loc is None and spatial_loc is not None:
+        _, _, _, coords_are_pixels = resolve_obs_coord_cols(list(obs.columns))
+
     prob_cols = _find_probability_columns(obs)
     return BiwtData(
         obs=obs,
@@ -268,6 +279,7 @@ def _from_anndata_object(
         file_path=file_path,
         probability_columns=prob_cols,
         microns_per_pixel=microns_per_pixel,
+        coords_are_pixels=coords_are_pixels,
     )
 
 
