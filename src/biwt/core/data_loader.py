@@ -269,7 +269,13 @@ def _from_anndata_object(
     # columns (imagerow/imagecol), not from an obsm coordinate array.
     coords_are_pixels = False
     if obsm_loc is None and spatial_loc is not None:
-        _, _, _, coords_are_pixels = resolve_obs_coord_cols(list(obs.columns))
+        # Spatial coordinates live in obs columns.  Synthesize obsm["spatial"]
+        # (pixel columns get the same y-up flip as build_obs_coords applies
+        # elsewhere) so the dim-reduction plotter in EditCellTypesWindow can
+        # offer a Spatial view alongside UMAP/t-SNE/PCA.
+        x_col, y_col, z_col, coords_are_pixels = resolve_obs_coord_cols(list(obs.columns))
+        if x_col and y_col and "spatial" not in obsm:
+            obsm["spatial"] = build_obs_coords(obs, x_col, y_col, z_col, coords_are_pixels)
 
     prob_cols = _find_probability_columns(obs)
     return BiwtData(

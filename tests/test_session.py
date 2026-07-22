@@ -123,6 +123,13 @@ class TestDataLoader:
         data = data_loader.load(SPATIAL_CSV)
         assert data.coords_are_pixels is False
 
+    def test_ann_data_synthesizes_spatial_obsm(self):
+        # Spatial coords in obs columns must still surface as obsm["spatial"]
+        # so the EditCellTypes dim-red dropdown offers a Spatial option.
+        data = data_loader.load(ANN_DATA)
+        assert "spatial" in data.obsm
+        assert data.obsm["spatial"].shape[0] == data.n_cells
+
 
 # ---------------------------------------------------------------------------
 # DomainSpec basics
