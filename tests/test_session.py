@@ -34,7 +34,7 @@ from biwt.core import data_loader
 from biwt.core.data_loader import BiwtData
 from biwt.core.domain import classify_domain_mismatch, infer_domain
 from biwt.core.positioning import build_ic_dataframe
-from biwt.gui.walkthrough import WalkthroughSession, _step_predicates, _scale_domain
+from biwt.gui.walkthrough import WalkthroughSession, _step_predicates
 from biwt.types import BiwtInput, DomainSpec
 
 # ---------------------------------------------------------------------------
@@ -97,38 +97,20 @@ class TestDataLoader:
     def test_load_ann_data(self):
         data = data_loader.load(ANN_DATA)
         assert data.n_cells == 3180
-        # This AnnData carries Visium-style imagerow/imagecol pixel columns,
-        # now detected as a last-resort spatial source (see coords_are_pixels).
+        # This AnnData carries Visium-style imagerow/imagecol columns, now
+        # recognized as spatial coordinates (last-resort fallback).
         assert data.has_spatial
-        assert data.coords_are_pixels is True
 
     def test_pixel_csv_has_spatial(self):
         data = data_loader.load(PIXEL_CSV)
         assert data.has_spatial
         assert data.n_cells == 5
 
-    def test_pixel_csv_flags_pixel_coords(self):
-        data = data_loader.load(PIXEL_CSV)
-        assert data.coords_are_pixels is True
-        # No known physical scale from a bare imagerow/imagecol CSV.
-        assert data.microns_per_pixel is None
-
     def test_pixel_csv_spatial_location_names_columns(self):
         data = data_loader.load(PIXEL_CSV)
         assert "imagecol" in data.spatial_location
         assert "imagerow" in data.spatial_location
         assert "pixel" in data.spatial_location.lower()
-
-    def test_standard_csv_not_flagged_pixels(self):
-        data = data_loader.load(SPATIAL_CSV)
-        assert data.coords_are_pixels is False
-
-    def test_ann_data_synthesizes_spatial_obsm(self):
-        # Spatial coords in obs columns must still surface as obsm["spatial"]
-        # so the EditCellTypes dim-red dropdown offers a Spatial option.
-        data = data_loader.load(ANN_DATA)
-        assert "spatial" in data.obsm
-        assert data.obsm["spatial"].shape[0] == data.n_cells
 
 
 # ---------------------------------------------------------------------------
@@ -221,10 +203,6 @@ class TestEffectiveDomain:
         s.user_domain = user
         assert s.effective_domain is user
 
-    def test_auto_scale_defaults_true(self):
-        s = _session(SPATIAL_CSV)
-        assert s.auto_scale_to_domain is True
-
     def test_domain_accepted_default_false(self):
         s = _session(SPATIAL_CSV)
         assert s.domain_accepted is False
@@ -280,31 +258,20 @@ class TestSetupSpatialData:
         np.testing.assert_allclose(s.spatial_data[:, 2], 0.0)
 
 
-# ---------------------------------------------------------------------------
-# Pixel-coordinate (imagerow/imagecol) domain handling
-# ---------------------------------------------------------------------------
-
-
-class TestPixelDomain:
-    def test_infer_domain_from_pixel_columns(self):
-        # Bounds come from imagecol (x: 10..50) and flipped imagerow (y: 0..40).
+class TestPixelDataDomain:
+    def test_pixel_domain_units_and_bounds(self):
+        # imagerow/imagecol data → domain in "pixel" units, coords used as-is
+        # (no conversion): x = imagecol (10..50), y = flipped imagerow (0..40).
         data = data_loader.load(PIXEL_CSV)
         d = infer_domain(obs=data.obs, obsm=data.obsm)
-        assert d.xmin == 10 and d.xmax == 50
-        assert d.ymin == 0 and d.ymax == 40
-        # No µm/pixel scale → domain stays in raw (pixel) data units.
-        assert d.source == "data_range"
+        assert d.units == "pixel"
+        assert (d.xmin, d.xmax) == (10, 50)
+        assert (d.ymin, d.ymax) == (0, 40)
 
-    def test_scale_domain_converts_xy_only(self):
-        d = DomainSpec(xmin=0, xmax=100, ymin=0, ymax=200,
-                       zmin=-10, zmax=10, source="data_range")
-        scaled = _scale_domain(d, 0.5)
-        assert (scaled.xmin, scaled.xmax) == (0.0, 50.0)
-        assert (scaled.ymin, scaled.ymax) == (0.0, 100.0)
-        # z is left untouched (pixel coords are 2-D).
-        assert (scaled.zmin, scaled.zmax) == (-10, 10)
-        assert scaled.units == "micron"
-        assert scaled.source == "user_edited"
+    def test_standard_csv_domain_units_micron(self):
+        data = data_loader.load(SPATIAL_CSV)
+        d = infer_domain(obs=data.obs, obsm=data.obsm)
+        assert d.units == "micron"
 
 
 # ---------------------------------------------------------------------------

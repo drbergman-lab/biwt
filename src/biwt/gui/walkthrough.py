@@ -67,21 +67,6 @@ _LE_STYLE = (
 # Domain editor dialog
 # ---------------------------------------------------------------------------
 
-def _scale_domain(d: DomainSpec, factor: float) -> DomainSpec:
-    """Return *d* with its x/y bounds multiplied by *factor* (µm per pixel).
-
-    The z bounds are left untouched — pixel coordinates are 2-D, so z carries
-    the default PhysiCell slab thickness rather than a pixel measurement.  The
-    result is tagged ``user_edited`` in microns.
-    """
-    return DomainSpec(
-        xmin=d.xmin * factor, xmax=d.xmax * factor,
-        ymin=d.ymin * factor, ymax=d.ymax * factor,
-        zmin=d.zmin, zmax=d.zmax,
-        source="user_edited", units="micron",
-    )
-
-
 class DomainEditorDialog(QDialog):
     """Pop-up for reviewing / editing domain bounds after data import.
 
@@ -98,7 +83,6 @@ class DomainEditorDialog(QDialog):
         context_message: str = "",
         initial_domain: Optional[DomainSpec] = None,
         host_name: str = "Host",
-        pixel_scale_unknown: bool = False,
     ):
         super().__init__(parent)
         self.setWindowTitle("Domain Settings")
@@ -107,7 +91,6 @@ class DomainEditorDialog(QDialog):
         self._data_domain = data_domain
         self._preferred_domain = preferred_domain
         self._initial_domain = initial_domain  # pre-set values to show on open (user_domain if revisiting)
-        self._pixel_scale_unknown = pixel_scale_unknown
 
         layout = QVBoxLayout(self)
 
@@ -116,28 +99,6 @@ class DomainEditorDialog(QDialog):
             lbl = QLabel(context_message)
             lbl.setWordWrap(True)
             layout.addWidget(lbl)
-
-        # --- pixel → micron conversion (only when scale is unknown) ---
-        if pixel_scale_unknown:
-            note = QLabel(
-                "Coordinates are in <b>pixels</b> with no known physical scale. "
-                "Enter a µm-per-pixel factor to convert the data domain to "
-                "microns, then edit the bounds below if needed."
-            )
-            note.setWordWrap(True)
-            layout.addWidget(note)
-            mpp_hbox = QHBoxLayout()
-            mpp_hbox.addWidget(QLabel("µm per pixel:"))
-            self._mpp_edit = QLineEdit()
-            mpp_v = QDoubleValidator()
-            mpp_v.setBottom(0.0)
-            self._mpp_edit.setValidator(mpp_v)
-            self._mpp_edit.setStyleSheet(_LE_STYLE)
-            self._mpp_edit.setMaximumWidth(120)
-            self._mpp_edit.editingFinished.connect(self._apply_pixel_scale)
-            mpp_hbox.addWidget(self._mpp_edit)
-            mpp_hbox.addStretch()
-            layout.addLayout(mpp_hbox)
 
         layout.addWidget(QLabel("Edit the domain below, or use one of the presets."))
 
@@ -209,23 +170,11 @@ class DomainEditorDialog(QDialog):
             d = DomainSpec(d.xmin, d.xmax, d.ymin, d.ymax,
                            -10.0, 10.0, d.source, d.units)
         self._fill_domain(d)
+        # Reflect the data-domain units (e.g. "pixel" for imagerow/imagecol).
+        self._units_edit.setText(d.units)
 
     def _fill_preferred(self) -> None:
         self._fill_domain(self._preferred_domain)
-
-    def _apply_pixel_scale(self) -> None:
-        """Rescale the (pixel) data domain by the entered µm/pixel factor."""
-        text = self._mpp_edit.text().strip()
-        if not text:
-            return
-        try:
-            factor = float(text)
-        except ValueError:
-            return
-        if factor <= 0:
-            return
-        self._fill_domain(_scale_domain(self._data_domain, factor))
-        self._units_edit.setText("micron")
 
     # ------------------------------------------------------------------
 
@@ -431,9 +380,9 @@ class WalkthroughSession:
                 self.spatial_data = arr
                 return
         cols = list(self.data.obs.columns)
-        x_col, y_col, z_col, is_pixels = resolve_obs_coord_cols(cols)
+        x_col, y_col, z_col, is_image_coords = resolve_obs_coord_cols(cols)
         if x_col and y_col:
-            xy = build_obs_coords(self.data.obs, x_col, y_col, z_col, is_pixels)
+            xy = build_obs_coords(self.data.obs, x_col, y_col, z_col, is_image_coords)
             if xy.shape[1] == 2:
                 xy = np.column_stack([xy, np.zeros(len(xy))])
             self.spatial_data = xy
@@ -731,15 +680,13 @@ class BioinformaticsWalkthrough(QWidget):
         self.session.use_spatial_data = None if bdata.has_spatial else False
 
 
-        # Infer domain — preferred always wins; otherwise use data metadata/range.
-        # microns_per_pixel is non-None only for platforms where we know the
-        # physical scale (currently 10x Visium).
+        # Infer domain — preferred always wins; otherwise use the raw data range
+        # exactly as found (no unit conversion; imagerow/imagecol → "pixel" units).
         preferred = self.session.biwt_input.preferred_domain
         inferred = domain_module.infer_domain(
             preferred=preferred,
             obs=bdata.obs,
             obsm=bdata.obsm,
-            microns_per_pixel=bdata.microns_per_pixel,
         )
         self.session.inferred_domain = inferred
 
@@ -748,7 +695,6 @@ class BioinformaticsWalkthrough(QWidget):
             preferred=None,
             obs=bdata.obs,
             obsm=bdata.obsm,
-            microns_per_pixel=bdata.microns_per_pixel,
         )
         self.session.data_domain = data_domain
 

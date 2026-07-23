@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 from matplotlib.figure import Figure
@@ -83,3 +84,30 @@ class TestReplotOrdering:
         PositionsWindow._replot_all_after_undo(d)
 
         assert calls.index("recompute_scatter_sizes") < calls.index("sync_par_area")
+
+
+class TestDefaultSpatialPars:
+    # Fixture data: x in [10, 50] (extent 40), y in [0, 40] (extent 40).
+    COORDS = np.array([[10.0, 40.0, 0.0], [50.0, 0.0, 0.0]])
+
+    def _dummy(self, auto_scale):
+        d = SimpleNamespace(
+            walkthrough=SimpleNamespace(session=SimpleNamespace(
+                use_spatial_data=True,
+                spatial_data_final=self.COORDS,
+                auto_scale_to_domain=auto_scale)),
+            plot_is_2d=True,
+            plot_xmin=-500.0, plot_xmax=500.0, plot_dx=1000.0,
+            plot_ymin=-500.0, plot_ymax=500.0, plot_dy=1000.0,
+        )
+        return d
+
+    def test_no_scale_centers_raw_extent(self):
+        # auto-scale off: original extent (40×40), centered in the domain.
+        pars = PositionsWindow._default_spatial_pars(self._dummy(auto_scale=False))
+        assert pars == [-20.0, -20.0, 40.0, 40.0]
+
+    def test_auto_scale_fills_domain_preserving_aspect(self):
+        # auto-scale on: 40×40 data scaled ×25 to fill the 1000×1000 domain.
+        pars = PositionsWindow._default_spatial_pars(self._dummy(auto_scale=True))
+        assert pars == [-500.0, -500.0, 1000.0, 1000.0]

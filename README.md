@@ -78,18 +78,18 @@ tests/
 ### Completed
 
 - [x] Data import: .h5ad, .rds/.rda/.rdata, .csv
-- [x] Spatial coordinate detection (obsm, obs columns, Visium scale factors)
-- [x] Pixel-coordinate fallback (Visium `imagecol`→x / `imagerow`→y, row-flipped) with µm/pixel prompt in Domain Settings when scale is unknown
-- [x] CSV spatial synthesis (x/y/z obs columns → obsm["spatial"])
-- [x] Domain inference with priority chain (preferred > platform > data_range > default)
+- [x] Spatial coordinate detection (obsm, obs columns)
+- [x] Pixel-coordinate fallback: recognize `imagecol`→x / `imagerow`→y (row-flipped) as a last-resort spatial source, used as-is with no unit conversion (data domain reported in `pixel` units)
+- [x] Spatial synthesis from obs columns (x/y/z or imagerow/imagecol → obsm["spatial"]) for CSV and AnnData/R, so the dim-reduction plot offers a Spatial view
+- [x] Domain inference with priority chain (preferred > data_range > default)
 - [x] Domain mismatch: two-tier detection (classify_domain_mismatch: "outside" / "small" / None)
 - [x] DomainEditorDialog auto-triggered at positions window open (not import time)
 - [x] Context-sensitive mismatch header; no header for manual "Domain Settings…" open
 - [x] domain_accepted flag prevents re-trigger on back/forward navigation
 - [x] BiwtInput.domain_accepted + "Skip domain validation" checkbox bypass auto-check
 - [x] Z-fields default to ±10 for 2D data in domain editor
-- [x] DomainSpec units field; auto-scale toggle wired into positions step
-- [x] Auto-scale off: raw data bounding box centered at domain center (not identity transform)
+- [x] DomainSpec units field (e.g. `pixel` for imagerow/imagecol data); no unit conversion — coordinates define the data domain as-is
+- [x] "Auto-scale data to fill domain" toggle wired into positions step (scale-to-fill vs. raw extent, both centered); off = raw data extent
 - [x] "Domain Settings…" button in positions plot window for manual domain editing
 - [x] Spot deconvolution query and cell expansion
 - [x] Cluster column selection
