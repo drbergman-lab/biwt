@@ -4,6 +4,81 @@ Session-level notes and decisions. Unlike the PRD (specification) and README (co
 
 ---
 
+## 2026-07-23: Recognize `imagerow`/`imagecol` spatial coordinates (parse-only)
+
+### What shipped
+Recognize 10x Visium `imagerow`/`imagecol` columns as a last-resort spatial
+source. The old code *looked* like it supported them but was dead: it called
+`_find_coord_col(cols, "imagerow")`, and that function's second argument is an
+*axis key* (`x`/`y`/`z`) looked up in `_COORD_CANDIDATES` — so `"imagerow"`
+never matched and `has_spatial` was always False for such data.
+
+- `core/domain.py`: added `_PIXEL_COORD_CANDIDATES`, `_find_pixel_coord_col`,
+  `resolve_obs_coord_cols()` and `build_obs_coords()` as the single place that
+  resolves spatial columns (x/y/z first, then pixel imagecol/imagerow). Wired
+  into `infer_domain`, `_detect_spatial_location_from_obs`.
+- **Axis mapping:** `imagecol` → x, `imagerow` → y. Image rows increase
+  *downward*, so `imagerow` is flipped (`y = rowmax - imagerow`) to a y-up
+  system. The flip is a reflection, so it doesn't change the domain-box size —
+  only orientation/offset.
+- `obsm["spatial"]` is synthesized from obs columns (CSV *and* AnnData/R) so the
+  EditCellTypes dim-reduction dropdown offers a Spatial view.
+- `setup_spatial_data` uses the same resolver.
+- **Units:** imagerow/imagecol data reports its data domain in `"pixel"` units
+  (other coords stay `"micron"`). `infer_domain` decides units from the obs
+  columns once, so a synthesized `obsm["spatial"]` (which would otherwise take
+  the obsm path and lose the signal) still yields `pixel`. Clicking **"Use Data
+  Domain"** in the editor fills those bounds *and* the units field.
+
+### No scaling — `microns_per_pixel` removed
+No pixels→microns conversion is applied anywhere: whatever coordinates we find
+define the data domain, as-is. This removed the pre-existing Visium
+`microns_per_pixel` machinery (`_extract_visium_microns_per_pixel`, the
+`BiwtData.microns_per_pixel` field, and the `infer_domain` scaling), because it
+was half-applied and misleading: it scaled the *domain bounds* to microns but the
+cells were still placed at raw coordinates, and the "Auto-scale to fill domain"
+checkbox nullified it anyway. A converter also can't prove coordinates are pixels
+(an object may carry scalefactors yet store microns), and pixel-vs-micron is
+undetectable from an `obsm` array. An earlier draft that added a user-entered
+"microns per unit" factor was likewise walked back.
+
+Physical scaling is the user's job — bring data already scaled for the domain, or
+scale upstream. The "Auto-scale to fill domain" option below is a *fit-to-domain
+placement* convenience, not a unit conversion.
+
+### Auto-scale placement kept (with a fix)
+The domain editor keeps the **"Auto-scale data to fill domain (preserving aspect
+ratio)"** checkbox (`session.auto_scale_to_domain`, default True). It affects only
+spatial *placement*, not the recorded coordinates/units:
+- checked → `_default_spatial_pars` scales the data extent to fill the domain
+  (aspect preserved), centered;
+- unchecked → uses the raw data extent, centered.
+
+The earlier bug — a domain change refused to update the spatial plotter once the
+user had hand-edited its parameters — was fixed in `_apply_domain_change_and_redraw`:
+instead of only refreshing when the history had a single entry, it now **appends**
+the newly-computed default to the plotter's history and points the index at it, so
+the plot rescales to the new domain while the user's prior edit remains available
+as an undo step. On a domain change the spatial plotter therefore reverts to the
+data extent, re-centers in the new domain, and rescales to fill if auto-scale is on.
+
+### Future work: a real pixels→microns scale factor
+If revisited, the clean design is to convert coordinates **into microns once, at
+load/placement time**, rather than scaling the domain box:
+1. Store the factor as data (`BiwtData`) plus a single user-editable session
+   value, e.g. `microns_per_unit` (float; `1.0` ⇒ already microns). Seed it from
+   any data converter, else `1.0`.
+2. Apply it to the **coordinate arrays** (`obsm["spatial"]` / `spatial_data`)
+   immediately after load, so everything downstream — plot, domain inference,
+   placement, exported ICs — is already in microns and the "Accept" bounds mean
+   what they say. This is a unit conversion, distinct from any fit-to-domain
+   resizing; do not reintroduce automatic resizing to implement it.
+3. Ask for the factor once, up front (at the spatial-confirmation step), with a
+   sensible default and a note that it can be revised — but only if step 2 is
+   done so it isn't silently overridden.
+4. Because pixel-vs-micron can't be auto-detected, keep the factor visible and
+   user-confirmable; never apply a data-derived factor silently.
+
 ## 2026-07-09: Fix `tomli` dependency classification (v0.3.2)
 
 ### Bug: `ModuleNotFoundError` on import under Python 3.9/3.10

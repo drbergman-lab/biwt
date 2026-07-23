@@ -170,9 +170,14 @@ class DomainEditorDialog(QDialog):
             d = DomainSpec(d.xmin, d.xmax, d.ymin, d.ymax,
                            -10.0, 10.0, d.source, d.units)
         self._fill_domain(d)
+        # Reflect the data-domain units (e.g. "pixel" for imagerow/imagecol).
+        self._units_edit.setText(d.units)
 
     def _fill_preferred(self) -> None:
         self._fill_domain(self._preferred_domain)
+        # Restore the host domain's units (e.g. undo a "pixel" left over from a
+        # prior "Use Data Domain" click on imagerow/imagecol data).
+        self._units_edit.setText(self._preferred_domain.units)
 
     # ------------------------------------------------------------------
 
@@ -366,7 +371,9 @@ class WalkthroughSession:
 
     def setup_spatial_data(self) -> None:
         """Extract raw spatial coordinates into self.spatial_data."""
-        from biwt.core.domain import _find_spatial_key, _find_coord_col
+        from biwt.core.domain import (
+            _find_spatial_key, resolve_obs_coord_cols, build_obs_coords,
+        )
         if self.data.obsm:
             key = _find_spatial_key(self.data.obsm)
             if key:
@@ -376,17 +383,10 @@ class WalkthroughSession:
                 self.spatial_data = arr
                 return
         cols = list(self.data.obs.columns)
-        x_col = _find_coord_col(cols, "x") or _find_coord_col(cols, "imagerow")
-        y_col = _find_coord_col(cols, "y") or _find_coord_col(cols, "imagecol")
+        x_col, y_col, z_col, is_image_coords = resolve_obs_coord_cols(cols)
         if x_col and y_col:
-            z_col = _find_coord_col(cols, "z")
-            xy = np.column_stack([
-                self.data.obs[x_col].values,
-                self.data.obs[y_col].values,
-            ])
-            if z_col:
-                xy = np.column_stack([xy, self.data.obs[z_col].values])
-            else:
+            xy = build_obs_coords(self.data.obs, x_col, y_col, z_col, is_image_coords)
+            if xy.shape[1] == 2:
                 xy = np.column_stack([xy, np.zeros(len(xy))])
             self.spatial_data = xy
 
@@ -683,15 +683,13 @@ class BioinformaticsWalkthrough(QWidget):
         self.session.use_spatial_data = None if bdata.has_spatial else False
 
 
-        # Infer domain — preferred always wins; otherwise use data metadata/range.
-        # microns_per_pixel is non-None only for platforms where we know the
-        # physical scale (currently 10x Visium).
+        # Infer domain — preferred always wins; otherwise use the raw data range
+        # exactly as found (no unit conversion; imagerow/imagecol → "pixel" units).
         preferred = self.session.biwt_input.preferred_domain
         inferred = domain_module.infer_domain(
             preferred=preferred,
             obs=bdata.obs,
             obsm=bdata.obsm,
-            microns_per_pixel=bdata.microns_per_pixel,
         )
         self.session.inferred_domain = inferred
 
@@ -700,7 +698,6 @@ class BioinformaticsWalkthrough(QWidget):
             preferred=None,
             obs=bdata.obs,
             obsm=bdata.obsm,
-            microns_per_pixel=bdata.microns_per_pixel,
         )
         self.session.data_domain = data_domain
 

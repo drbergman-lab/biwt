@@ -32,7 +32,7 @@ import pytest
 
 from biwt.core import data_loader
 from biwt.core.data_loader import BiwtData
-from biwt.core.domain import classify_domain_mismatch
+from biwt.core.domain import classify_domain_mismatch, infer_domain
 from biwt.core.positioning import build_ic_dataframe
 from biwt.gui.walkthrough import WalkthroughSession, _step_predicates
 from biwt.types import BiwtInput, DomainSpec
@@ -45,6 +45,7 @@ FIXTURES = Path(__file__).parent / "fixtures"
 SPATIAL_CSV     = str(FIXTURES / "spatial.csv")
 NONSPATIAL_CSV  = str(FIXTURES / "nonspatial.csv")
 SPOT_DECONV_CSV = str(FIXTURES / "spot_deconv.csv")
+PIXEL_CSV       = str(FIXTURES / "spatial_pixels.csv")
 SEURAT_RDS = str(FIXTURES / "toy_seurat.rds")
 ANN_DATA = str(FIXTURES / "test_AnnData.h5ad")
 
@@ -96,7 +97,20 @@ class TestDataLoader:
     def test_load_ann_data(self):
         data = data_loader.load(ANN_DATA)
         assert data.n_cells == 3180
-        assert not data.has_spatial
+        # This AnnData carries Visium-style imagerow/imagecol columns, now
+        # recognized as spatial coordinates (last-resort fallback).
+        assert data.has_spatial
+
+    def test_pixel_csv_has_spatial(self):
+        data = data_loader.load(PIXEL_CSV)
+        assert data.has_spatial
+        assert data.n_cells == 5
+
+    def test_pixel_csv_spatial_location_names_columns(self):
+        data = data_loader.load(PIXEL_CSV)
+        assert "imagecol" in data.spatial_location
+        assert "imagerow" in data.spatial_location
+        assert "pixel" in data.spatial_location.lower()
 
 
 # ---------------------------------------------------------------------------
@@ -190,6 +204,7 @@ class TestEffectiveDomain:
         assert s.effective_domain is user
 
     def test_auto_scale_defaults_true(self):
+        # Placement contract: spatial data fills the domain by default.
         s = _session(SPATIAL_CSV)
         assert s.auto_scale_to_domain is True
 
@@ -236,6 +251,32 @@ class TestSetupSpatialData:
         s = _session(NONSPATIAL_CSV)
         s.setup_spatial_data()
         assert s.spatial_data is None
+
+    def test_pixel_csv_maps_and_flips_axes(self):
+        # Fixture (imagecol, imagerow): (10,0) (20,10) (30,20) (40,30) (50,40).
+        # imagecol -> x directly; imagerow -> y flipped (y = rowmax - row).
+        s = _session(PIXEL_CSV)
+        s.setup_spatial_data()
+        assert s.spatial_data.shape == (5, 3)
+        np.testing.assert_allclose(s.spatial_data[:, 0], [10, 20, 30, 40, 50])
+        np.testing.assert_allclose(s.spatial_data[:, 1], [40, 30, 20, 10, 0])
+        np.testing.assert_allclose(s.spatial_data[:, 2], 0.0)
+
+
+class TestPixelDataDomain:
+    def test_pixel_domain_units_and_bounds(self):
+        # imagerow/imagecol data → domain in "pixel" units, coords used as-is
+        # (no conversion): x = imagecol (10..50), y = flipped imagerow (0..40).
+        data = data_loader.load(PIXEL_CSV)
+        d = infer_domain(obs=data.obs, obsm=data.obsm)
+        assert d.units == "pixel"
+        assert (d.xmin, d.xmax) == (10, 50)
+        assert (d.ymin, d.ymax) == (0, 40)
+
+    def test_standard_csv_domain_units_micron(self):
+        data = data_loader.load(SPATIAL_CSV)
+        d = infer_domain(obs=data.obs, obsm=data.obsm)
+        assert d.units == "micron"
 
 
 # ---------------------------------------------------------------------------

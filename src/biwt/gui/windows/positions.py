@@ -2148,12 +2148,17 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
         else:
             # Still 2D or still 3D; just reset current axes
             self.ax0.cla()
-            # Refresh spatial plotter defaults for the new domain, but only if
-            # the user hasn't manually modified those parameters yet (history length == 1).
-            if (hasattr(self, "patch_history") and len(self.patch_history) > 5
-                    and len(self.patch_history[5]) == 1):
-                self.patch_history[5] = [self._default_spatial_pars()]
-                self.patch_history_idx[5] = 0
+            # Recompute the spatial plotter default for the new domain and make
+            # it current. If the user hasn't edited the spatial parameters yet
+            # (single history entry), replace it in place; otherwise append the
+            # new default so their prior edit is preserved as an undo step.
+            if (hasattr(self, "patch_history") and len(self.patch_history) > 5):
+                if len(self.patch_history[5]) == 1:
+                    self.patch_history[5] = [self._default_spatial_pars()]
+                    self.patch_history_idx[5] = 0
+                else:
+                    self.patch_history[5].append(self._default_spatial_pars())
+                    self.patch_history_idx[5] = len(self.patch_history[5]) - 1
 
         # Domain area changed → confluence-based cell counts are stale.
         self.walkthrough.session.cell_counts_confirmed = False
