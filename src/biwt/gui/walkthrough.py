@@ -175,6 +175,9 @@ class DomainEditorDialog(QDialog):
 
     def _fill_preferred(self) -> None:
         self._fill_domain(self._preferred_domain)
+        # Restore the host domain's units (e.g. undo a "pixel" left over from a
+        # prior "Use Data Domain" click on imagerow/imagecol data).
+        self._units_edit.setText(self._preferred_domain.units)
 
     # ------------------------------------------------------------------
 

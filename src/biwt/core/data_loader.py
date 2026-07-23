@@ -216,7 +216,8 @@ def _load_csv(file_path: str) -> BiwtData:
 
     # Synthesize obsm["spatial"] from coordinate columns so the dim-red
     # plotter in EditCellTypesWindow can display the spatial scatter plot.
-    # imagerow/imagecol columns map to y/x with a y-up flip (build_obs_coords).
+    # For image columns: imagecol -> x, imagerow -> y (flipped y-up) — see
+    # build_obs_coords.
     obsm: dict = {}
     x_col, y_col, z_col, is_image_coords = resolve_obs_coord_cols(list(df.columns))
     if x_col and y_col:

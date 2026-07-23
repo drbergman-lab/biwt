@@ -203,6 +203,11 @@ class TestEffectiveDomain:
         s.user_domain = user
         assert s.effective_domain is user
 
+    def test_auto_scale_defaults_true(self):
+        # Placement contract: spatial data fills the domain by default.
+        s = _session(SPATIAL_CSV)
+        assert s.auto_scale_to_domain is True
+
     def test_domain_accepted_default_false(self):
         s = _session(SPATIAL_CSV)
         assert s.domain_accepted is False
