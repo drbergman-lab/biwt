@@ -45,6 +45,14 @@ dependencies = [
     "tomli>=1.2; python_version < '3.11'",
 ]
 
+# Surfaced on the PyPI project page — the entry point for host applications
+# and users who reach the package before the repository.
+[project.urls]
+Homepage = "https://github.com/drbergman-lab/biwt"
+Repository = "https://github.com/drbergman-lab/biwt"
+Documentation = "https://github.com/drbergman-lab/biwt/blob/main/docs/installation.md"
+Issues = "https://github.com/drbergman-lab/biwt/issues"
+
 [project.optional-dependencies]
 # pip install biwt[anndata]  — enables .h5ad import
 anndata = ["anndata>=0.9"]

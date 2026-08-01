@@ -25,6 +25,7 @@ Run with:
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -33,7 +34,12 @@ import pytest
 from types import SimpleNamespace
 
 from biwt.core import data_loader
-from biwt.core.data_loader import BiwtData, _extract_visium_microns_per_pixel
+from biwt.core.data_loader import (
+    DOCS_URL,
+    BiwtData,
+    LoadError,
+    _extract_visium_microns_per_pixel,
+)
 from biwt.core.domain import classify_domain_mismatch, infer_domain
 from biwt.core.positioning import build_ic_dataframe
 from biwt.gui.walkthrough import WalkthroughSession, _step_predicates, _scale_domain
@@ -118,6 +124,51 @@ class TestDataLoader:
         # A bare imagerow/imagecol CSV carries no scale factor.
         data = data_loader.load(PIXEL_CSV)
         assert data.microns_per_data_unit is None
+
+
+# ---------------------------------------------------------------------------
+# LoadError docs pointer
+#
+# Only failures a user fixes by changing their environment carry docs_url;
+# failures about the file itself must not, or every bad CSV would send the
+# user to the R setup guide.
+# ---------------------------------------------------------------------------
+
+class TestLoadErrorDocsPointer:
+    def test_bare_load_error_has_no_docs_url(self):
+        assert LoadError("something went wrong").docs_url is None
+
+    def test_unsupported_extension_has_no_docs_url(self):
+        with pytest.raises(LoadError) as exc:
+            data_loader.load("sample.txt")
+        assert exc.value.docs_url is None
+
+    def test_unreadable_csv_has_no_docs_url(self):
+        with pytest.raises(LoadError) as exc:
+            data_loader.load(str(FIXTURES / "does_not_exist.csv"))
+        assert exc.value.docs_url is None
+
+    def test_missing_anndata_points_at_docs(self, monkeypatch):
+        # Setting a module to None in sys.modules makes `import` raise ImportError.
+        monkeypatch.setitem(sys.modules, "anndata", None)
+        with pytest.raises(LoadError) as exc:
+            data_loader.load("sample.h5ad")
+        assert exc.value.docs_url == DOCS_URL
+        assert "biwt[anndata]" in str(exc.value)
+
+    @pytest.mark.parametrize("suffix", [".rds", ".rda", ".rdata"])
+    def test_missing_rpy2_stack_points_at_docs(self, monkeypatch, suffix):
+        monkeypatch.setitem(sys.modules, "anndata2ri", None)
+        with pytest.raises(LoadError) as exc:
+            data_loader.load(f"sample{suffix}")
+        assert exc.value.docs_url == DOCS_URL
+        assert "biwt[seurat]" in str(exc.value)
+
+    def test_docs_url_resolves_to_a_file_in_the_repo(self):
+        # Guards the in-app link against a rename of the docs page.
+        repo_root = Path(__file__).resolve().parents[1]
+        rel = DOCS_URL.split("/blob/main/", 1)[1]
+        assert (repo_root / rel).is_file(), f"{DOCS_URL} points at a missing file"
 
 
 # ---------------------------------------------------------------------------

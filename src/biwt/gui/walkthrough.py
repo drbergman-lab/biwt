@@ -33,6 +33,7 @@ removed from the fallback list.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from html import escape
 from typing import Optional, Callable, Type
 import logging
 
@@ -817,6 +818,33 @@ class BioinformaticsWalkthrough(QWidget):
     # File import
     # ------------------------------------------------------------------
 
+    def _show_import_error(self, err: LoadError) -> None:
+        """Show the modal error for a failed import.
+
+        Errors that carry a ``docs_url`` — a missing optional dependency or a
+        broken R stack — are rendered as rich text with a clickable pointer to
+        the setup guide.  Errors about the file itself stay plain text, so the
+        pointer only appears where it is actually the fix.
+        """
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Critical)
+        box.setWindowTitle("Import failed")
+        box.setStandardButtons(QMessageBox.Ok)
+
+        if err.docs_url:
+            # QMessageBox's text label sets openExternalLinks itself, so the
+            # anchor opens in the default browser with no extra wiring.
+            box.setTextFormat(Qt.RichText)
+            box.setTextInteractionFlags(Qt.TextBrowserInteraction)
+            box.setText(
+                escape(str(err)).replace("\n", "<br>")
+                + f'<br><br>See the <a href="{escape(err.docs_url, quote=True)}">'
+                "BIWT installation docs</a> for setup instructions."
+            )
+        else:
+            box.setText(str(err))
+        box.exec_()
+
     def _import_cb(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
             self,
@@ -829,7 +857,7 @@ class BioinformaticsWalkthrough(QWidget):
         try:
             bdata = data_loader.load(path)
         except LoadError as e:
-            QMessageBox.critical(self, "Import failed", str(e))
+            self._show_import_error(e)
             return
 
         # Reset session so stale state from a previous run doesn't survive reimport.

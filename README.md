@@ -5,11 +5,22 @@ A guided wizard for importing single-cell bioinformatics data and generating ini
 ## Installation
 
 ```bash
-pip install -e .                    # core (CSV support only)
-pip install -e ".[anndata]"         # + .h5ad support
-pip install -e ".[seurat]"          # + .rds/.rda support (requires R + rpy2)
-pip install -e ".[dev]"             # + test dependencies
+pip install biwt                    # core (CSV support only)
+pip install "biwt[anndata]"         # + .h5ad support
+pip install "biwt[seurat]"          # + .rds/.rda support (also needs R — see below)
+pip install "biwt[gui]"             # + PyQt5 walkthrough UI
+pip install "biwt[all]"             # everything
 ```
+
+Development install (from a clone):
+
+```bash
+pip install -e ".[dev]"             # editable + test dependencies
+```
+
+`.rds` / `.rda` import needs a working R with `Seurat` and `SingleCellExperiment` in addition
+to the pip extra. See **[docs/installation.md](docs/installation.md)** for the conda recipe
+and a troubleshooting guide for the R stack.
 
 ## Quick Start
 
@@ -61,8 +72,12 @@ src/biwt/
     widgets.py          — Shared Qt widgets
     windows/            — One file per walkthrough step
 tests/
-  test_session.py       — 43 tests covering session logic end-to-end
+  test_session.py       — 78 tests covering session logic end-to-end
+  test_gui_smoke.py     — Headless Qt import-path and error-dialog tests
+  test_positions_plot.py — Spatial placement / plot scaling tests
   fixtures/             — CSV test fixtures
+docs/
+  installation.md       — Install matrix, R/Seurat setup, troubleshooting
 ```
 
 ## Key Design Decisions
@@ -106,7 +121,10 @@ tests/
 - [x] Session reset on reimport
 - [x] `tomli` in core dependencies (fixes import crash on Python 3.9/3.10)
 - [x] Step predicate extraction for testability
-- [x] 57 passing tests
+- [x] `[project.urls]` metadata so the PyPI page links to the repo, docs, and issues
+- [x] Installation + R/Seurat setup guide ([docs/installation.md](docs/installation.md))
+- [x] `LoadError.docs_url`: environment-related import failures link to the setup guide from the "Import failed" dialog; file-related failures stay plain text
+- [x] 93 passing tests
 
 ### In Progress
 
@@ -124,6 +142,7 @@ tests/
 
 ## Related Documents
 
+- [docs/installation.md](docs/installation.md) — Install matrix, R/Seurat setup, troubleshooting
 - [PRD.md](PRD.md) — Product requirements (behavioral specs, acceptance criteria)
 - [progress.md](progress.md) — Session decisions and reasoning
 - [CLAUDE.md](CLAUDE.md) — Claude agent guide for this repo

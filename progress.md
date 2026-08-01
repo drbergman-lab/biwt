@@ -316,6 +316,79 @@ Both auto-scale modes share the same normalized base coords (0→1 relative to d
 
 ---
 
+## 2026-08-01: Discoverable install docs + docs pointer on environment errors
+
+### Why: the reported symptom was not the one the obvious fix addresses
+
+Trigger: a host application that wanted to call BIWT could not find BIWT's docs. The natural
+reading is "the `.rds` import error message should link to setup instructions," but that only
+reaches someone who already installed BIWT, opened the wizard, and picked an `.rds`. The real
+gap was upstream — `pyproject.toml` had no `[project.urls]` at all, so the PyPI page carried
+zero outbound links. Work was sequenced to fix the outermost gap first:
+
+1. `[project.urls]` — Homepage / Repository / Documentation / Issues.
+2. `docs/installation.md` — the page those links point at.
+3. `LoadError.docs_url` — the pointer, decided at the raise site.
+4. The dialog — renders the pointer as a clickable link.
+
+Doing 4 before 1–3 would have shipped a link to a section that documented none of what it
+promised.
+
+### Docs live here, not in the host
+
+Studio's `bin/ics_tab.py` (`_warn_legacy_biwt_tab`) already showed a rich-text `QMessageBox`
+linking to Studio's `doc/BIWT.md` — which is where BIWT's R/Seurat setup was documented. That
+runs the dependency backwards: a host-agnostic package's install instructions were maintained
+in one host's repo, and host #2 would have duplicated them. The content is now ported to
+`docs/installation.md` here (Studio-specific bits generalized: `studio` → `<env>`, no
+`bin/studio.py` invocations), and Studio's doc should link here rather than the reverse.
+
+`docs/installation.md` rather than a README anchor: the troubleshooting section is ~10 KB and
+would swamp the README, and the URL is baked into shipped releases, so it needs a target that
+does not move when the README is reorganized.
+
+### `docs_url` on the exception, not a blanket append in the dialog
+
+The tempting one-liner is to append "see the installation docs" to every `LoadError` in
+`_import_cb`. But `str(e)` covers ten distinct raise sites, and telling a user whose CSV
+failed to parse to go read the Seurat setup is noise.
+
+Which failures warrant the pointer is a property of the raise site, so `LoadError` grew an
+optional `docs_url` (default `None`) and the GUI renders a link only when one is present.
+Four sites set it: missing `anndata`, missing `rpy2`/`anndata2ri`, `anndata2ri activation
+failed` (the 2.0+ `activate()` removal), and `Failed to read ... as R object` (missing
+`SeuratObject`, or an ABI-mismatched R — the segfault case). Six do not: unsupported
+extension, unreadable `.h5ad`, empty R workspace, unsupported R class, unreadable CSV,
+unreadable obs/obsm.
+
+Keeping the decision in `core/data_loader.py` also means a notebook or CLI host calling
+`data_loader.load()` gets the same pointer — putting the URL in the Qt callback would have
+made it GUI-only, against the package's pure-Python-core rule.
+
+### Verified rather than assumed: QMessageBox opens external links itself
+
+Qt sets `openExternalLinks=True` on the message box's text label (`qt_msgbox_label`), so an
+`<a href>` in rich-text mode opens in the default browser with no `linkActivated` →
+`QDesktopServices` wiring. Confirmed by introspecting the label under
+`QT_QPA_PLATFORM=offscreen`; no handler was added.
+
+`str(err)` is HTML-escaped before interpolation, since messages embed file paths and R error
+text that can contain `<`, `>`, and `&`.
+
+### Tests
+
+`TestLoadErrorDocsPointer` (`test_session.py`) asserts the pointer is present on dependency
+failures and absent on file failures; missing dependencies are simulated with
+`monkeypatch.setitem(sys.modules, "anndata2ri", None)`, which makes `import` raise
+`ImportError` without touching the real environment. One test resolves `DOCS_URL` back to a
+file in the repo, so renaming the docs page fails the suite instead of shipping a dead link.
+
+`test_gui_smoke.py` covers the dialog itself with `QMessageBox.exec_` monkeypatched to record
+the box instead of blocking: rich text plus anchor for dependency errors, plain text for file
+errors, and HTML escaping of the message.
+
+---
+
 ## Open Questions
 
 - **Visium multi-library:** Current code takes the first library's scale factors. Multi-library arrays are uncommon but should be handled eventually.
