@@ -872,7 +872,7 @@ class BioinformaticsWalkthrough(QWidget):
 
         log.info(
             "Loaded %d cells from '%s'. Domain source: %s.",
-            bdata.n_cells, path, inferred.source,
+            bdata.n_cells, path, self.session.inferred_domain.source,
         )
         self._start_walkthrough()
 
