@@ -4,6 +4,47 @@ Session-level notes and decisions. Unlike the PRD (specification) and README (co
 
 ---
 
+## 2026-07-23 (later): data-unit→host-unit scale factor (supersedes the "no conversion" notes below)
+
+The parse-only, no-conversion stance below was intentionally reversed after a
+design discussion: recognizing imagerow/imagecol usefully **is** a unit-conversion
+problem, so a proper, visible scale factor was added and folded into this branch.
+
+### Design
+- **Factor `F` = host units per data unit** (`preferred_domain.units`, microns for
+  PhysiCell Studio). Auto-detected only from Visium `.h5ad`
+  (`_extract_visium_microns_per_pixel` → `BiwtData.microns_per_data_unit`,
+  `55/spot_diameter_fullres`); everything else → `None` (user types it).
+- **No unit-name inference.** `infer_domain` reports generic `"data units"` —
+  imagerow/imagecol are still recognized + y-flipped but NOT labeled "pixel".
+- **Placement scales the data directly**, centered: `placed = raw × F`, centered
+  in the domain (`compute_spatial_placement`, `session.effective_scale()`). Pure
+  uniform scale + translate — aspect always preserved; the domain is an
+  independent host-units container. This replaced the old "auto-scale to fill
+  domain" (min-of-ratios fit), which is why `auto_scale_to_domain` was removed in
+  favor of `scale_factor` + `apply_scale`.
+- **Domain editor** shows two synced bounds columns (data units | host units)
+  linked by `F` (no radio — both always visible), a "{host} per data unit" field
+  with a reset-to-file button, and one "Apply scale factor to data" checkbox
+  (gates cell-scaling only, never the display). "Use Data Domain" fills
+  data-units=raw, host=raw×F; host domain is host units verbatim.
+- **Why scale the data, not "fit to domain":** the old µm/pixel scaled the domain
+  box but never the placed cells (half-baked). Scaling the cells by `F` and
+  centering makes the factor actually reach the exported coordinates, and hand-
+  editing the domain no longer changes the cell scale.
+- **TODO:** when host units ≠ microns (e.g. nm) the seeded Visium µm/pixel factor
+  needs converting to host-units/pixel (×1000 for nm). Seeded as-is for now;
+  user can override. Also: read a declared unit string if a format ever provides one.
+
+### Files
+`core/data_loader.py` (extractor + `microns_per_data_unit`), `core/domain.py`
+(units → "data units"; "(image columns)"), `core/positioning.py`
+(`compute_spatial_placement`), `gui/walkthrough.py` (`DomainEditorDialog` rewrite,
+session `scale_factor`/`apply_scale`/`effective_scale`, `_scale_domain`, import
+seeding), `gui/windows/positions.py` (`_default_spatial_pars`, both dialog sites).
+
+---
+
 ## 2026-07-23: Recognize `imagerow`/`imagecol` spatial coordinates (parse-only)
 
 ### What shipped

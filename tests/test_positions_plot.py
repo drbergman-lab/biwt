@@ -13,6 +13,7 @@ matplotlib.use("Agg")
 from matplotlib.figure import Figure
 import pytest
 
+from biwt.core.positioning import compute_spatial_placement
 from biwt.gui.windows.positions import PositionsWindow
 
 
@@ -90,24 +91,48 @@ class TestDefaultSpatialPars:
     # Fixture data: x in [10, 50] (extent 40), y in [0, 40] (extent 40).
     COORDS = np.array([[10.0, 40.0, 0.0], [50.0, 0.0, 0.0]])
 
-    def _dummy(self, auto_scale):
+    def _dummy(self, scale):
         d = SimpleNamespace(
             walkthrough=SimpleNamespace(session=SimpleNamespace(
                 use_spatial_data=True,
                 spatial_data_final=self.COORDS,
-                auto_scale_to_domain=auto_scale)),
+                effective_scale=lambda: scale)),
             plot_is_2d=True,
             plot_xmin=-500.0, plot_xmax=500.0, plot_dx=1000.0,
             plot_ymin=-500.0, plot_ymax=500.0, plot_dy=1000.0,
         )
         return d
 
-    def test_no_scale_centers_raw_extent(self):
-        # auto-scale off: original extent (40×40), centered in the domain.
-        pars = PositionsWindow._default_spatial_pars(self._dummy(auto_scale=False))
+    def test_no_factor_places_raw_extent_centered(self):
+        # effective_scale()==1.0: original extent (40×40), centered in the domain.
+        pars = PositionsWindow._default_spatial_pars(self._dummy(scale=1.0))
         assert pars == [-20.0, -20.0, 40.0, 40.0]
 
-    def test_auto_scale_fills_domain_preserving_aspect(self):
-        # auto-scale on: 40×40 data scaled ×25 to fill the 1000×1000 domain.
-        pars = PositionsWindow._default_spatial_pars(self._dummy(auto_scale=True))
-        assert pars == [-500.0, -500.0, 1000.0, 1000.0]
+    def test_factor_scales_data_directly_centered(self):
+        # effective_scale()==0.5: 40×40 data → 20×20, centered (NOT fill-to-domain).
+        pars = PositionsWindow._default_spatial_pars(self._dummy(scale=0.5))
+        assert pars == [-10.0, -10.0, 20.0, 20.0]
+
+
+class TestComputeSpatialPlacement:
+    def test_scale_and_center_2d(self):
+        pars = compute_spatial_placement((40.0, 40.0), (0.0, 0.0), 0.5, True)
+        assert pars == [-10.0, -10.0, 20.0, 20.0]
+
+    def test_scale_and_center_3d(self):
+        pars = compute_spatial_placement((40.0, 40.0, 10.0), (0.0, 0.0, 0.0), 0.5, False)
+        assert pars == [-10.0, -10.0, -2.5, 20.0, 20.0, 5.0]
+
+    def test_invariant_output_equals_raw_times_factor(self):
+        # Key invariant: with domain = data_bbox × F (the "Use Data Domain"
+        # case, so the domain center = data_center × F), a mapped point == raw × F.
+        F = 0.5
+        data = np.array([[10.0, 40.0], [50.0, 0.0], [30.0, 20.0]])
+        dmin, dmax = data.min(0), data.max(0)
+        extent = dmax - dmin
+        domain_center = ((dmin + dmax) / 2.0) * F
+        x0, y0, w, h = compute_spatial_placement(
+            tuple(extent), tuple(domain_center), F, True)
+        base = (data - dmin) / extent           # normalized [0,1] (matches the plotter)
+        mapped = base * [w, h] + [x0, y0]
+        np.testing.assert_allclose(mapped, data * F)

@@ -79,7 +79,7 @@ tests/
 
 - [x] Data import: .h5ad, .rds/.rda/.rdata, .csv
 - [x] Spatial coordinate detection (obsm, obs columns)
-- [x] Pixel-coordinate fallback: recognize `imagecol`→x / `imagerow`→y (row-flipped) as a last-resort spatial source, used as-is with no unit conversion (data domain reported in `pixel` units)
+- [x] Pixel-coordinate fallback: recognize `imagecol`→x / `imagerow`→y (row-flipped) as a last-resort spatial source; domain reported in generic `data units` (no inferred unit name)
 - [x] Spatial synthesis from obs columns (x/y/z or imagerow/imagecol → obsm["spatial"]) for CSV and AnnData/R, so the dim-reduction plot offers a Spatial view
 - [x] Domain inference with priority chain (preferred > data_range > default)
 - [x] Domain mismatch: two-tier detection (classify_domain_mismatch: "outside" / "small" / None)
@@ -88,8 +88,8 @@ tests/
 - [x] domain_accepted flag prevents re-trigger on back/forward navigation
 - [x] BiwtInput.domain_accepted + "Skip domain validation" checkbox bypass auto-check
 - [x] Z-fields default to ±10 for 2D data in domain editor
-- [x] DomainSpec units field (e.g. `pixel` for imagerow/imagecol data); no unit conversion — coordinates define the data domain as-is
-- [x] "Auto-scale data to fill domain" toggle wired into positions step (scale-to-fill vs. raw extent, both centered); off = raw data extent
+- [x] Data-unit→host-unit scale factor in the domain editor: auto-detected Visium µm/pixel (`_extract_visium_microns_per_pixel`), editable, with dual data-units/host-units bounds columns synced by the factor and a reset-to-file button
+- [x] Placement scales cells by the factor and centers them in the domain (`compute_spatial_placement`; `session.effective_scale()`) — uniform, aspect-preserving; the domain is an independent host-units container
 - [x] "Domain Settings…" button in positions plot window for manual domain editing
 - [x] Spot deconvolution query and cell expansion
 - [x] Cluster column selection

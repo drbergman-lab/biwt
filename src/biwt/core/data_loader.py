@@ -51,12 +51,18 @@ class BiwtData:
         Path the data was loaded from.
     probability_columns:
         Obs columns that look like per-cell-type deconvolution probabilities.
+    microns_per_data_unit:
+        Conversion factor (microns per one raw data-coordinate unit) that the
+        *file itself* provided, or ``None`` if none.  Currently only 10x Visium
+        `.h5ad` (via ``scalefactors``) supplies this.  It seeds the editable
+        scale factor in the domain editor; it is never applied silently.
     """
     obs: pd.DataFrame
     obsm: dict = field(default_factory=dict)
     spatial_location: Optional[str] = None
     file_path: str = ""
     probability_columns: list = field(default_factory=list)
+    microns_per_data_unit: Optional[float] = None
 
     @property
     def column_names(self) -> list[str]:
@@ -132,7 +138,8 @@ def _load_h5ad(file_path: str) -> BiwtData:
     except Exception as e:
         raise LoadError(f"Failed to read '{file_path}' as AnnData: {e}") from e
 
-    return _from_anndata_object(adata, file_path)
+    mpu = _extract_visium_microns_per_pixel(adata)
+    return _from_anndata_object(adata, file_path, microns_per_data_unit=mpu)
 
 
 def _load_r_file(file_path: str, suffix: str) -> BiwtData:
@@ -202,7 +209,8 @@ def _load_r_file(file_path: str, suffix: str) -> BiwtData:
     except Exception as e:
         raise LoadError(f"Failed to read '{file_path}' as R object: {e}") from e
 
-    return _from_anndata_object(adata, file_path)
+    mpu = _extract_visium_microns_per_pixel(adata)
+    return _from_anndata_object(adata, file_path, microns_per_data_unit=mpu)
 
 
 def _load_csv(file_path: str) -> BiwtData:
@@ -239,6 +247,7 @@ def _load_csv(file_path: str) -> BiwtData:
 def _from_anndata_object(
     adata,
     file_path: str,
+    microns_per_data_unit: Optional[float] = None,
 ) -> BiwtData:
     """Build a BiwtData from an in-memory AnnData object."""
     try:
@@ -265,7 +274,36 @@ def _from_anndata_object(
         spatial_location=spatial_loc,
         file_path=file_path,
         probability_columns=prob_cols,
+        microns_per_data_unit=microns_per_data_unit,
     )
+
+
+def _extract_visium_microns_per_pixel(adata) -> Optional[float]:
+    """Extract the µm/pixel scale factor from 10x Visium AnnData metadata.
+
+    10x Visium spots are 55 µm in diameter in the tissue section.  The fullres
+    pixel diameter is stored in
+    ``adata.uns['spatial'][library_id]['scalefactors']['spot_diameter_fullres']``,
+    so µm/pixel = ``55.0 / spot_diameter_fullres``.
+
+    Returns ``None`` for any non-Visium or missing metadata (callers treat that
+    as "no file-provided factor").  This is the only format-derived factor BIWT
+    currently reads; the value is never applied silently — it seeds the editable
+    scale factor in the domain editor.
+    """
+    try:
+        spatial_meta = adata.uns.get("spatial", {})
+        if not spatial_meta:
+            return None
+        library_id = next(iter(spatial_meta))
+        scalefactors = spatial_meta[library_id].get("scalefactors", {})
+        spot_diameter_px = scalefactors.get("spot_diameter_fullres")
+        if spot_diameter_px and spot_diameter_px > 0:
+            visium_spot_diameter_um = 55.0
+            return visium_spot_diameter_um / spot_diameter_px
+    except Exception:
+        pass
+    return None
 
 
 def _find_probability_columns(obs: pd.DataFrame) -> list[str]:

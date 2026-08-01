@@ -4,9 +4,10 @@ Domain inference logic.
 Priority order for resolving the final DomainSpec:
   1. preferred    — host-supplied DomainSpec (always wins if provided)
   2. data_range   — min/max of the raw coordinate arrays (obsm or obs columns),
-                    used exactly as found (no unit conversion).  When the
-                    coordinates come from image columns (imagerow/imagecol) the
-                    domain units are set to ``"pixel"``.
+                    used exactly as found.  The units are reported generically as
+                    ``"data units"`` — BIWT infers no unit name from the data (a
+                    pixels→host-units scale factor is applied later, visibly, in
+                    the domain editor).
   3. default      — ±500 µm × ±10 µm fallback
 
 Public entry point: ``infer_domain(preferred, obs, obsm)``
@@ -32,9 +33,9 @@ def infer_domain(
 ) -> DomainSpec:
     """Return the best available DomainSpec given what the data provides.
 
-    Coordinates are used exactly as found — BIWT applies no unit conversion.
-    When they come from image columns (imagerow/imagecol) the domain units are
-    reported as ``"pixel"``.
+    Coordinates are used exactly as found; the reported units are the generic
+    ``"data units"`` (BIWT infers no unit name — imagerow/imagecol are still
+    recognized and y-flipped, but not labeled "pixel").
 
     Parameters
     ----------
@@ -51,17 +52,14 @@ def infer_domain(
     if preferred is not None:
         return preferred
 
-    # Reported units come from the obs columns: image (imagerow/imagecol)
-    # coordinates are pixels, everything else is assumed microns.  Resolve once
-    # so the units are consistent whether the bounds come from obsm or obs —
-    # a synthesized obsm["spatial"] (built from image columns) would otherwise
-    # take the obsm path and lose the pixel-units signal.
+    # Resolve obs columns once (needed for the obs-column branch and the y-flip
+    # of image columns).  The domain units are the generic "data units" — no
+    # unit name is inferred from the data.
     try:
         obs_cols = list(obs.columns) if obs is not None else []
     except AttributeError:
         obs_cols = []
     x_col, y_col, z_col, is_image_coords = resolve_obs_coord_cols(obs_cols)
-    units = "pixel" if is_image_coords else "micron"
 
     # --- try obsm ---------------------------------------------------------
     if obsm is not None:
@@ -69,12 +67,12 @@ def infer_domain(
         if key and key in obsm:
             coords = np.asarray(obsm[key], dtype=float)
             if coords.ndim == 2 and coords.shape[1] >= 2:
-                return _domain_from_coords(coords, source="data_range", units=units)
+                return _domain_from_coords(coords, source="data_range")
 
     # --- try obs columns --------------------------------------------------
     if x_col and y_col:
         xy = build_obs_coords(obs, x_col, y_col, z_col, is_image_coords)
-        return _domain_from_coords(xy, source="data_range", units=units)
+        return _domain_from_coords(xy, source="data_range")
 
     return DomainSpec.default()
 
@@ -84,7 +82,7 @@ def infer_domain(
 # ---------------------------------------------------------------------------
 
 def _domain_from_coords(coords: np.ndarray, source: str = "data_range",
-                        units: str = "micron") -> DomainSpec:
+                        units: str = "data units") -> DomainSpec:
     """Build a DomainSpec from the bounding box of a coordinate array."""
     xmin, xmax = float(coords[:, 0].min()), float(coords[:, 0].max())
     ymin, ymax = float(coords[:, 1].min()), float(coords[:, 1].max())
@@ -131,8 +129,8 @@ def _find_coord_col(columns: list[str], axis: str) -> Optional[str]:
 # convention ``imagecol`` is the horizontal (x) axis and ``imagerow`` is the
 # vertical (y) axis; image rows increase *downward*, so ``imagerow`` is flipped
 # when building a y-up coordinate array (see ``build_obs_coords``).  There is no
-# pixel z axis.  NOTE: coordinates are used as-is (no unit conversion); a future
-# session could add a pixels→microns scale factor (see progress.md).
+# pixel z axis.  Coordinates are read as-is; the data→host-units scale factor is
+# applied visibly in the domain editor (see the domain-editor dialog).
 _PIXEL_COORD_CANDIDATES: dict[str, list[str]] = {
     "x": ["imagecol", "image_col"],
     "y": ["imagerow", "image_row"],
@@ -250,7 +248,7 @@ def _detect_spatial_location_from_obs(obs) -> Optional[str]:
     if not (x_col and y_col):
         return None
     if is_image_coords:
-        return f"obs columns '{x_col}', '{y_col}' (pixel coordinates)"
+        return f"obs columns '{x_col}', '{y_col}' (image columns)"
     if z_col:
         return f"obs columns '{x_col}', '{y_col}', '{z_col}'"
     return f"obs columns '{x_col}', '{y_col}'"

@@ -27,7 +27,8 @@ from biwt.gui.widgets import (
     GoBackButton, ContinueButton, LegendWindow, QCheckBox_custom, QLineEdit_custom,
 )
 from biwt.core.domain import classify_domain_mismatch
-from biwt.gui.walkthrough import DomainEditorDialog, _build_mismatch_message
+from biwt.core.positioning import compute_spatial_placement
+from biwt.gui.walkthrough import DomainEditorDialog, _build_mismatch_message, _scale_domain
 
 
 # ---------------------------------------------------------------------------
@@ -232,26 +233,32 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
         if not s.use_spatial_data:
             s.domain_accepted = True
             return
-        data_d = s.data_domain
+        data_d = s.data_domain   # raw coordinate range (data units)
         if data_d is None or data_d.source == "default":
             s.domain_accepted = True
             return
-        mismatch = classify_domain_mismatch(data_d, s.effective_domain)
+        # Compare the data extent in host units (raw × factor) vs the domain.
+        data_host = _scale_domain(data_d, s.scale_factor) if s.scale_factor else data_d
+        mismatch = classify_domain_mismatch(data_host, s.effective_domain)
         if mismatch is None:
             s.domain_accepted = True
             return
         host_name = s.biwt_input.host_name
-        msg = _build_mismatch_message(mismatch, data_d, s.effective_domain, host_name)
+        msg = _build_mismatch_message(mismatch, data_host, s.effective_domain, host_name)
         dlg = DomainEditorDialog(
             self, data_d, s.preferred_domain,
             context_message=msg,
-            initial_domain=s.effective_domain,  # always pre-populate with current active domain
+            initial_domain=s.user_domain,   # None on first open ⇒ dialog shows raw×factor
             host_name=host_name,
+            file_factor=(s.data.microns_per_data_unit if s.data else None),
+            current_factor=s.scale_factor,
+            apply_scale=s.apply_scale,
         )
         if dlg.exec_() == QDialog.Accepted:
-            user_domain, auto_scale = dlg.result()
+            user_domain, factor, apply = dlg.result()
             s.user_domain = user_domain
-            s.auto_scale_to_domain = auto_scale
+            s.scale_factor = factor
+            s.apply_scale = apply
             old_is_2d = self.plot_is_2d
             self._get_domain_dims(s)
             self._apply_domain_change_and_redraw(old_is_2d)
@@ -752,37 +759,17 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
                 ((s.spatial_data_final[:, 2] - zL) / data_dz).reshape(-1, 1),
             ))
 
-        if s.auto_scale_to_domain:
-            # Scale to fill domain while preserving aspect ratio.
-            sf_x = self.plot_dx / data_dx
-            sf_y = self.plot_dy / data_dy
-            if self.plot_is_2d:
-                sf = min(sf_x, sf_y)
-            else:
-                sf = min(sf_x, sf_y, self.plot_dz / data_dz)
-
-            width  = data_dx * sf
-            height = data_dy * sf
-            x0 = 0.5 * (self.plot_xmin + self.plot_xmax) - width / 2
-            y0 = 0.5 * (self.plot_ymin + self.plot_ymax) - height / 2
-
-            if self.plot_is_2d:
-                return [x0, y0, width, height]
-
-            depth = data_dz * sf
-            z0 = 0.5 * (self.plot_zmin + self.plot_zmax) - depth / 2
-            return [x0, y0, z0, width, height, depth]
-
-        else:
-            # No scaling: report original data bounding box, centered in domain.
-            x0 = 0.5 * (self.plot_xmin + self.plot_xmax) - data_dx / 2
-            y0 = 0.5 * (self.plot_ymin + self.plot_ymax) - data_dy / 2
-
-            if self.plot_is_2d:
-                return [x0, y0, data_dx, data_dy]
-
-            z0 = 0.5 * (self.plot_zmin + self.plot_zmax) - data_dz / 2
-            return [x0, y0, z0, data_dx, data_dy, data_dz]
+        # Scale the data by the conversion factor (1.0 = no conversion) and
+        # center it in the domain — a pure scale + translate (aspect preserved).
+        sf = s.effective_scale()
+        cx = 0.5 * (self.plot_xmin + self.plot_xmax)
+        cy = 0.5 * (self.plot_ymin + self.plot_ymax)
+        if self.plot_is_2d:
+            return compute_spatial_placement((data_dx, data_dy), (cx, cy), sf, True)
+        cz = 0.5 * (self.plot_zmin + self.plot_zmax)
+        return compute_spatial_placement(
+            (data_dx, data_dy, data_dz), (cx, cy, cz), sf, False
+        )
 
     # ------------------------------------------------------------------
     # Parameter text boxes
@@ -2101,13 +2088,17 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
         dlg = DomainEditorDialog(
             self, data_d, s.preferred_domain,
             context_message="",
-            initial_domain=s.effective_domain,  # always pre-populate with current active domain
+            initial_domain=s.user_domain,   # revisit current domain if set
             host_name=s.biwt_input.host_name,
+            file_factor=(s.data.microns_per_data_unit if s.data else None),
+            current_factor=s.scale_factor,
+            apply_scale=s.apply_scale,
         )
         if dlg.exec_() == QDialog.Accepted:
-            user_domain, auto_scale = dlg.result()
+            user_domain, factor, apply = dlg.result()
             s.user_domain = user_domain
-            s.auto_scale_to_domain = auto_scale
+            s.scale_factor = factor
+            s.apply_scale = apply
             self._get_domain_dims(s)
 
             # Apply domain changes to plot (handles 2D/3D switch, axes reset, etc.)
