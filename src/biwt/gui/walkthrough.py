@@ -120,7 +120,10 @@ class DomainEditorDialog(QDialog):
         self._data_domain = data_domain            # raw bounds, data units
         self._preferred_domain = preferred_domain  # host bounds, host units
         self._file_factor = file_factor
+        # Both are singular unit *names* ("micron", "data unit"), so they read
+        # correctly both as a column header and as a ratio denominator.
         self._host_units = (preferred_domain.units or "micron")
+        self._data_units = (data_domain.units if data_domain else None) or "data unit"
 
         layout = QVBoxLayout(self)
 
@@ -133,8 +136,10 @@ class DomainEditorDialog(QDialog):
         factor_hbox = QHBoxLayout()
         # Ratio notation ("micron/data unit") rather than prose ("micron per
         # data unit"): a ratio denominator is singular by convention, which
-        # sidesteps pluralising an arbitrary host unit name.
-        factor_hbox.addWidget(QLabel(f"{self._host_units}/data unit:"))
+        # sidesteps pluralising either unit name.  Reads straight off the two
+        # DomainSpecs, so a data domain that ever carries a real unit name
+        # renders as e.g. "micron/pixel" with no further change here.
+        factor_hbox.addWidget(QLabel(f"{self._host_units}/{self._data_units}:"))
         self._factor_edit = QLineEdit()
         fv = QDoubleValidator()
         fv.setBottom(0.0)
@@ -155,7 +160,7 @@ class DomainEditorDialog(QDialog):
 
         # --- two-column bounds grid (data units | host units) ---
         grid = QGridLayout()
-        grid.addWidget(QLabel("<b>data units</b>"), 0, 1)
+        grid.addWidget(QLabel(f"<b>{self._data_units}</b>"), 0, 1)
         grid.addWidget(QLabel(f"<b>{self._host_units}</b>"), 0, 2)
         self._du_fields: dict[str, QLineEdit] = {}    # x/y only
         self._host_fields: dict[str, QLineEdit] = {}  # x/y/z (the stored domain)

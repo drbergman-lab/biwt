@@ -491,6 +491,34 @@ to reach CellCounts, which is skipped whenever spatial data is used.
 
 ---
 
+## 2026-08-01: Scale-factor label as a ratio; data unit name made singular
+
+The domain editor's factor field read `micron per data unit`, which is wrong for a singular
+unit name — nobody says "0.5 micron per data unit". Pluralising needs a rule for an arbitrary
+host unit string, so the label is now a **ratio**: `micron/data unit`. A ratio denominator is
+singular by convention (km/h, mg/L), so no pluralisation logic is needed at all.
+
+That exposed an inconsistency in what `DomainSpec.units` holds. The host side stored a
+singular unit *name* (`"micron"`), but `_domain_from_coords` defaulted to the plural
+`"data units"`. Now both are singular names, so the same value reads correctly in both places
+it appears: as a bounds-column header, and as a term in the ratio.
+
+Both sides of the label are read from the two `DomainSpec`s rather than hardcoded, which
+means a data domain that ever carries a real unit name renders as `micron/pixel` with no
+further change to the dialog. Nothing sets one today — `_domain_from_coords` still passes the
+generic default even on the `imagerow`/`imagecol` path, where pixel-ness *is* known — so
+that remains an available follow-up rather than something implemented.
+
+`DomainSpec.units` on the host side is untouched: still `"micron"`, still the PhysiCell
+convention, still what rides out on `BiwtResult.domain_used`.
+
+Two tests pin this: one asserts the ratio format and the absence of the old prose, the other
+constructs the dialog with `nanometer`/`pixel` to prove neither side is hardcoded.
+
+`docs/assets/screenshots/domain.png` still shows the old prose label and needs a retake.
+
+---
+
 ## Open Questions
 
 - **Visium multi-library:** Current code takes the first library's scale factors. Multi-library arrays are uncommon but should be handled eventually.

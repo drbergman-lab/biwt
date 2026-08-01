@@ -64,7 +64,7 @@ When coordinates come from `obs` columns rather than an `obsm` array, BIWT synth
 `obsm["spatial"]` from them so the scatter plots on later screens have something to draw.
 
 !!! info "Coordinates found this way are in *data units*"
-    BIWT reports the extent as generic "data units" and infers no unit name from your file.
+    BIWT reports the extent in a generic `data unit` and infers no unit name from your file.
     Visium pixel coordinates in particular are not microns. Converting them is the job of the
     scale factor in [the domain editor](domain.md) — and Visium is the one case where BIWT
     can read the factor (µm per pixel) out of the file and pre-fill it for you.

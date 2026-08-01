@@ -135,25 +135,44 @@ def test_dialog_renders_whichever_docs_url_the_error_carries(widget, monkeypatch
     assert f'<a href="{TROUBLESHOOTING_DOCS_URL}">' in boxes[0].text()
 
 
-def test_scale_factor_label_uses_ratio_notation(qapp):
-    """The docs describe this field as `{host unit}/data unit`.
-
-    Ratio notation keeps the denominator singular whatever the host unit is;
-    prose ("micron per data unit") reads wrong for a singular unit name.
-    """
-    from PyQt5.QtWidgets import QLabel
+def _domain_editor(qapp, data_units="data unit", host_units="micron"):
     from biwt.gui.walkthrough import DomainEditorDialog
-
-    dlg = DomainEditorDialog(
+    return DomainEditorDialog(
         None,
-        data_domain=DomainSpec(-100, 4900, -100, 4300, units="data units"),
+        data_domain=DomainSpec(-100, 4900, -100, 4300, units=data_units),
         preferred_domain=DomainSpec(xmin=-500, xmax=500, ymin=-500, ymax=500,
-                                    units="micron"),
+                                    units=host_units),
         file_factor=0.5,
     )
-    labels = [l.text() for l in dlg.findChildren(QLabel)]
+
+
+def _labels(dlg) -> list:
+    from PyQt5.QtWidgets import QLabel
+    return [l.text() for l in dlg.findChildren(QLabel)]
+
+
+def test_scale_factor_label_uses_ratio_notation(qapp):
+    """The docs describe this field as `{host unit}/{data unit}`.
+
+    Ratio notation keeps both unit names singular, which is how
+    ``DomainSpec.units`` stores them ("micron", not "microns").
+    """
+    labels = _labels(_domain_editor(qapp))
     assert "micron/data unit:" in labels
     assert not any(" per data unit" in t for t in labels)
+
+
+def test_scale_factor_label_is_derived_from_both_domains(qapp):
+    """Neither side of the ratio is hardcoded.
+
+    A data domain that carries a real unit name renders as "micron/pixel"
+    with no further change to the dialog.
+    """
+    labels = _labels(_domain_editor(qapp, data_units="pixel", host_units="nanometer"))
+    assert "nanometer/pixel:" in labels
+    # ...and the bounds column headers use the same names.
+    assert "<b>pixel</b>" in labels
+    assert "<b>nanometer</b>" in labels
 
 
 def test_error_message_is_html_escaped(widget, monkeypatch):

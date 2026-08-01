@@ -84,7 +84,7 @@ The `BiwtInput.extra_cell_template_paths` mechanism (TOML files of `name = """<p
 - Missing optional dependencies (`anndata`, `rpy2`) produce an install hint, not a traceback.
 - Empty CSV files produce a `LoadError`. *(not yet implemented — see [F1 open issue])*
 - CSV files with spatial columns (x, y, z) synthesize `obsm["spatial"]` for downstream plotting.
-- Spatial coordinates are resolved from obs/CSV columns in priority order (`resolve_obs_coord_cols`): `x`/`y`/`z` candidates first, then — as a last resort — 10x Visium pixel columns `imagecol`/`imagerow`. `imagecol` maps to x and `imagerow` maps to y; because image rows increase downward, `imagerow` is flipped (`y = rowmax - imagerow`) to give a y-up coordinate system. The data domain is reported in generic `"data units"` — BIWT infers no unit name from the data. A data→host-units **scale factor** (see F2) converts the coordinates, applied visibly in the domain editor; the only auto-detected factor is 10x Visium's µm/pixel (`BiwtData.microns_per_data_unit`).
+- Spatial coordinates are resolved from obs/CSV columns in priority order (`resolve_obs_coord_cols`): `x`/`y`/`z` candidates first, then — as a last resort — 10x Visium pixel columns `imagecol`/`imagerow`. `imagecol` maps to x and `imagerow` maps to y; because image rows increase downward, `imagerow` is flipped (`y = rowmax - imagerow`) to give a y-up coordinate system. The data domain is reported in a generic `"data unit"` — BIWT infers no unit name from the data. Like every other unit name, it is stored singular (`DomainSpec.units` holds `"micron"`, not `"microns"`), so it reads correctly both as a bounds-column header and as the denominator of the scale-factor label. A data→host-units **scale factor** (see F2) converts the coordinates, applied visibly in the domain editor; the only auto-detected factor is 10x Visium's µm/pixel (`BiwtData.microns_per_data_unit`).
 - When spatial coordinates are found in obs columns (rather than an `obsm` array), `obsm["spatial"]` is synthesized from them (with the pixel flip applied) for both CSV and AnnData/R, so the EditCellTypes dim-reduction plotter offers a Spatial view.
 
 ---
@@ -101,7 +101,7 @@ The `BiwtInput.extra_cell_template_paths` mechanism (TOML files of `name = """<p
   - **"small"**: data fits inside but covers < 50% of any axis or < 50% of the 2-D area (cells would be sparse).
 - The dialog edits the domain in the **host's units** (`preferred_domain.units`, e.g. `micron`) and exposes a data-unit→host-unit **scale factor**:
   - A **`{host-unit}/data unit`** field (e.g. `micron/data unit`) — ratio notation, so the denominator stays singular whatever the host unit is — seeded from `BiwtData.microns_per_data_unit` (Visium), or a `"none found in file"` placeholder. A reset button (enabled only when the field differs from the file value) restores the file value.
-  - **Two bounds columns** shown side by side — `data units` and `{host units}` — kept in sync by the factor (edit either, the other updates via ×/÷ F). With no factor, the data-units column is disabled and only the host-units column (the stored domain) is editable.
+  - **Two bounds columns** shown side by side, headed with the two unit names — `{data unit}` and `{host unit}` — kept in sync by the factor (edit either, the other updates via ×/÷ F). With no factor, the data-units column is disabled and only the host-units column (the stored domain) is editable.
   - **"Use Data Domain"**: fills data-units = raw data bounds and host-units = raw × factor (or, with no factor, host-units = raw). **"Use {host} Domain"**: fills host-units = the host bounds verbatim. Z is host-units only and never scaled.
   - **"Apply scale factor to data"** checkbox (on by default) — when on, placement scales the cells by the factor; when off, cells are placed at their raw extent (centered). It never disables the factor field or the column sync.
 - When OK is clicked, the **host-units** bounds become `session.user_domain`; the factor and checkbox persist to `session.scale_factor` / `session.apply_scale`.
@@ -111,7 +111,7 @@ The `BiwtInput.extra_cell_template_paths` mechanism (TOML files of `name = """<p
 
 **Acceptance criteria:**
 - [x] `classify_domain_mismatch()` returns `"outside"`, `"small"`, or `None`; auto-triggered at positions window open on mismatch (data extent compared in host units).
-- [x] Data domain reported in `"data units"` (no inferred unit name); imagerow/imagecol still recognized + y-flipped.
+- [x] Data domain reported in a generic singular `"data unit"` (no inferred unit name); imagerow/imagecol still recognized + y-flipped.
 - [x] Visium µm/pixel factor extracted (`_extract_visium_microns_per_pixel`) into `BiwtData.microns_per_data_unit`; CSV/R → `None`.
 - [x] Domain editor: factor field (placeholder when none) + reset-to-file button; dual data-units/host-units columns synced by the factor; disabled data-units column when no factor.
 - [x] `session.effective_scale()` truth table (factor × apply); `compute_spatial_placement` scales data by F and centers (uniform → exact F× when domain = data×F).

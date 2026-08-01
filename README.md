@@ -118,7 +118,7 @@ mkdocs.yml
 
 - [x] Data import: .h5ad, .rds/.rda/.rdata, .csv
 - [x] Spatial coordinate detection (obsm, obs columns)
-- [x] Pixel-coordinate fallback: recognize `imagecol`→x / `imagerow`→y (row-flipped) as a last-resort spatial source; domain reported in generic `data units` (no inferred unit name)
+- [x] Pixel-coordinate fallback: recognize `imagecol`→x / `imagerow`→y (row-flipped) as a last-resort spatial source; domain reported in a generic `data unit` (no inferred unit name)
 - [x] Spatial synthesis from obs columns (x/y/z or imagerow/imagecol → obsm["spatial"]) for CSV and AnnData/R, so the dim-reduction plot offers a Spatial view
 - [x] Domain inference with priority chain (preferred > data_range > default)
 - [x] Domain mismatch: two-tier detection (classify_domain_mismatch: "outside" / "small" / None)
@@ -149,7 +149,7 @@ mkdocs.yml
 - [x] MkDocs Material documentation site published to GitHub Pages by `.github/workflows/docs.yml`
 - [x] Docs: user guide (all wizard steps), recipes (Visium / non-spatial / spot deconvolution), host-integration guide, mkdocstrings API reference
 - [x] `LoadError.docs_url`: environment-related import failures link to the setup docs from the "Import failed" dialog; file-related failures stay plain text. Missing dependencies point at the install page, broken R stacks at troubleshooting
-- [x] 96 passing tests
+- [x] 98 passing tests
 
 ### In Progress
 

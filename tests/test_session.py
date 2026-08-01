@@ -352,10 +352,10 @@ class TestSetupSpatialData:
 class TestPixelDataDomain:
     def test_image_columns_recognized_and_flipped(self):
         # imagerow/imagecol still recognized + y-flipped, but NOT labeled "pixel":
-        # x = imagecol (10..50), y = flipped imagerow (0..40); units = "data units".
+        # x = imagecol (10..50), y = flipped imagerow (0..40); units = "data unit".
         data = data_loader.load(PIXEL_CSV)
         d = infer_domain(obs=data.obs, obsm=data.obsm)
-        assert d.units == "data units"
+        assert d.units == "data unit"
         assert (d.xmin, d.xmax) == (10, 50)
         assert (d.ymin, d.ymax) == (0, 40)
 
@@ -363,7 +363,7 @@ class TestPixelDataDomain:
         # BIWT infers no unit name from the data.
         data = data_loader.load(SPATIAL_CSV)
         d = infer_domain(obs=data.obs, obsm=data.obsm)
-        assert d.units == "data units"
+        assert d.units == "data unit"
 
 
 class TestScaleFactor:
