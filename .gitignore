@@ -21,3 +21,7 @@ test_biwt.py
 tests/fixtures/toy_*.rds
 # MkDocs build output
 site/
+
+# Generated documentation-screenshot data (see scripts/make_screenshot_data.py)
+screenshot_data.h5ad
+screenshot_deconv.h5ad

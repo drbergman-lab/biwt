@@ -459,6 +459,35 @@ Both were invisible until docstrings became rendered output:
 
 GitHub Pages must be enabled with **Settings → Pages → Source: GitHub Actions** before the
 workflow can deploy. Until then the in-app links 404. Nothing in the repo can do this step.
+*(Done 2026-08-01; the site goes live on the first push to `main`.)*
+
+### Screenshot data generator
+
+`scripts/make_screenshot_data.py` builds a synthetic Visium-like `.h5ad` for documentation
+screenshots. Synthetic rather than a public 10x dataset because raw Visium carries no
+cell-type annotation — a real file would need a full clustering pass before BIWT's
+cluster-column dropdown showed anything worth photographing — and because the composition can
+be tuned to read clearly at screenshot resolution.
+
+It is built backwards from what each screen needs:
+
+- `uns["spatial"][lib]["scalefactors"]["spot_diameter_fullres"] = 110.0`. BIWT computes
+  `55.0 / spot_diameter_fullres`, so this yields exactly 0.5 µm/pixel and the domain editor's
+  factor field appears pre-filled — the entire point of that screenshot.
+- A ~2500 µm tissue extent, which `classify_domain_mismatch` calls `"outside"` against a
+  ±500 µm domain, so the domain editor auto-opens at the positions step instead of having to
+  be summoned.
+- Six cell types with two obvious merges (`Tumor_Core`/`Tumor_Edge`, `M1`/`M2 Macrophage`), so
+  edit-cell-types demonstrates merging rather than just listing.
+- Decoy obs columns (`orig.ident`, `nCount_RNA`, `percent.mt`, `seurat_clusters`, …) so the
+  cluster-column dropdown looks like a real object.
+- `--deconv` adds `*_probability` columns. Opt-in, because their presence changes the wizard's
+  path: BIWT asks the deconvolution question and then skips the cluster-column step.
+
+**Two passes over the same file** are needed for full coverage — verified by driving
+`_step_predicates` headlessly. Answering *yes* at the spatial query reaches ClusterColumn,
+EditCellTypes, RenameCellTypes, Positions, LoadCellParameters; answering *no* is the only way
+to reach CellCounts, which is skipped whenever spatial data is used.
 
 ---
 

@@ -92,6 +92,8 @@ tests/
   test_gui_smoke.py     — Headless Qt import-path and error-dialog tests
   test_positions_plot.py — Spatial placement / plot scaling tests
   fixtures/             — CSV test fixtures
+scripts/
+  make_screenshot_data.py — Synthetic Visium-like .h5ad for doc screenshots
 docs/                   — MkDocs Material site (published to GitHub Pages)
   index.md
   getting-started/      — Install matrix, first walkthrough, R/Seurat troubleshooting
