@@ -80,6 +80,38 @@ def scale_spatial_to_domain(
     return out
 
 
+def compute_spatial_placement(data_extent, domain_center, scale, is_2d):
+    """Placement rectangle for the spatial plotter.
+
+    The data is scaled uniformly by *scale* (host-units per data unit) and
+    centered at *domain_center* — a pure scale + translate, so aspect ratio is
+    always preserved.  *scale* of ``1.0`` places the data at its own extent,
+    centered (no conversion).
+
+    Parameters
+    ----------
+    data_extent:
+        Sequence ``(dx, dy)`` (2-D) or ``(dx, dy, dz)`` (3-D) — the data's
+        bounding-box widths.
+    domain_center:
+        Sequence ``(cx, cy)`` or ``(cx, cy, cz)`` — the domain center to place
+        the scaled data around.
+    scale:
+        Uniform multiplier applied to every axis extent.
+    is_2d:
+        When True use only x/y.
+
+    Returns
+    -------
+    ``[x0, y0, w, h]`` (2-D) or ``[x0, y0, z0, w, h, d]`` (3-D): the placement
+    rectangle's origin (min corner) followed by its widths.
+    """
+    n = 2 if is_2d else 3
+    wh = [float(data_extent[i]) * scale for i in range(n)]
+    origin = [float(domain_center[i]) - wh[i] / 2.0 for i in range(n)]
+    return origin + wh
+
+
 # ---------------------------------------------------------------------------
 # IC DataFrame construction
 # ---------------------------------------------------------------------------

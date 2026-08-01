@@ -41,7 +41,7 @@ import pandas as pd
 
 from PyQt5.QtWidgets import (
     QWidget, QDialog, QVBoxLayout, QHBoxLayout, QGridLayout,
-    QLabel, QPushButton, QLineEdit, QCheckBox,
+    QLabel, QPushButton, QLineEdit, QCheckBox, QToolButton,
     QFileDialog, QMessageBox, QDialogButtonBox,
 )
 from PyQt5.QtCore import Qt
@@ -67,13 +67,38 @@ _LE_STYLE = (
 # Domain editor dialog
 # ---------------------------------------------------------------------------
 
+def _scale_domain(d: DomainSpec, factor: float,
+                  source: str = "data_range", units: str = "micron") -> DomainSpec:
+    """Return *d* with its x/y bounds multiplied by *factor* (host-units per data unit).
+
+    Z bounds are left untouched (a 2-D slab / synthetic depth, not a data-unit
+    measurement). Used to convert a raw data-range domain into host units.
+    """
+    return DomainSpec(
+        xmin=d.xmin * factor, xmax=d.xmax * factor,
+        ymin=d.ymin * factor, ymax=d.ymax * factor,
+        zmin=d.zmin, zmax=d.zmax, source=source, units=units,
+    )
+
+
 class DomainEditorDialog(QDialog):
     """Pop-up for reviewing / editing domain bounds after data import.
 
-    Shown when the data-inferred domain does not match the preferred domain.
-    Returns ``(DomainSpec, auto_scale)`` via :pymethod:`result` after
+    The domain is edited in the **host's units** (``preferred_domain.units``,
+    e.g. microns).  A conversion factor (host-units per data unit) is shown
+    alongside a mirrored **data-units** column; editing either column keeps the
+    other in sync via the factor.  When "Apply scale factor to data" is checked,
+    the factor is used to scale the placed cells (``raw × factor``, centered in
+    the domain).
+
+    ``result()`` returns ``(DomainSpec, scale_factor, apply_scale)`` after
     ``exec_()`` returns ``QDialog.Accepted``.
     """
+
+    _XY = ("xmin", "xmax", "ymin", "ymax")
+    _ROWS = [("X min", "xmin"), ("X max", "xmax"),
+             ("Y min", "ymin"), ("Y max", "ymax"),
+             ("Z min", "zmin"), ("Z max", "zmax")]
 
     def __init__(
         self,
@@ -83,58 +108,68 @@ class DomainEditorDialog(QDialog):
         context_message: str = "",
         initial_domain: Optional[DomainSpec] = None,
         host_name: str = "Host",
+        file_factor: Optional[float] = None,
+        current_factor: Optional[float] = None,
+        apply_scale: bool = True,
     ):
         super().__init__(parent)
         self.setWindowTitle("Domain Settings")
-        self.setMinimumWidth(420)
+        self.setMinimumWidth(460)
 
-        self._data_domain = data_domain
-        self._preferred_domain = preferred_domain
-        self._initial_domain = initial_domain  # pre-set values to show on open (user_domain if revisiting)
+        self._data_domain = data_domain            # raw bounds, data units
+        self._preferred_domain = preferred_domain  # host bounds, host units
+        self._file_factor = file_factor
+        self._host_units = (preferred_domain.units or "micron")
 
         layout = QVBoxLayout(self)
 
-        # --- context-sensitive header (shown only when non-empty) ---
         if context_message:
             lbl = QLabel(context_message)
             lbl.setWordWrap(True)
             layout.addWidget(lbl)
 
-        layout.addWidget(QLabel("Edit the domain below, or use one of the presets."))
+        # --- conversion factor row ---
+        factor_hbox = QHBoxLayout()
+        factor_hbox.addWidget(QLabel(f"{self._host_units} per data unit:"))
+        self._factor_edit = QLineEdit()
+        fv = QDoubleValidator()
+        fv.setBottom(0.0)
+        self._factor_edit.setValidator(fv)
+        self._factor_edit.setStyleSheet(_LE_STYLE)
+        self._factor_edit.setMaximumWidth(120)
+        self._factor_edit.setPlaceholderText("none found in file")
+        F0 = current_factor if current_factor is not None else file_factor
+        if F0 is not None:
+            self._factor_edit.setText(f"{F0:g}")
+        factor_hbox.addWidget(self._factor_edit)
+        self._reset_btn = QToolButton()
+        self._reset_btn.setText("↺")  # ↺ restore
+        self._reset_btn.clicked.connect(self._on_reset)
+        factor_hbox.addWidget(self._reset_btn)
+        factor_hbox.addStretch()
+        layout.addLayout(factor_hbox)
 
-        # --- coordinate fields ---
+        # --- two-column bounds grid (data units | host units) ---
         grid = QGridLayout()
+        grid.addWidget(QLabel("<b>data units</b>"), 0, 1)
+        grid.addWidget(QLabel(f"<b>{self._host_units}</b>"), 0, 2)
+        self._du_fields: dict[str, QLineEdit] = {}    # x/y only
+        self._host_fields: dict[str, QLineEdit] = {}  # x/y/z (the stored domain)
         dv = QDoubleValidator()
-        self._fields: dict[str, QLineEdit] = {}
-        for row, (label, attr) in enumerate([
-            ("X min", "xmin"), ("X max", "xmax"),
-            ("Y min", "ymin"), ("Y max", "ymax"),
-            ("Z min", "zmin"), ("Z max", "zmax"),
-        ]):
-            grid.addWidget(QLabel(label), row, 0)
-            le = QLineEdit_custom(ndigits=2)
-            le.setValidator(dv)
-            le.setStyleSheet(_LE_STYLE)
-            self._fields[attr] = le
-            grid.addWidget(le, row, 1)
+        for i, (label, attr) in enumerate(self._ROWS, start=1):
+            grid.addWidget(QLabel(label), i, 0)
+            host_le = QLineEdit_custom(ndigits=2)
+            host_le.setValidator(dv)
+            host_le.setStyleSheet(_LE_STYLE)
+            self._host_fields[attr] = host_le
+            grid.addWidget(host_le, i, 2)
+            if attr in self._XY:
+                du_le = QLineEdit_custom(ndigits=2)
+                du_le.setValidator(dv)
+                du_le.setStyleSheet(_LE_STYLE)
+                self._du_fields[attr] = du_le
+                grid.addWidget(du_le, i, 1)
         layout.addLayout(grid)
-
-        # --- units ---
-        initial_units = (initial_domain.units if initial_domain is not None
-                         else preferred_domain.units)
-        units_hbox = QHBoxLayout()
-        units_hbox.addWidget(QLabel("Units:"))
-        self._units_edit = QLineEdit(initial_units)
-        self._units_edit.setStyleSheet(_LE_STYLE)
-        self._units_edit.setMaximumWidth(120)
-        units_hbox.addWidget(self._units_edit)
-        units_hbox.addStretch()
-        layout.addLayout(units_hbox)
-
-        # --- auto-scale checkbox ---
-        self._auto_scale_cb = QCheckBox("Auto-scale data to fill domain (preserving aspect ratio)")
-        self._auto_scale_cb.setChecked(True)
-        layout.addWidget(self._auto_scale_cb)
 
         # --- preset buttons ---
         preset_hbox = QHBoxLayout()
@@ -146,47 +181,160 @@ class DomainEditorDialog(QDialog):
         preset_hbox.addWidget(preferred_btn)
         layout.addLayout(preset_hbox)
 
+        # --- apply checkbox ---
+        self._apply_cb = QCheckBox("Apply scale factor to data")
+        self._apply_cb.setChecked(apply_scale)
+        layout.addWidget(self._apply_cb)
+
         # --- OK / Cancel ---
         btn_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         btn_box.accepted.connect(self.accept)
         btn_box.rejected.connect(self.reject)
         layout.addWidget(btn_box)
 
-        # Auto-populate: show user-set values if revisiting, otherwise data domain.
-        if self._initial_domain is not None:
-            self._fill_domain(self._initial_domain)
+        # --- initial population (before signals are connected) ---
+        if initial_domain is not None:
+            self._fill_host(initial_domain)   # revisit: host column = active domain
         else:
-            self._fill_data()
+            self._fill_data()                 # first open: host = raw×F (or raw)
+        self._update_data_units_enabled()
+        self._update_reset_enabled()
+
+        # --- wire signals (after population, so programmatic fills don't loop) ---
+        # textEdited fires only on user input (not setText) → no sync loops.
+        self._factor_edit.textChanged.connect(self._on_factor_changed)
+        for attr, le in self._du_fields.items():
+            le.textEdited.connect(lambda _t, a=attr: self._on_du_edited(a))
+        for attr in self._XY:
+            self._host_fields[attr].textEdited.connect(lambda _t, a=attr: self._on_host_edited(a))
 
     # ------------------------------------------------------------------
+    # Factor
+    # ------------------------------------------------------------------
 
-    def _fill_domain(self, d: DomainSpec) -> None:
-        for attr, le in self._fields.items():
-            le.setText(str(getattr(d, attr)))
+    def _effective_factor(self) -> Optional[float]:
+        """Current factor: the field value if valid (>0), else the file value."""
+        text = self._factor_edit.text().strip()
+        if not text:
+            return self._file_factor
+        try:
+            f = float(text)
+        except ValueError:
+            return None
+        return f if f > 0 else None
+
+    def _on_factor_changed(self, _text: str = "") -> None:
+        # A changed factor re-derives the data-units column from the host domain.
+        if self._effective_factor() is not None:
+            self._sync_du_from_host()
+        self._update_data_units_enabled()
+        self._update_reset_enabled()
+
+    def _on_reset(self) -> None:
+        if self._file_factor is not None:
+            self._factor_edit.setText(f"{self._file_factor:g}")
+
+    def _update_reset_enabled(self) -> None:
+        if self._file_factor is None:
+            self._reset_btn.setEnabled(False)
+            self._reset_btn.setToolTip("")
+            return
+        cur = self._effective_factor()
+        differs = cur is None or abs(cur - self._file_factor) > 1e-12
+        self._reset_btn.setEnabled(differs)
+        self._reset_btn.setToolTip(f"restore value from file: {self._file_factor:g}")
+
+    def _update_data_units_enabled(self) -> None:
+        enabled = self._effective_factor() is not None
+        for le in self._du_fields.values():
+            le.setEnabled(enabled)
+
+    # ------------------------------------------------------------------
+    # Column sync
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _parse(le: QLineEdit) -> Optional[float]:
+        try:
+            return float(le.text())
+        except (ValueError, TypeError):
+            return None
+
+    @staticmethod
+    def _fmt(v: float) -> str:
+        return f"{v:g}"
+
+    def _sync_du_from_host(self) -> None:
+        F = self._effective_factor()
+        if F is None:
+            return
+        for attr, du_le in self._du_fields.items():
+            host_v = self._parse(self._host_fields[attr])
+            if host_v is not None:
+                du_le.setText(self._fmt(host_v / F))
+
+    def _on_du_edited(self, attr: str) -> None:
+        F = self._effective_factor()
+        v = self._parse(self._du_fields[attr])
+        if F is None or v is None:
+            return
+        self._host_fields[attr].setText(self._fmt(v * F))
+
+    def _on_host_edited(self, attr: str) -> None:
+        F = self._effective_factor()
+        v = self._parse(self._host_fields[attr])
+        if F is None or v is None:
+            return
+        self._du_fields[attr].setText(self._fmt(v / F))
+
+    # ------------------------------------------------------------------
+    # Preset fills
+    # ------------------------------------------------------------------
+
+    def _fill_host(self, d: DomainSpec) -> None:
+        """Fill the host column from *d* (host units); derive the data-units column."""
+        for attr in self._host_fields:
+            self._host_fields[attr].setText(self._fmt(getattr(d, attr)))
+        self._sync_du_from_host()
 
     def _fill_data(self) -> None:
+        """Use Data Domain: data-units = raw bounds; host = raw × factor (or raw)."""
         d = self._data_domain
-        if abs(d.zmax - d.zmin) < 1e-6:
-            d = DomainSpec(d.xmin, d.xmax, d.ymin, d.ymax,
-                           -10.0, 10.0, d.source, d.units)
-        self._fill_domain(d)
+        zmin, zmax = d.zmin, d.zmax
+        if abs(zmax - zmin) < 1e-6:
+            zmin, zmax = -10.0, 10.0
+        F = self._effective_factor()
+        for attr in self._XY:
+            raw = getattr(d, attr)
+            if F is not None:
+                self._du_fields[attr].setText(self._fmt(raw))
+                self._host_fields[attr].setText(self._fmt(raw * F))
+            else:
+                self._host_fields[attr].setText(self._fmt(raw))
+        # Z is never scaled by the factor.
+        self._host_fields["zmin"].setText(self._fmt(zmin))
+        self._host_fields["zmax"].setText(self._fmt(zmax))
 
     def _fill_preferred(self) -> None:
-        self._fill_domain(self._preferred_domain)
+        """Use Host Domain: host = host bounds verbatim; derive data-units."""
+        for attr in self._host_fields:
+            self._host_fields[attr].setText(self._fmt(getattr(self._preferred_domain, attr)))
+        self._sync_du_from_host()
 
     # ------------------------------------------------------------------
 
-    def result(self) -> tuple[DomainSpec, bool]:
-        """Return ``(DomainSpec, auto_scale_to_domain)`` from the dialog fields."""
-        vals = {attr: float(le.text() or "0") for attr, le in self._fields.items()}
+    def result(self) -> tuple[DomainSpec, Optional[float], bool]:
+        """Return ``(host-units DomainSpec, scale_factor, apply_scale)``."""
+        def hv(attr):
+            v = self._parse(self._host_fields[attr])
+            return v if v is not None else 0.0
         domain = DomainSpec(
-            xmin=vals["xmin"], xmax=vals["xmax"],
-            ymin=vals["ymin"], ymax=vals["ymax"],
-            zmin=vals["zmin"], zmax=vals["zmax"],
-            source="user_edited",
-            units=self._units_edit.text().strip() or "micron",
+            xmin=hv("xmin"), xmax=hv("xmax"),
+            ymin=hv("ymin"), ymax=hv("ymax"),
+            zmin=hv("zmin"), zmax=hv("zmax"),
+            source="user_edited", units=self._host_units,
         )
-        return domain, self._auto_scale_cb.isChecked()
+        return domain, self._effective_factor(), self._apply_cb.isChecked()
 
 
 def _build_mismatch_message(
@@ -268,10 +416,13 @@ class WalkthroughSession:
     inferred_domain: Optional[DomainSpec] = None
 
     # ---- domain editor overrides (set by DomainEditorDialog) -------------
-    user_domain: Optional[DomainSpec] = None     # user-edited domain; overrides inferred
-    auto_scale_to_domain: bool = True            # scale data coords to fill domain box
-    data_domain: Optional[DomainSpec] = None     # raw data bounding box computed at import
+    user_domain: Optional[DomainSpec] = None     # user-edited domain (host units); overrides inferred
+    data_domain: Optional[DomainSpec] = None     # raw data bounding box (data units) computed at import
     domain_accepted: bool = False                # True once user has resolved domain dialog
+    # Scale factor: host-units per one raw data-coordinate unit. Seeded from
+    # BiwtData.microns_per_data_unit; user-editable in the domain editor.
+    scale_factor: Optional[float] = None
+    apply_scale: bool = True                     # whether the factor scales cell placement
 
     # ---- spatial data (extracted from data after import) -----------------
     # spatial_data: raw (N, 2-or-3) coordinate array in data units
@@ -338,6 +489,17 @@ class WalkthroughSession:
             return self.user_domain
         return self.inferred_domain or self.preferred_domain
 
+    def effective_scale(self) -> float:
+        """Uniform factor applied to place cells (``1.0`` = no conversion).
+
+        The stored ``scale_factor`` (host-units per data unit) is applied only
+        when ``apply_scale`` is on and a positive factor exists; otherwise cells
+        are placed at their raw extent, centered.
+        """
+        if self.apply_scale and self.scale_factor and self.scale_factor > 0:
+            return self.scale_factor
+        return 1.0
+
     # ------------------------------------------------------------------
     # Data-logic helpers (pure Python, no Qt)
     # ------------------------------------------------------------------
@@ -366,7 +528,9 @@ class WalkthroughSession:
 
     def setup_spatial_data(self) -> None:
         """Extract raw spatial coordinates into self.spatial_data."""
-        from biwt.core.domain import _find_spatial_key, _find_coord_col
+        from biwt.core.domain import (
+            _find_spatial_key, resolve_obs_coord_cols, build_obs_coords,
+        )
         if self.data.obsm:
             key = _find_spatial_key(self.data.obsm)
             if key:
@@ -376,17 +540,10 @@ class WalkthroughSession:
                 self.spatial_data = arr
                 return
         cols = list(self.data.obs.columns)
-        x_col = _find_coord_col(cols, "x") or _find_coord_col(cols, "imagerow")
-        y_col = _find_coord_col(cols, "y") or _find_coord_col(cols, "imagecol")
+        x_col, y_col, z_col, is_image_coords = resolve_obs_coord_cols(cols)
         if x_col and y_col:
-            z_col = _find_coord_col(cols, "z")
-            xy = np.column_stack([
-                self.data.obs[x_col].values,
-                self.data.obs[y_col].values,
-            ])
-            if z_col:
-                xy = np.column_stack([xy, self.data.obs[z_col].values])
-            else:
+            xy = build_obs_coords(self.data.obs, x_col, y_col, z_col, is_image_coords)
+            if xy.shape[1] == 2:
                 xy = np.column_stack([xy, np.zeros(len(xy))])
             self.spatial_data = xy
 
@@ -683,26 +840,29 @@ class BioinformaticsWalkthrough(QWidget):
         self.session.use_spatial_data = None if bdata.has_spatial else False
 
 
-        # Infer domain — preferred always wins; otherwise use data metadata/range.
-        # microns_per_pixel is non-None only for platforms where we know the
-        # physical scale (currently 10x Visium).
-        preferred = self.session.biwt_input.preferred_domain
-        inferred = domain_module.infer_domain(
-            preferred=preferred,
-            obs=bdata.obs,
-            obsm=bdata.obsm,
-            microns_per_pixel=bdata.microns_per_pixel,
-        )
-        self.session.inferred_domain = inferred
+        # Seed the scale factor (host-units per data unit) from what the file
+        # supplied (currently only Visium µm/pixel); None → user enters one.
+        self.session.scale_factor = bdata.microns_per_data_unit
 
-        # Compute and store data-range domain for later mismatch check at positions step.
+        # data_domain = raw coordinate range (data units), used by the editor.
         data_domain = domain_module.infer_domain(
             preferred=None,
             obs=bdata.obs,
             obsm=bdata.obsm,
-            microns_per_pixel=bdata.microns_per_pixel,
         )
         self.session.data_domain = data_domain
+
+        # Default effective domain (host units): the host's preferred domain wins;
+        # otherwise the raw range converted by the seed factor (raw × factor).
+        preferred = self.session.biwt_input.preferred_domain
+        if preferred is not None:
+            self.session.inferred_domain = preferred
+        elif self.session.scale_factor:
+            self.session.inferred_domain = _scale_domain(
+                data_domain, self.session.scale_factor
+            )
+        else:
+            self.session.inferred_domain = data_domain
 
         # domain_accepted: host can pre-accept, or user can check the checkbox.
         self.session.domain_accepted = (
@@ -712,7 +872,7 @@ class BioinformaticsWalkthrough(QWidget):
 
         log.info(
             "Loaded %d cells from '%s'. Domain source: %s.",
-            bdata.n_cells, path, inferred.source,
+            bdata.n_cells, path, self.session.inferred_domain.source,
         )
         self._start_walkthrough()
 

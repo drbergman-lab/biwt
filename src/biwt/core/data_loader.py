@@ -20,7 +20,12 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-from biwt.core.domain import _detect_spatial_location_from_obsm, _detect_spatial_location_from_obs
+from biwt.core.domain import (
+    _detect_spatial_location_from_obsm,
+    _detect_spatial_location_from_obs,
+    resolve_obs_coord_cols,
+    build_obs_coords,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -46,17 +51,18 @@ class BiwtData:
         Path the data was loaded from.
     probability_columns:
         Obs columns that look like per-cell-type deconvolution probabilities.
-    microns_per_pixel:
-        Scale factor derived from platform metadata (e.g. 10x Visium
-        ``scalefactors``).  ``None`` when not available; ``domain.py`` uses
-        this to convert pixel-space coordinates to µm before domain inference.
+    microns_per_data_unit:
+        Conversion factor (microns per one raw data-coordinate unit) that the
+        *file itself* provided, or ``None`` if none.  Currently only 10x Visium
+        `.h5ad` (via ``scalefactors``) supplies this.  It seeds the editable
+        scale factor in the domain editor; it is never applied silently.
     """
     obs: pd.DataFrame
     obsm: dict = field(default_factory=dict)
     spatial_location: Optional[str] = None
     file_path: str = ""
     probability_columns: list = field(default_factory=list)
-    microns_per_pixel: Optional[float] = None
+    microns_per_data_unit: Optional[float] = None
 
     @property
     def column_names(self) -> list[str]:
@@ -132,8 +138,8 @@ def _load_h5ad(file_path: str) -> BiwtData:
     except Exception as e:
         raise LoadError(f"Failed to read '{file_path}' as AnnData: {e}") from e
 
-    mpp = _extract_visium_microns_per_pixel(adata)
-    return _from_anndata_object(adata, file_path, microns_per_pixel=mpp)
+    mpu = _extract_visium_microns_per_pixel(adata)
+    return _from_anndata_object(adata, file_path, microns_per_data_unit=mpu)
 
 
 def _load_r_file(file_path: str, suffix: str) -> BiwtData:
@@ -203,7 +209,8 @@ def _load_r_file(file_path: str, suffix: str) -> BiwtData:
     except Exception as e:
         raise LoadError(f"Failed to read '{file_path}' as R object: {e}") from e
 
-    return _from_anndata_object(adata, file_path)
+    mpu = _extract_visium_microns_per_pixel(adata)
+    return _from_anndata_object(adata, file_path, microns_per_data_unit=mpu)
 
 
 def _load_csv(file_path: str) -> BiwtData:
@@ -217,19 +224,12 @@ def _load_csv(file_path: str) -> BiwtData:
 
     # Synthesize obsm["spatial"] from coordinate columns so the dim-red
     # plotter in EditCellTypesWindow can display the spatial scatter plot.
+    # For image columns: imagecol -> x, imagerow -> y (flipped y-up) — see
+    # build_obs_coords.
     obsm: dict = {}
-    if spatial_location is not None:
-        from biwt.core.domain import _find_coord_col
-        cols = list(df.columns)
-        x_col = _find_coord_col(cols, "x") or _find_coord_col(cols, "imagerow")
-        y_col = _find_coord_col(cols, "y") or _find_coord_col(cols, "imagecol")
-        if x_col and y_col:
-            z_col = _find_coord_col(cols, "z")
-            xy = np.column_stack([df[x_col].to_numpy(float), df[y_col].to_numpy(float)])
-            if z_col:
-                obsm["spatial"] = np.column_stack([xy, df[z_col].to_numpy(float)])
-            else:
-                obsm["spatial"] = xy
+    x_col, y_col, z_col, is_image_coords = resolve_obs_coord_cols(list(df.columns))
+    if x_col and y_col:
+        obsm["spatial"] = build_obs_coords(df, x_col, y_col, z_col, is_image_coords)
 
     return BiwtData(
         obs=df,
@@ -247,7 +247,7 @@ def _load_csv(file_path: str) -> BiwtData:
 def _from_anndata_object(
     adata,
     file_path: str,
-    microns_per_pixel: Optional[float] = None,
+    microns_per_data_unit: Optional[float] = None,
 ) -> BiwtData:
     """Build a BiwtData from an in-memory AnnData object."""
     try:
@@ -256,10 +256,17 @@ def _from_anndata_object(
     except Exception as e:
         raise LoadError(f"Could not read obs/obsm from AnnData object: {e}") from e
 
-    spatial_loc = (
-        _detect_spatial_location_from_obsm(obsm)
-        or _detect_spatial_location_from_obs(obs)
-    )
+    obsm_loc = _detect_spatial_location_from_obsm(obsm)
+    spatial_loc = obsm_loc or _detect_spatial_location_from_obs(obs)
+
+    # When spatial coordinates live in obs columns (not an obsm array),
+    # synthesize obsm["spatial"] from them (imagerow/imagecol get the y-up flip)
+    # so the EditCellTypes dim-reduction plotter can offer a Spatial view.
+    if obsm_loc is None and spatial_loc is not None:
+        x_col, y_col, z_col, is_image_coords = resolve_obs_coord_cols(list(obs.columns))
+        if x_col and y_col and "spatial" not in obsm:
+            obsm["spatial"] = build_obs_coords(obs, x_col, y_col, z_col, is_image_coords)
+
     prob_cols = _find_probability_columns(obs)
     return BiwtData(
         obs=obs,
@@ -267,32 +274,27 @@ def _from_anndata_object(
         spatial_location=spatial_loc,
         file_path=file_path,
         probability_columns=prob_cols,
-        microns_per_pixel=microns_per_pixel,
+        microns_per_data_unit=microns_per_data_unit,
     )
 
 
 def _extract_visium_microns_per_pixel(adata) -> Optional[float]:
     """Extract the µm/pixel scale factor from 10x Visium AnnData metadata.
 
-    10x Visium spots are 55 µm in diameter in the tissue section.
-    The fullres pixel diameter is stored in
-    ``adata.uns['spatial'][library_id]['scalefactors']['spot_diameter_fullres']``.
+    10x Visium spots are 55 µm in diameter in the tissue section.  The fullres
+    pixel diameter is stored in
+    ``adata.uns['spatial'][library_id]['scalefactors']['spot_diameter_fullres']``,
+    so µm/pixel = ``55.0 / spot_diameter_fullres``.
 
-    Returns ``None`` for any non-Visium or missing metadata — callers treat
-    ``None`` as "scale unknown; use raw coordinates".
-
-    Platform-specific notes
-    -----------------------
-    This currently handles 10x Visium only.  Other platforms with known
-    physical scales (Xenium, MERFISH, etc.) typically store coordinates
-    already in µm and do not need this conversion.  Add cases here as
-    support for other platforms is added.
+    Returns ``None`` for any non-Visium or missing metadata (callers treat that
+    as "no file-provided factor").  This is the only format-derived factor BIWT
+    currently reads; the value is never applied silently — it seeds the editable
+    scale factor in the domain editor.
     """
     try:
         spatial_meta = adata.uns.get("spatial", {})
         if not spatial_meta:
             return None
-        # Take the first library (multi-library arrays are uncommon)
         library_id = next(iter(spatial_meta))
         scalefactors = spatial_meta[library_id].get("scalefactors", {})
         spot_diameter_px = scalefactors.get("spot_diameter_fullres")
