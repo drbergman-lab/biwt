@@ -131,7 +131,10 @@ class DomainEditorDialog(QDialog):
 
         # --- conversion factor row ---
         factor_hbox = QHBoxLayout()
-        factor_hbox.addWidget(QLabel(f"{self._host_units} per data unit:"))
+        # Ratio notation ("micron/data unit") rather than prose ("micron per
+        # data unit"): a ratio denominator is singular by convention, which
+        # sidesteps pluralising an arbitrary host unit name.
+        factor_hbox.addWidget(QLabel(f"{self._host_units}/data unit:"))
         self._factor_edit = QLineEdit()
         fv = QDoubleValidator()
         fv.setBottom(0.0)

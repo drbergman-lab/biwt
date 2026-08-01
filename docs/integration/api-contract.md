@@ -24,7 +24,7 @@ Passed **in** as `BiwtInput.preferred_domain` and returned **out** as
 ### `units`
 
 Defaults to `"micron"`, the PhysiCell convention. BIWT uses this for two things: labelling
-the [domain editor](../guide/domain.md) fields ("micron per data unit"), and flagging
+the [domain editor](../guide/domain.md) fields (`micron/data unit`), and flagging
 potential mismatches.
 
 !!! warning "Non-micron hosts: a known gap"

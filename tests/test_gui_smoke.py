@@ -135,6 +135,27 @@ def test_dialog_renders_whichever_docs_url_the_error_carries(widget, monkeypatch
     assert f'<a href="{TROUBLESHOOTING_DOCS_URL}">' in boxes[0].text()
 
 
+def test_scale_factor_label_uses_ratio_notation(qapp):
+    """The docs describe this field as `{host unit}/data unit`.
+
+    Ratio notation keeps the denominator singular whatever the host unit is;
+    prose ("micron per data unit") reads wrong for a singular unit name.
+    """
+    from PyQt5.QtWidgets import QLabel
+    from biwt.gui.walkthrough import DomainEditorDialog
+
+    dlg = DomainEditorDialog(
+        None,
+        data_domain=DomainSpec(-100, 4900, -100, 4300, units="data units"),
+        preferred_domain=DomainSpec(xmin=-500, xmax=500, ymin=-500, ymax=500,
+                                    units="micron"),
+        file_factor=0.5,
+    )
+    labels = [l.text() for l in dlg.findChildren(QLabel)]
+    assert "micron/data unit:" in labels
+    assert not any(" per data unit" in t for t in labels)
+
+
 def test_error_message_is_html_escaped(widget, monkeypatch):
     boxes = _capture_message_boxes(monkeypatch)
 

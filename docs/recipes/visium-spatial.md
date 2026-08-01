@@ -56,7 +56,7 @@ At the positions screen the [domain editor](../guide/domain.md) will almost cert
 its own, because raw Visium coordinates run into the thousands while a PhysiCell domain is
 typically ±500 µm. This is the mismatch it exists to catch.
 
-**Check the "micron per data unit" field first.**
+**Check the `micron/data unit` field first.**
 
 - If it is pre-filled, BIWT read it from your file. A typical Visium value is around 0.5–2 µm
   per pixel depending on the image resolution. Sanity-check it: your tissue's real extent is

@@ -28,7 +28,7 @@ nonsensical initial condition. A Visium array spanning 8,000 pixels is not 8,000
 ## The scale factor
 
 The bridge between the two is one number: **host units per data unit**. The field is labeled
-with the host's own unit — "micron per data unit" for PhysiCell.
+as a ratio using the host's own unit — `micron/data unit` for PhysiCell.
 
 - For **10x Visium** data, BIWT reads µm-per-pixel out of the file and pre-fills it. A reset
   button (enabled only when you have changed the value) restores the file's number.
