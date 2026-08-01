@@ -1,7 +1,33 @@
-# 1. Import data
+# Import data
 
 The first screen has one button: **Import file…**. It offers `.h5ad`, `.rds`, `.rda`,
 `.rdata`, and `.csv`.
+
+<figure markdown>
+  ![The BIWT import screen](../assets/screenshots/import.png)
+  <figcaption>The starting screen. Everything else in the wizard follows from what you load
+  here.</figcaption>
+</figure>
+
+## Default cell-type column
+
+Next to the import button is a **Default cell-type column** field, pre-filled with `type`.
+
+If your data has a metadata column with that name, BIWT uses it as the cell-type annotation
+straight away and the [cluster column](cluster-column.md) screen never appears. If it does
+not — which is usual, since most objects call it `cell_type`, `celltype`, or
+`annotation` — BIWT tells you so and asks you to choose:
+
+> `'type' was not found in the obs columns. Select from the following:`
+
+So the field is a shortcut, not a requirement. Set it to your annotation column's name if you
+import many files with the same schema; otherwise leave it and pick from the dropdown.
+
+## Skip domain validation
+
+The checkbox below suppresses the [domain editor](domain.md) auto-opening at the positions
+step. Leave it unchecked unless you already know your domain is right — the check exists
+because coordinate/domain mismatches are the most common way to get a nonsensical result.
 
 ## What BIWT reads from each format
 

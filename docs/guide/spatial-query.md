@@ -1,11 +1,19 @@
-# 4. Spatial query
+# Spatial query
 
 **Shown when:** BIWT found spatial coordinates in your data. If it found none, there is
 nothing to ask and this screen is skipped — placement will be random.
 
 ## The question
 
-"Use the spatial coordinates from the data?" Yes or no.
+"Use the spatial coordinates from the data?" Yes or no. The prompt names *where* it found
+them, which is worth reading — `obsm['spatial']` is a real coordinate array, but a hit on
+`obs` columns could be an embedding rather than tissue positions.
+
+<figure markdown>
+  ![The spatial data query](../assets/screenshots/spatial-query-yes.png)
+  <figcaption>Note that the prompt names where the coordinates were found — worth reading
+  before you answer.</figcaption>
+</figure>
 
 ## Yes — place cells where the data says
 

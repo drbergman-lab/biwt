@@ -1,4 +1,4 @@
-# 6. Rename cell types
+# Rename cell types
 
 **Shown when:** always.
 
@@ -6,6 +6,12 @@
 
 Each cell type that survived the [edit step](edit-cell-types.md) gets a text field,
 pre-filled with its first original name. Change any of them, or accept them all.
+
+<figure markdown>
+  ![Rename cell types](../assets/screenshots/rename-cell-types.png)
+  <figcaption>Original name on the left, the name that will reach your simulation on the
+  right.</figcaption>
+</figure>
 
 The names you set here are what appear in the `type` column of the output and in the
 generated PhysiCell cell-definitions XML. They are the names your simulation config will use.

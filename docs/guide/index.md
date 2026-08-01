@@ -28,6 +28,13 @@ is skipped entirely — you never see it.
 When every condition is false, BIWT [assembles the result](result.md) and hands it to the
 host.
 
+!!! note "The step numbers in the title bar are relative"
+    BIWT numbers steps by which ones are actually being shown, so the same screen gets
+    different numbers on different paths. Using spatial data, Positions is "Step 5"; without
+    it, [cell counts](cell-counts.md) takes that number and Positions becomes "Step 6". The
+    pages in this guide are deliberately unnumbered for that reason — follow the names, not
+    the count.
+
 Two consequences worth internalizing:
 
 - **Your answers change which screens exist.** Saying "yes" at the spatial query removes the

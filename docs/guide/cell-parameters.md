@@ -1,4 +1,4 @@
-# 9. Cell parameters
+# Cell parameters
 
 **Shown when:** always — the last step before BIWT hands back its result.
 
@@ -7,9 +7,24 @@
 Each of your cell types can be assigned a **phenotype template**: a block of PhysiCell XML
 describing how that cell behaves. Motility, mechanics, secretion, cycle, death rates.
 
+<figure markdown>
+  ![Assigning phenotype templates to each cell type](../assets/screenshots/cell-parameters.png)
+  <figcaption>One dropdown per cell type. The suffix on each entry — <code>(built-in)</code>
+  — shows where the template came from.</figcaption>
+</figure>
+
 This is optional in the sense that you can accept defaults, but it is where a table of
 positions becomes a runnable model. Positions say where cells are; parameters say what they
 do.
+
+!!! warning "Marked experimental in the UI"
+    The screen carries a banner: *these templates are PhysiCell-specific and may change in
+    future releases.* That reflects a planned split — the PhysiCell templates are expected to
+    move into a separate `biwt-physicell` package, leaving the base package
+    framework-agnostic. Treat template *names* as unstable across releases.
+
+**Sort templates** reorders the dropdown entries by name or by source, which matters once you
+have loaded your own alongside the built-ins.
 
 ## The built-in templates
 
@@ -35,9 +50,17 @@ with no good match, `default` is a reasonable neutral starting point.
 
 ## Supplying your own templates
 
-A host can pass additional template files through
-[`BiwtInput.extra_cell_template_paths`][biwt.types.BiwtInput]. Each is a TOML file mapping a
-template name to a PhysiCell phenotype XML block:
+Two routes, and you do not need to be the host to use the first one.
+
+**From the wizard.** The **Add templates from file…** button at the bottom of the screen loads
+a template file on the spot. Your templates then appear in every dropdown alongside the
+built-ins, distinguished by their source suffix.
+
+**From the host.** An application embedding BIWT can pass template files at launch through
+[`BiwtInput.extra_cell_template_paths`][biwt.types.BiwtInput], so they are always present
+without the user loading anything.
+
+Either way the file is TOML, mapping a template name to a PhysiCell phenotype XML block:
 
 ```toml
 "My Cell Type" = """
@@ -50,9 +73,8 @@ template name to a PhysiCell phenotype XML block:
 """
 ```
 
-Templates loaded this way appear in the dropdowns alongside the built-ins. This is the
-supported way to use your own parameter database without waiting for BIWT to add it — see
-[embedding BIWT](../integration/api-contract.md) for how a host wires it up.
+This is the supported way to use your own parameter database without waiting for BIWT to add
+it — see [embedding BIWT](../integration/api-contract.md) for how a host wires it up.
 
 ## What happens with your choices
 

@@ -53,6 +53,9 @@ plugins:
             merge_init_into_class: true
             filters: ["!^_"]
 
+extra_css:
+  - assets/stylesheets/extra.css
+
 markdown_extensions:
   - admonition
   - attr_list
@@ -74,17 +77,20 @@ nav:
       - Installation: getting-started/installation.md
       - Your first walkthrough: getting-started/first-walkthrough.md
       - Troubleshooting: getting-started/troubleshooting.md
+  # Deliberately unnumbered: BIWT numbers steps dynamically by which ones are
+  # shown, so the same screen is "Step 5" on one path and "Step 6" on another.
+  # Static numbers here would contradict both the app and guide/index.md.
   - User guide:
       - guide/index.md
-      - 1. Import data: guide/import.md
-      - 2. Spot deconvolution: guide/spot-deconvolution.md
-      - 3. Cluster column: guide/cluster-column.md
-      - 4. Spatial query: guide/spatial-query.md
-      - 5. Edit cell types: guide/edit-cell-types.md
-      - 6. Rename cell types: guide/rename-cell-types.md
-      - 7. Cell counts: guide/cell-counts.md
-      - 8. Positions: guide/positions.md
-      - 9. Cell parameters: guide/cell-parameters.md
+      - Import data: guide/import.md
+      - Spot deconvolution: guide/spot-deconvolution.md
+      - Cluster column: guide/cluster-column.md
+      - Spatial query: guide/spatial-query.md
+      - Edit cell types: guide/edit-cell-types.md
+      - Rename cell types: guide/rename-cell-types.md
+      - Cell counts: guide/cell-counts.md
+      - Positions: guide/positions.md
+      - Cell parameters: guide/cell-parameters.md
       - The domain editor: guide/domain.md
       - Finishing up: guide/result.md
   - Recipes:

@@ -1,14 +1,22 @@
-# 5. Edit cell types
+# Edit cell types
 
 **Shown when:** always.
 
 ## The question
 
 Every cell type found in your [cluster column](cluster-column.md) is listed alphabetically
-with three options: **Keep**, **Merge**, or **Delete**.
+with three options: **Keep**, **Merge**, or **Delete**. By default all are kept.
 
-When your data has spatial coordinates, a scatter plot sits alongside the list, colored by
-cell type, so you can see what you are about to change. **Show Legend** opens the color key
+<figure markdown>
+  ![Edit cell types, with the spatial scatter plot alongside](../assets/screenshots/edit-cell-types.png)
+  <figcaption>Tick the types you want to act on, then use Merge or Delete. The plot updates
+  as you go.</figcaption>
+</figure>
+
+When your data has spatial coordinates, a scatter plot sits alongside the list so you can see
+what you are about to change. The dropdown above it switches between available
+representations — `spatial` plus any dimensionality reductions your object carries — and
+**Marker Size** is worth turning down on dense data. **Show Legend** (⌘L) opens the color key
 in a popup.
 
 ## Keep

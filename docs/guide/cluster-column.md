@@ -1,12 +1,21 @@
-# 3. Cluster column
+# Cluster column
 
-**Shown when:** you have not already chosen a column, and you are not doing
-[spot deconvolution](spot-deconvolution.md).
+**Shown when:** the [default cell-type column](import.md#default-cell-type-column) was not
+found in your data, and you are not doing [spot deconvolution](spot-deconvolution.md).
 
 ## The question
 
 A dropdown lists every column in your data's metadata table. You pick the one holding
 cell-type labels.
+
+<figure markdown>
+  ![The cluster column dropdown, listing every obs column](../assets/screenshots/cluster-column-dropdown.png)
+  <figcaption>Every metadata column is offered, alphabetically. Only one of these is a
+  cell-type annotation.</figcaption>
+</figure>
+
+The message above the dropdown names the column BIWT looked for and did not find — `type` by
+default, or whatever you set on the [import screen](import.md#default-cell-type-column).
 
 This is the single most consequential choice in the wizard. Everything downstream — which
 types exist, what you can merge, how many cells of each go into the domain — derives from

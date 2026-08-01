@@ -1,0 +1,47 @@
+/* Screenshots.
+ *
+ * The captures are RGBA with the macOS window shadow on transparency, so they
+ * composite correctly over both the light and dark theme backgrounds — no
+ * border, background, or baked-in padding needed.
+ *
+ * They vary a lot in natural size (a 672px dialog next to a 2528px window).
+ * Rather than padding the files to a common canvas, cap the large ones and
+ * leave the small ones alone: upscaling a small dialog to match a big one just
+ * makes it blurry.
+ */
+
+.md-typeset figure img,
+.md-typeset p > img[src*="/screenshots/"] {
+  display: block;
+  margin: 0 auto;
+  max-width: 100%;
+  height: auto;
+}
+
+/* Full-window captures: keep them from dominating the page on wide screens. */
+.md-typeset img[src*="/screenshots/"] {
+  max-height: 34rem;
+  width: auto;
+}
+
+/* Small dialogs read better at their natural size than stretched to column
+ * width, so never scale anything up. */
+.md-typeset figure {
+  margin: 1.4em auto;
+  text-align: center;
+}
+
+.md-typeset figure figcaption {
+  font-size: 0.75rem;
+  color: var(--md-default-fg-color--light);
+  margin-top: 0.5em;
+  max-width: 46rem;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Tabbed screenshot sets (the four cell-count modes) shouldn't jump in height
+ * as you switch tabs. */
+.md-typeset .tabbed-block > figure {
+  margin-top: 0.8em;
+}

@@ -7,6 +7,13 @@ time from that screen with **Domain Settings…**.
 This is the most conceptually dense part of BIWT, because it is where two coordinate systems
 meet.
 
+<figure markdown>
+  ![The domain editor, opened on an "outside" mismatch](../assets/screenshots/domain.png)
+  <figcaption>Opened automatically because the data extends past the host domain. The scale
+  factor here was read from the file's Visium metadata; the two bounds columns stay in sync
+  through it.</figcaption>
+</figure>
+
 ## Data units vs host units
 
 Your file has coordinates in whatever the instrument or analysis produced — often Visium
@@ -20,8 +27,8 @@ nonsensical initial condition. A Visium array spanning 8,000 pixels is not 8,000
 
 ## The scale factor
 
-The bridge between the two is one number: **host units per data unit**. For PhysiCell the
-field is labeled "microns per data unit".
+The bridge between the two is one number: **host units per data unit**. The field is labeled
+with the host's own unit — "micron per data unit" for PhysiCell.
 
 - For **10x Visium** data, BIWT reads µm-per-pixel out of the file and pre-fills it. A reset
   button (enabled only when you have changed the value) restores the file's number.

@@ -1,11 +1,18 @@
-# 7. Cell counts
+# Cell counts
 
 **Shown when:** you are **not** using spatial data. With spatial data, one cell is placed per
 data row, so there is nothing to decide and this screen is skipped.
 
 ## The question
 
-How many cells of each type to place. Four modes, as radio buttons.
+How many cells of each type to place. The four modes sit side by side as columns — pick one
+with its radio button and that column becomes editable while the others grey out.
+
+<figure markdown>
+  ![The cell counts screen with confluence mode selected](../assets/screenshots/cell-counts-confluence.png)
+  <figcaption>Confluence selected: its column is editable and pre-populated from the current
+  counts, while the other three grey out.</figcaption>
+</figure>
 
 ## The four modes
 

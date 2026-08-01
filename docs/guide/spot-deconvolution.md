@@ -1,4 +1,4 @@
-# 2. Spot deconvolution
+# Spot deconvolution
 
 **Shown when:** your data has per-cell-type probability columns **and** spatial coordinates.
 Otherwise this screen never appears.
