@@ -1,0 +1,103 @@
+site_name: BIWT
+site_description: >-
+  BioInformatics WalkThrough — import single-cell data and generate
+  initial conditions for agent-based models.
+site_url: https://drbergman-lab.github.io/biwt/
+repo_url: https://github.com/drbergman-lab/biwt
+repo_name: drbergman-lab/biwt
+edit_uri: edit/main/docs/
+copyright: BSD-3-Clause
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.indexes
+    - toc.follow
+    - content.code.copy
+    - content.action.edit
+    - search.suggest
+    - search.highlight
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            show_source: true
+            show_root_heading: true
+            show_symbol_type_heading: true
+            members_order: source
+            docstring_style: numpy
+            separate_signature: true
+            show_signature_annotations: true
+            merge_init_into_class: true
+            filters: ["!^_"]
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - footnotes
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Getting started:
+      - getting-started/index.md
+      - Installation: getting-started/installation.md
+      - Your first walkthrough: getting-started/first-walkthrough.md
+      - Troubleshooting: getting-started/troubleshooting.md
+  - User guide:
+      - guide/index.md
+      - 1. Import data: guide/import.md
+      - 2. Spot deconvolution: guide/spot-deconvolution.md
+      - 3. Cluster column: guide/cluster-column.md
+      - 4. Spatial query: guide/spatial-query.md
+      - 5. Edit cell types: guide/edit-cell-types.md
+      - 6. Rename cell types: guide/rename-cell-types.md
+      - 7. Cell counts: guide/cell-counts.md
+      - 8. Positions: guide/positions.md
+      - 9. Cell parameters: guide/cell-parameters.md
+      - The domain editor: guide/domain.md
+      - Finishing up: guide/result.md
+  - Recipes:
+      - recipes/index.md
+      - Visium spatial data: recipes/visium-spatial.md
+      - Non-spatial scRNA-seq: recipes/nonspatial-scrnaseq.md
+      - Spot deconvolution: recipes/spot-deconvolution.md
+  - Embedding BIWT:
+      - integration/index.md
+      - The API contract: integration/api-contract.md
+      - PhysiCell Studio: integration/studio.md
+  - API reference:
+      - reference/index.md
+      - biwt.types: reference/types.md
+      - biwt.core: reference/core.md
+      - biwt.gui: reference/gui.md

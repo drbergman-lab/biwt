@@ -26,7 +26,11 @@ matplotlib.use("Agg")
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QApplication, QFileDialog, QMessageBox
 
-from biwt.core.data_loader import DOCS_URL, LoadError
+from biwt.core.data_loader import (
+    INSTALL_DOCS_URL,
+    TROUBLESHOOTING_DOCS_URL,
+    LoadError,
+)
 from biwt.gui.walkthrough import create_biwt_widget
 from biwt.types import BiwtInput, DomainSpec
 
@@ -100,7 +104,7 @@ def test_dependency_error_dialog_links_to_docs(widget, monkeypatch):
     assert len(boxes) == 1
     text = boxes[0].text()
     assert boxes[0].textFormat() == Qt.RichText
-    assert f'<a href="{DOCS_URL}">' in text
+    assert f'<a href="{INSTALL_DOCS_URL}">' in text
     assert "biwt[seurat]" in text
     # Recoverable failure: the user stays in the wizard, nothing was loaded.
     assert widget.session.data is None
@@ -114,14 +118,27 @@ def test_file_error_dialog_has_no_docs_link(widget, monkeypatch):
     assert len(boxes) == 1
     text = boxes[0].text()
     assert "<a href=" not in text
-    assert "installation docs" not in text
+    assert "setup docs" not in text
     assert widget.session.data is None
+
+
+def test_dialog_renders_whichever_docs_url_the_error_carries(widget, monkeypatch):
+    # The dialog must not hardcode the install page — R-stack failures point at
+    # troubleshooting instead.
+    boxes = _capture_message_boxes(monkeypatch)
+
+    widget._show_import_error(
+        LoadError("anndata2ri activation failed: boom",
+                  docs_url=TROUBLESHOOTING_DOCS_URL)
+    )
+
+    assert f'<a href="{TROUBLESHOOTING_DOCS_URL}">' in boxes[0].text()
 
 
 def test_error_message_is_html_escaped(widget, monkeypatch):
     boxes = _capture_message_boxes(monkeypatch)
 
-    widget._show_import_error(LoadError("bad <class> & 'quote'", docs_url=DOCS_URL))
+    widget._show_import_error(LoadError("bad <class> & 'quote'", docs_url=INSTALL_DOCS_URL))
 
     text = boxes[0].text()
     assert "&lt;class&gt;" in text

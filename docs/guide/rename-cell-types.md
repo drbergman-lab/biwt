@@ -1,0 +1,48 @@
+# 6. Rename cell types
+
+**Shown when:** always.
+
+## The question
+
+Each cell type that survived the [edit step](edit-cell-types.md) gets a text field,
+pre-filled with its first original name. Change any of them, or accept them all.
+
+The names you set here are what appear in the `type` column of the output and in the
+generated PhysiCell cell-definitions XML. They are the names your simulation config will use.
+
+## Why bother
+
+Two reasons.
+
+**Cluster IDs are not names.** If you selected a `seurat_clusters` column, your types are
+currently `0`, `1`, `2`. A config full of `<cell_definition name="7">` is unreadable and
+unmaintainable.
+
+**Matching the host's existing definitions.** If your simulation config already defines a
+`tumor` cell type, naming yours `tumor` lets them line up instead of creating a near-duplicate.
+
+## Suggestions from the host
+
+If the host application passed BIWT its current cell-type names — Studio does this from its
+cell-definitions tab — BIWT suggests the closest match as **placeholder text** in each field.
+
+Placeholder text is a hint, not a value. The field is still showing your original name until
+you type. If you want the suggestion, type it.
+
+## Naming rules
+
+**Exact duplicates are blocked.** Two types cannot share a name; BIWT warns and keeps you on
+the screen.
+
+**Case matters.** `CD8` and `cd8` are treated as different names and both are allowed,
+because PhysiCell treats them as distinct. This is easy to do by accident — if you meant them
+to be the same type, merge them at the [previous step](edit-cell-types.md) instead.
+
+!!! tip "Pick names your config can live with"
+    Avoid spaces and punctuation if your downstream tooling is picky about XML attribute
+    values. `CD8_T_cell` travels better than `CD8+ T cell (exhausted)`.
+
+## Next
+
+[Cell counts →](cell-counts.md) if you are not using spatial data; otherwise
+[positions →](positions.md).

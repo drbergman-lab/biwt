@@ -84,7 +84,14 @@ class BiwtData:
 # Setup instructions for the optional data-format dependencies.  Attached to the
 # subset of LoadErrors a user fixes by changing their environment rather than
 # their file, so any host — GUI, notebook, CLI — can point at the same guide.
-DOCS_URL = "https://github.com/drbergman-lab/biwt/blob/main/docs/installation.md"
+#
+# Two targets, because the two failure modes have different fixes: a dependency
+# that was never installed sends you to the install matrix, while an R stack
+# that is present but misbehaving sends you to the numbered troubleshooting
+# entries that diagnose it.
+DOCS_BASE_URL = "https://drbergman-lab.github.io/biwt/"
+INSTALL_DOCS_URL = DOCS_BASE_URL + "getting-started/installation/"
+TROUBLESHOOTING_DOCS_URL = DOCS_BASE_URL + "getting-started/troubleshooting/"
 
 
 class LoadError(Exception):
@@ -149,7 +156,7 @@ def _load_h5ad(file_path: str) -> BiwtData:
         raise LoadError(
             "anndata is required for .h5ad files.\n"
             "Install with:  pip install biwt[anndata]",
-            docs_url=DOCS_URL,
+            docs_url=INSTALL_DOCS_URL,
         )
     try:
         adata = anndata.read_h5ad(file_path)
@@ -177,14 +184,14 @@ def _load_r_file(file_path: str, suffix: str) -> BiwtData:
         raise LoadError(
             "rpy2 and anndata2ri are required for R files.\n"
             "Install with:  pip install biwt[seurat]",
-            docs_url=DOCS_URL,
+            docs_url=INSTALL_DOCS_URL,
         )
     try:
         anndata2ri.activate()
     except Exception as e:
         # Almost always anndata2ri 2.0+, which dropped activate(); BIWT pins <2.
         raise LoadError(
-            f"anndata2ri activation failed: {e}", docs_url=DOCS_URL
+            f"anndata2ri activation failed: {e}", docs_url=TROUBLESHOOTING_DOCS_URL
         ) from e
 
     try:
@@ -232,7 +239,7 @@ def _load_r_file(file_path: str, suffix: str) -> BiwtData:
         # Usually an R-side problem rather than a bad file: SeuratObject not
         # installed in the R that rpy2 bound to, or an ABI-mismatched R.
         raise LoadError(
-            f"Failed to read '{file_path}' as R object: {e}", docs_url=DOCS_URL
+            f"Failed to read '{file_path}' as R object: {e}", docs_url=TROUBLESHOOTING_DOCS_URL
         ) from e
 
     mpu = _extract_visium_microns_per_pixel(adata)

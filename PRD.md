@@ -71,7 +71,7 @@ The `BiwtInput.extra_cell_template_paths` mechanism (TOML files of `name = """<p
 - When a `.rds` / `.rda` / `.rdata` file is selected, BIWT reads it via `rpy2` + `anndata2ri`, supporting Seurat, SingleCellExperiment, and SpatialExperiment objects.
 - When a `.csv` file is selected, BIWT reads it via `pandas.read_csv`.
 - On import failure, a critical error dialog is shown with an actionable message.
-- When the failure is fixed by changing the environment rather than the file, the dialog additionally shows a clickable link to the installation docs. `LoadError.docs_url` carries the pointer (`None` when absent), so the decision lives at the raise site in `core/data_loader.py` and any host — GUI, notebook, CLI — can surface it. It is set for: missing `anndata`, missing `rpy2`/`anndata2ri`, `anndata2ri` activation failure (the 2.0+ API removal), and R-object read failures (missing `SeuratObject`, ABI-mismatched R). It is **not** set for unsupported extensions, malformed CSVs, or unsupported R classes.
+- When the failure is fixed by changing the environment rather than the file, the dialog additionally shows a clickable link to the setup docs. `LoadError.docs_url` carries the pointer (`None` when absent), so the decision lives at the raise site in `core/data_loader.py` and any host — GUI, notebook, CLI — can surface it. Two targets, matching the two fixes: `INSTALL_DOCS_URL` for dependencies that were never installed (missing `anndata`, missing `rpy2`/`anndata2ri`), and `TROUBLESHOOTING_DOCS_URL` for an R stack that is present but misbehaving (`anndata2ri` activation failure from the 2.0+ API removal; R-object read failures from a missing `SeuratObject` or an ABI-mismatched R). It is **not** set for unsupported extensions, malformed CSVs, or unsupported R classes.
 - On successful import, the previous session state is fully reset.
 
 **Acceptance criteria:**
@@ -345,8 +345,9 @@ When BIWT cannot complete a step:
 
 - Python >= 3.9 required.
 - `anndata >= 0.12.2` required for `.h5ad` support (optional pip extra: `biwt[anndata]`).
-- `rpy2` + `anndata2ri` required for R object support (optional pip extra: `biwt[seurat]`), plus a working R with `Seurat` and `SingleCellExperiment`. Setup recipe and troubleshooting: [docs/installation.md](docs/installation.md).
+- `rpy2` + `anndata2ri` required for R object support (optional pip extra: `biwt[seurat]`), plus a working R with `Seurat` and `SingleCellExperiment`. Setup recipe and troubleshooting live in the docs site (`docs/getting-started/`).
 - `[project.urls]` in `pyproject.toml` publishes Homepage / Repository / Documentation / Issues so the PyPI page links back to the repo and docs.
+- Documentation is a MkDocs Material site under `docs/`, built and deployed to GitHub Pages by `.github/workflows/docs.yml` on push to `main`. The build runs with `--strict`, so a broken internal link or a nav entry pointing at a missing file fails CI. The API reference is generated from docstrings by mkdocstrings, which means docstring formatting errors are build failures too. Optional pip extra: `biwt[docs]`.
 - Performance targets are non-blocking for this release; no specific throughput constraints are defined.
 
 ---

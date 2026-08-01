@@ -123,11 +123,16 @@ class BiwtResult:
     output_csv_path:
         Path where BIWT wrote the cells.csv, or ``None`` if the host is
         responsible for writing.
+    cell_definitions_xml:
+        Serialized PhysiCell cell-definitions XML assembled from the phenotype
+        templates chosen at the parameters step, or ``None`` if none were
+        assigned.
 
-    Future expansion (not yet populated — reserved field names):
-        substrate_data     : Optional[pd.DataFrame]
-        gene_expression    : Optional[pd.DataFrame]
-        spatial_metadata   : dict
+    Notes
+    -----
+    Reserved for future expansion — these are **not** currently attributes and
+    hosts must not code against them: ``substrate_data`` (DataFrame),
+    ``gene_expression`` (DataFrame), ``spatial_metadata`` (dict).
     """
     coordinates: pd.DataFrame       # columns: x, y, z, type
     cell_type_map: dict              # original_label → final_name | None

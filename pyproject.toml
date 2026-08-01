@@ -50,7 +50,7 @@ dependencies = [
 [project.urls]
 Homepage = "https://github.com/drbergman-lab/biwt"
 Repository = "https://github.com/drbergman-lab/biwt"
-Documentation = "https://github.com/drbergman-lab/biwt/blob/main/docs/installation.md"
+Documentation = "https://drbergman-lab.github.io/biwt/"
 Issues = "https://github.com/drbergman-lab/biwt/issues"
 
 [project.optional-dependencies]
@@ -65,6 +65,10 @@ gui = ["PyQt5>=5.15", "matplotlib>=3.5"]
 
 # pip install biwt[all]      — everything
 all = ["biwt[anndata,seurat,gui]"]
+
+# pip install biwt[docs]     — build the documentation site (mkdocs build)
+# black is not a linter here — mkdocstrings uses it to format rendered signatures.
+docs = ["mkdocs>=1.5", "mkdocs-material>=9.5", "mkdocstrings[python]>=0.24", "black>=24"]
 
 # pip install biwt[dev]      — development / testing extras
 dev = ["pytest>=7", "pytest-qt", "biwt[anndata,gui]"]

@@ -389,6 +389,79 @@ errors, and HTML escaping of the message.
 
 ---
 
+## 2026-08-01: Documentation site (MkDocs Material → GitHub Pages)
+
+### Why a site rather than more markdown files
+
+The previous session added `docs/installation.md` and pointed the "Import failed" dialog at
+it via a `/blob/main/` GitHub URL. Two problems with stopping there. The URL is baked into
+released wheels but always resolves to tip-of-main, so an 0.3.2 user reads 0.5 docs. And the
+troubleshooting content alone is ~10 KB — a single flat file was already at the limit of what
+is navigable, and the three sections still missing (user guide, recipes, integration) are
+several times larger.
+
+Chose MkDocs Material over Sphinx: the source stays plain markdown that renders fine on
+GitHub, the setup is a single config file, and mkdocstrings covers the autodoc requirement
+without committing to reStructuredText.
+
+### Structure
+
+Four audiences, four top-level sections, because they want different things:
+
+- `getting-started/` — install, first walkthrough, R troubleshooting
+- `guide/` — one page per wizard step, written as user-facing prose rather than the PRD's
+  spec language, plus the domain editor (a dialog, not a step)
+- `recipes/` — Visium, non-spatial scRNA-seq, spot deconvolution; task-shaped, each naming
+  the traps specific to that data
+- `integration/` — the audience whose failure to find the docs started all of this
+- `reference/` — mkdocstrings
+
+The PRD stays the internal spec. It is not user documentation and was not linked into the
+nav; the guide pages were written *from* it, not as a copy of it.
+
+### Build is strict, and that is load-bearing
+
+`mkdocs build --strict` fails on broken internal links and nav entries pointing at missing
+files, so the docs cannot silently rot as pages are renamed. Because mkdocstrings imports the
+package to read docstrings, malformed docstrings are also build failures — the first strict
+run caught a real one (see below). CI runs the build on PRs and only deploys on push to
+`main`.
+
+### Two docs URLs, not one
+
+Splitting the guide into install and troubleshooting pages made the single `DOCS_URL` too
+coarse, so `data_loader` now exposes `INSTALL_DOCS_URL` and `TROUBLESHOOTING_DOCS_URL`:
+
+- Never-installed dependency (missing `anndata`, missing `rpy2`/`anndata2ri`) → install page.
+- R stack present but misbehaving (`anndata2ri` activation failure, R-object read failure) →
+  troubleshooting page, which has numbered entries for exactly those symptoms.
+
+The dialog's link text went from "BIWT installation docs" to "BIWT setup docs" so it reads
+correctly for both.
+
+The URL-resolution test was reworked: it now maps a published Pages path back to its source
+file under `docs/`, so renaming a page still fails the suite. A second test asserts
+`DOCS_BASE_URL` equals pyproject's `Documentation` entry, so the PyPI link and the in-app
+links cannot drift apart.
+
+### Two real docstring bugs, found by writing the docs
+
+Both were invisible until docstrings became rendered output:
+
+1. `create_biwt_widget`'s example passed `output_csv_path=` to `BiwtInput`, which has no such
+   field — the documented example raised `TypeError`. Replaced with `host_name` and a note
+   that persistence belongs in `on_complete`.
+2. `BiwtResult`'s "Future expansion" block sat inside its numpydoc `Parameters` section, so
+   griffe parsed it as a parameter named `Future`. Moved to a `Notes` section, explicitly
+   flagged as not-currently-attributes.
+
+### Deployment prerequisite
+
+GitHub Pages must be enabled with **Settings → Pages → Source: GitHub Actions** before the
+workflow can deploy. Until then the in-app links 404. Nothing in the repo can do this step.
+
+---
+
 ## Open Questions
 
 - **Visium multi-library:** Current code takes the first library's scale factors. Multi-library arrays are uncommon but should be handled eventually.

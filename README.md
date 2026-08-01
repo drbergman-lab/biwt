@@ -19,8 +19,24 @@ pip install -e ".[dev]"             # editable + test dependencies
 ```
 
 `.rds` / `.rda` import needs a working R with `Seurat` and `SingleCellExperiment` in addition
-to the pip extra. See **[docs/installation.md](docs/installation.md)** for the conda recipe
-and a troubleshooting guide for the R stack.
+to the pip extra. See the
+**[installation guide](https://drbergman-lab.github.io/biwt/getting-started/installation/)**
+for the conda recipe and a
+[troubleshooting guide](https://drbergman-lab.github.io/biwt/getting-started/troubleshooting/)
+for the R stack.
+
+## Documentation
+
+Full docs: **[drbergman-lab.github.io/biwt](https://drbergman-lab.github.io/biwt/)** — user
+guide for every wizard step, worked recipes for Visium / scRNA-seq / spot-deconvolution data,
+the host-integration contract, and a generated API reference.
+
+Build them locally with:
+
+```bash
+pip install -e ".[docs]"
+mkdocs serve
+```
 
 ## Quick Start
 
@@ -76,8 +92,14 @@ tests/
   test_gui_smoke.py     — Headless Qt import-path and error-dialog tests
   test_positions_plot.py — Spatial placement / plot scaling tests
   fixtures/             — CSV test fixtures
-docs/
-  installation.md       — Install matrix, R/Seurat setup, troubleshooting
+docs/                   — MkDocs Material site (published to GitHub Pages)
+  index.md
+  getting-started/      — Install matrix, first walkthrough, R/Seurat troubleshooting
+  guide/                — One page per wizard step, plus the domain editor
+  recipes/              — Visium, non-spatial scRNA-seq, spot deconvolution
+  integration/          — Host embedding: API contract + Studio bridge
+  reference/            — mkdocstrings API reference
+mkdocs.yml
 ```
 
 ## Key Design Decisions
@@ -122,9 +144,10 @@ docs/
 - [x] `tomli` in core dependencies (fixes import crash on Python 3.9/3.10)
 - [x] Step predicate extraction for testability
 - [x] `[project.urls]` metadata so the PyPI page links to the repo, docs, and issues
-- [x] Installation + R/Seurat setup guide ([docs/installation.md](docs/installation.md))
-- [x] `LoadError.docs_url`: environment-related import failures link to the setup guide from the "Import failed" dialog; file-related failures stay plain text
-- [x] 93 passing tests
+- [x] MkDocs Material documentation site published to GitHub Pages by `.github/workflows/docs.yml`
+- [x] Docs: user guide (all wizard steps), recipes (Visium / non-spatial / spot deconvolution), host-integration guide, mkdocstrings API reference
+- [x] `LoadError.docs_url`: environment-related import failures link to the setup docs from the "Import failed" dialog; file-related failures stay plain text. Missing dependencies point at the install page, broken R stacks at troubleshooting
+- [x] 96 passing tests
 
 ### In Progress
 
@@ -142,7 +165,7 @@ docs/
 
 ## Related Documents
 
-- [docs/installation.md](docs/installation.md) — Install matrix, R/Seurat setup, troubleshooting
+- [Documentation site](https://drbergman-lab.github.io/biwt/) — user guide, recipes, integration guide, API reference (source in [docs/](docs/))
 - [PRD.md](PRD.md) — Product requirements (behavioral specs, acceptance criteria)
 - [progress.md](progress.md) — Session decisions and reasoning
 - [CLAUDE.md](CLAUDE.md) — Claude agent guide for this repo

@@ -35,7 +35,9 @@ from types import SimpleNamespace
 
 from biwt.core import data_loader
 from biwt.core.data_loader import (
-    DOCS_URL,
+    DOCS_BASE_URL,
+    INSTALL_DOCS_URL,
+    TROUBLESHOOTING_DOCS_URL,
     BiwtData,
     LoadError,
     _extract_visium_microns_per_pixel,
@@ -148,27 +150,41 @@ class TestLoadErrorDocsPointer:
             data_loader.load(str(FIXTURES / "does_not_exist.csv"))
         assert exc.value.docs_url is None
 
-    def test_missing_anndata_points_at_docs(self, monkeypatch):
+    def test_missing_anndata_points_at_install_docs(self, monkeypatch):
         # Setting a module to None in sys.modules makes `import` raise ImportError.
         monkeypatch.setitem(sys.modules, "anndata", None)
         with pytest.raises(LoadError) as exc:
             data_loader.load("sample.h5ad")
-        assert exc.value.docs_url == DOCS_URL
+        assert exc.value.docs_url == INSTALL_DOCS_URL
         assert "biwt[anndata]" in str(exc.value)
 
     @pytest.mark.parametrize("suffix", [".rds", ".rda", ".rdata"])
-    def test_missing_rpy2_stack_points_at_docs(self, monkeypatch, suffix):
+    def test_missing_rpy2_stack_points_at_install_docs(self, monkeypatch, suffix):
         monkeypatch.setitem(sys.modules, "anndata2ri", None)
         with pytest.raises(LoadError) as exc:
             data_loader.load(f"sample{suffix}")
-        assert exc.value.docs_url == DOCS_URL
+        assert exc.value.docs_url == INSTALL_DOCS_URL
         assert "biwt[seurat]" in str(exc.value)
 
-    def test_docs_url_resolves_to_a_file_in_the_repo(self):
-        # Guards the in-app link against a rename of the docs page.
+    @pytest.mark.parametrize("url", [INSTALL_DOCS_URL, TROUBLESHOOTING_DOCS_URL])
+    def test_docs_urls_resolve_to_a_page_in_the_repo(self, url):
+        # Guards the in-app links against a docs page being renamed or moved:
+        # the published Pages path maps 1:1 onto a source file under docs/.
         repo_root = Path(__file__).resolve().parents[1]
-        rel = DOCS_URL.split("/blob/main/", 1)[1]
-        assert (repo_root / rel).is_file(), f"{DOCS_URL} points at a missing file"
+        rel = url.removeprefix(DOCS_BASE_URL).strip("/")
+        assert (repo_root / "docs" / f"{rel}.md").is_file(), \
+            f"{url} does not correspond to docs/{rel}.md"
+
+    def test_docs_base_url_matches_pyproject(self):
+        # The PyPI "Documentation" link and the in-app links must not drift apart.
+        try:
+            import tomllib
+        except ModuleNotFoundError:      # Python 3.9 / 3.10
+            import tomli as tomllib
+        repo_root = Path(__file__).resolve().parents[1]
+        with open(repo_root / "pyproject.toml", "rb") as f:
+            urls = tomllib.load(f)["project"]["urls"]
+        assert urls["Documentation"] == DOCS_BASE_URL
 
 
 # ---------------------------------------------------------------------------

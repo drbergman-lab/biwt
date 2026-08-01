@@ -839,7 +839,7 @@ class BioinformaticsWalkthrough(QWidget):
             box.setText(
                 escape(str(err)).replace("\n", "<br>")
                 + f'<br><br>See the <a href="{escape(err.docs_url, quote=True)}">'
-                "BIWT installation docs</a> for setup instructions."
+                "BIWT setup docs</a> for how to fix this."
             )
         else:
             box.setText(str(err))
@@ -1119,10 +1119,13 @@ def create_biwt_widget(
                 preferred_domain=DomainSpec(xmin=-500, xmax=500,
                                             ymin=-500, ymax=500),
                 host_cell_type_names=["default", "tumor", "immune"],
-                output_csv_path="./config/cells.csv",
+                host_name="My App",
             ),
             on_complete=lambda result: print(result.coordinates.head()),
         )
         widget.show()
+
+    BIWT never writes to disk.  To persist the result, do it in
+    ``on_complete`` — e.g. ``result.to_csv("./config/cells.csv")``.
     """
     return BioinformaticsWalkthrough(biwt_input=biwt_input, on_complete=on_complete)
