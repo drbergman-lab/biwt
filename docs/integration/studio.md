@@ -78,10 +78,10 @@ Studio does not pass `host_cell_type_names`, so BIWT cannot suggest matches agai
 existing cell definitions at the [rename step](../guide/rename-cell-types.md). Wiring that up
 is a straightforward improvement for any host with a cell-type list to hand.
 
-## Parity contract
+## What the package path must match
 
-BIWT replaced a built-in Studio tab, and the replacement is held to a parity contract
-documented in the project's PRD:
+BIWT replaced a built-in Studio tab, and the replacement has to hold the line on what that tab
+already did. From the project's PRD:
 
 - The `--biwt` flag and the `_biwt_complete` callback must keep working without Studio source
   changes beyond the bridge itself.

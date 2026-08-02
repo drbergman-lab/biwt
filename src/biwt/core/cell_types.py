@@ -7,7 +7,7 @@ stores them as ``CellTypeAction`` objects inside a ``CellTypeConfig``.
 original_label → final_name mapping that ``positioning.py`` can consume.
 
 ``suggest_name_mappings`` provides lightweight heuristic hints to the GUI
-so it can pre-populate rename fields when Studio cell-type names are available.
+so it can pre-populate rename fields when host cell-type names are available.
 Future: replace / augment with a cell-type registry / ontology lookup.
 """
 
@@ -109,13 +109,16 @@ def suggest_name_mappings(
     data_labels: list[str],
     host_names: list[str],
 ) -> dict[str, Optional[str]]:
-    """Suggest a Studio cell-type name for each data label.
+    """Suggest a host cell-type name for each data label.
 
     Strategy (in priority order):
       1. Exact match (case-insensitive).
-      2. Studio name is a substring of the data label (or vice-versa).
+      2. Host name is a substring of the data label (or vice-versa).
 
-    Returns a dict ``{data_label: studio_name | None}``.
+    There is no ranking: for (2) the first host name that matches by
+    containment wins, in the order the host supplied them.
+
+    Returns a dict ``{data_label: host_name | None}``.
     ``None`` means no suggestion was found.
 
     This is deliberately simple — good enough for pre-populating the GUI.

@@ -39,19 +39,37 @@ tumour with one plotter, then the immune populations with another.
 
 Six ways to decide *where* the selected cells go:
 
-| Plotter | Places cells… |
-|---|---|
-| **Everywhere (1)** | Randomly across the whole domain |
-| **Rectangle (2)** | Randomly within a rectangle you specify |
-| **Disc (3)** | Randomly within a circle |
-| **Annulus (4)** | Within a ring, between inner and outer radii |
-| **Wedge (5)** | Within an angular sector |
-| **Spatial (6)** | At the coordinates from your data |
+Six ways to decide *where* the selected cells go. Three of them are named for the shape they
+make, so they are renamed when the domain is 3-D:
+
+| Plotter | 2-D | 3-D | Places cells… |
+|---|---|---|---|
+| **(1)** | Everywhere | Everywhere | Randomly across the whole domain |
+| **(2)** | Rectangle | **Box** | Randomly within a rectangle/box you specify |
+| **(3)** | Disc | **Sphere** | Randomly within a circle/sphere |
+| **(4)** | Annulus | **Spherical Shell** | Between an inner and an outer radius |
+| **(5)** | Wedge | Wedge | Within an angular sector |
+| **(6)** | Spatial | Spatial | At the coordinates from your data |
+
+The number is the keyboard shortcut. **Wedge** keeps its name in 3-D even though it becomes a
+spherical sector, and the toolbar icons stay flat in both cases — the "Box" button shows a
+rectangle.
 
 **Spatial** is the one that uses your file's geometry; the other five are synthetic regions
 you define. That makes this screen useful even for non-spatial data — you are not limited to
 "scattered uniformly", you can build structure by placing different types into different
 regions.
+
+### In a 3-D domain
+
+There is no 2-D/3-D switch. BIWT decides from the domain's z extent: **3-D means
+`zmax - zmin` greater than 20 µm**, one default PhysiCell voxel. The stock domain is ±10 µm in
+z, exactly 20, so it is 2-D — you get a 3-D screen only after widening z in
+[the domain editor](domain.md), and doing so mid-session rebuilds the plot in place.
+
+Each shape then gains the parameters it needs: every one gets a `z0`, **Box** adds `depth`,
+and **Wedge** adds a second pair of angles `ϕ1`, `ϕ2` (defaulting to 0° and 45°, and accepted
+only in 0–180°) alongside `θ1`, `θ2`.
 
 ### Setting a region
 
@@ -65,11 +83,18 @@ draw on the plot:
 - **⌥^-click** / **⌥⇧-click** — set `θ1` / `θ2`
 - **⌥-click-drag** — set `θ1, θ2` together
 
+Drawing is available per plotter, not everywhere. In a **3-D** domain, Box, Sphere, Spherical
+Shell and Wedge are keyboard-entry only — type the numbers. Spatial keeps its mouse handling in
+both 2-D and 3-D.
+
 ### Num cells per spot
 
 Places more than one cell at each coordinate. Mainly for spot-based data where one row
 represents a patch of tissue containing several cells — see
 [spot deconvolution](spot-deconvolution.md) for the case where the mixture is known per spot.
+
+The extra cells are scattered in a disc around the recorded coordinate, in the z = 0 plane —
+including in a 3-D domain, where they will not be spread through the depth.
 
 ## How spatial placement transforms your data
 

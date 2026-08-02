@@ -13,9 +13,12 @@ describing how that cell behaves. Motility, mechanics, secretion, cycle, death r
   — shows where the template came from.</figcaption>
 </figure>
 
-This is optional in the sense that you can accept defaults, but it is where a table of
-positions becomes a runnable model. Positions say where cells are; parameters say what they
-do.
+**You can click Continue straight away.** Every type arrives already assigned the `default`
+template, so the screen is in a valid state the moment it opens and nothing is required of you
+here. Come back and refine it later if you would rather get to a working config first.
+
+That said, this is where a table of positions becomes a runnable model. Positions say where
+cells are; parameters say what they do.
 
 !!! warning "Marked experimental in the UI"
     The screen carries a banner: *these templates are PhysiCell-specific and may change in
@@ -40,8 +43,8 @@ BIWT ships 29 templates:
 | Neural / layered tissue | `Apical`, `Pial`, `RGC`, `Layer 2`, `Layer 3`, `Layer 5`, `Layer 6` |
 
 Pick the closest match for each type. The names are suggestive, not binding — nothing stops
-you assigning `Fibroblast` parameters to a type you named something else, and for a cell type
-with no good match, `default` is a reasonable neutral starting point.
+you assigning `Fibroblast` parameters to a type you named something else, and any type with no
+good match can be left on `default`.
 
 !!! tip "Treat templates as starting points"
     These are literature-derived defaults, not calibrated parameters for your system. Expect
@@ -83,7 +86,12 @@ complete PhysiCell settings XML: the standard scaffold sections, your domain, an
 `<cell_definitions>` block containing one entry per cell type. That XML comes back to the
 host as `BiwtResult.cell_definitions_xml`.
 
-If you assign no templates, no XML is generated and the result carries positions only.
+Every type must end up with a template — the screen will not let you continue otherwise — but
+since all of them start on `default`, that condition is already met when you arrive.
+
+At the API level the XML is optional: a `BiwtResult` assembled with an empty cell-definitions
+registry carries positions only and sets `cell_definitions_xml` to `None`. The wizard does not
+produce that state.
 
 ## Next
 

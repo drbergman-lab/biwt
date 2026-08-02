@@ -76,10 +76,33 @@ probability columns, for deconvolved spatial data).
 
 Current limits worth knowing before you start:
 
-- **2D placement.** 3D data is padded to `z = 0` rather than placed in depth.
+- **3D placement is partial.** Give the domain a z extent greater than 20 µm and the
+  [plotters](guide/positions.md) place cells in depth — including the Spatial plotter, which
+  uses your data's z column. But spot-deconvolution placement, and the extra cells from
+  *Num cells per spot*, are always put at `z = 0`.
 - **Single Visium library.** Multi-library arrays use the first library's scale factors.
 - **Gene expression is not carried through.** Only positions and type labels reach the
   result; `substrate_data` and `gene_expression` are reserved but unpopulated.
+
+---
+
+## Reading these docs
+
+Coloured boxes mean specific things:
+
+!!! note "Note"
+    Context or behavior worth knowing. Nothing goes wrong if you skip it.
+
+!!! tip "Tip"
+    Optional advice that will make your result better.
+
+!!! warning "Warning"
+    You can get a wrong or surprising result here.
+
+!!! danger "Danger"
+    This silently corrupts your output. Read it.
+
+Collapsed **Why…** boxes hold background you can safely skip on a first pass.
 
 ---
 

@@ -6,14 +6,25 @@ nothing to ask and this screen is skipped — placement will be random.
 ## The question
 
 "Use the spatial coordinates from the data?" Yes or no. The prompt names *where* it found
-them, which is worth reading — `obsm['spatial']` is a real coordinate array, but a hit on
-`obs` columns could be an embedding rather than tissue positions.
+them, which is worth reading: BIWT checks `obsm` first, then `obs`/CSV columns, and some of
+the places it looks are more trustworthy than others.
 
 <figure markdown>
   ![The spatial data query](../assets/screenshots/spatial-query-yes.png)
   <figcaption>Note that the prompt names where the coordinates were found — worth reading
   before you answer.</figcaption>
 </figure>
+
+| Source named in the prompt | Usually holds | Use it? |
+|---|---|---|
+| `obsm['spatial']`, `obsm['X_spatial']`, `obsm['spatial_coords']` | The conventional slot for tissue coordinates — Visium, Xenium, MERFISH | Yes — this is what it is for |
+| Any other `obsm` key containing `spatial` or `coord` | Whatever its author put there: `tissue_coords`, but `X_umap_coords` matches too | Check the name before trusting it |
+| `obs` columns `spatial_x`, `x_coord`, `coord_x`, `x_centroid`, `cell_x` (and `y`/`z` equivalents) | Columns whose name says "coordinate" — segmentation centroids, exported spatial tables | Yes |
+| `obs` columns `x`, `y`, `z` | Anything at all — the most generic match BIWT makes | Usually, but this is where an embedding can hide |
+| `obs` columns `imagecol`, `imagerow`, shown as *(image columns)* | Visium pixel positions, flipped to y-up | Yes, but set the scale factor in [the domain editor](domain.md) |
+
+Embeddings stored under their conventional names — `X_umap`, `X_tsne`, `X_pca` — are **not**
+matched, so a UMAP sitting alongside real coordinates is never picked up by mistake.
 
 ## Yes — place cells where the data says
 
@@ -25,7 +36,8 @@ Consequences:
 
 - **Cell counts follow from the data.** One cell per row, so the
   [cell counts](cell-counts.md) screen is skipped. You cannot ask for "500 tumor cells" here
-  — you get however many the data has, minus anything you delete.
+  — you get however many the data has, minus any types you delete at the
+  [edit cell types](edit-cell-types.md) screen.
 - **The [domain editor](domain.md) becomes relevant.** How your data's extent maps onto the
   simulation box is now a real decision, and BIWT will raise it at the
   [positions](positions.md) screen if the fit looks wrong.
@@ -48,17 +60,15 @@ architecture, spatial gradients, anything where "where the cells are" is the poi
 
 Say **no** when the arrangement is not meaningful, or you do not want it. Two common cases:
 
-- Your coordinates are a **dimensionality-reduction embedding** (UMAP, t-SNE), not physical
-  positions. These are not tissue geometry and should not be treated as such.
+- The prompt named a source you do not trust — see the table above. Placing cells at the
+  positions of a **dimensionality-reduction embedding** gives you a picture of the embedding,
+  not of tissue.
 - You want a **synthetic population** with realistic composition but a controlled size —
   seeding a simulation with 2,000 cells in the observed proportions rather than the 40,000 in
   your dataset.
 
-!!! warning "UMAP coordinates can look like spatial data"
-    If your object stores an embedding in a place BIWT reads as coordinates, this screen will
-    offer to use it. Placing cells at their UMAP positions produces a picture of your
-    embedding, not of tissue. If the preview at the [positions](positions.md) step looks like
-    a UMAP, come back and answer no.
+Either way the [positions](positions.md) step previews the result, and you can come back and
+change this answer.
 
 ## Next
 

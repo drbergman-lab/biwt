@@ -72,23 +72,28 @@ ratios. You keep the biology and lose the compute cost.
 domain size. If you might change the domain later, confluence travels better.
 
 *Use data counts* is right only when the dataset size is already the population you want.
-*Set manually* is for designed ratios — a specific effector-to-target ratio, for instance.
+*Set manually* gives you each count directly.
 
-!!! tip "Rare populations disappear at small totals"
+!!! warning "Rare populations disappear at small totals"
     Proportional scaling of a population that is 0.3% of your data down to a 2,000-cell total
     gives you six cells. If a rare type matters to the model, use **Set manually** and
     over-represent it deliberately, rather than letting rounding decide.
 
 ### Positions
 
-Random placement inside the domain. The preview will look like coloured noise — that is
-correct for this recipe. There is no domain-mismatch dialog, because there is no data extent
-to compare.
+Random placement inside the domain, with no domain-mismatch dialog — there is no data extent
+to compare. Place everything at once and the preview looks like coloured noise.
+
+That is only the default, though. Non-spatial data does not mean the initial condition has to
+be unstructured: this screen is where you can build the geometry your model expects. Place
+each type in its own pass with a different [plotter](../guide/positions.md) — a disc of tumour,
+an annulus of immune cells around it, a rectangle of stroma along one edge — rather than
+accepting one uniform scatter.
 
 ### Cell parameters
 
-Assign a phenotype template per type. This matters more here than in the spatial recipes: with
-no spatial structure to drive early dynamics, behavior is entirely down to parameters.
+Assign a phenotype template per type. Parameters are what turn a set of positions into a
+runnable model.
 
 ## What you get
 

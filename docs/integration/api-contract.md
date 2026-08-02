@@ -73,9 +73,11 @@ only for rename suggestions; BIWT does not require them and does not constrain t
 them.
 
 **`domain_accepted`** — set `True` to suppress the automatic domain-mismatch dialog for every
-session.
+session. Be aware this currently overrides the user rather than defaulting them: the **Skip
+domain validation** checkbox stays unticked and inert, and the user cannot untick their way
+back to the dialog.
 
-**`host_name`** — appears in the domain editor as "Use \<host_name\> Domain". Set it; the
+**`host_name`** — appears in the domain editor as `Use <host_name> Domain`. Set it; the
 default `"Host"` reads like a placeholder because it is one.
 
 **`extra_cell_template_paths`** — paths to TOML files, each mapping a template name to a

@@ -89,14 +89,14 @@ nav:
       - Edit cell types: guide/edit-cell-types.md
       - Rename cell types: guide/rename-cell-types.md
       - Cell counts: guide/cell-counts.md
+      - The domain editor: guide/domain.md
       - Positions: guide/positions.md
       - Cell parameters: guide/cell-parameters.md
-      - The domain editor: guide/domain.md
       - Finishing up: guide/result.md
   - Recipes:
       - recipes/index.md
-      - Visium spatial data: recipes/visium-spatial.md
       - Non-spatial scRNA-seq: recipes/nonspatial-scrnaseq.md
+      - Visium spatial data: recipes/visium-spatial.md
       - Spot deconvolution: recipes/spot-deconvolution.md
   - Embedding BIWT:
       - integration/index.md

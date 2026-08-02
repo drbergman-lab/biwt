@@ -100,8 +100,9 @@ class LoadError(Exception):
     ``docs_url`` is set when the fix is an installation or environment change
     (a missing optional dependency, a broken R stack) and is ``None`` when the
     failure is about the file itself (unsupported extension, malformed CSV).
-    Hosts should surface it only when present — pointing someone whose CSV
-    failed to parse at the R setup guide is noise.
+
+    So a host displaying this error should render the link only when
+    ``docs_url`` is not ``None``, rather than always linking to the setup docs.
     """
 
     def __init__(self, message: str, *, docs_url: Optional[str] = None):

@@ -48,7 +48,7 @@ Two buttons fill the columns for you:
 
 - **Use Data Domain** — data-units gets your raw data bounds; host-units gets raw × factor
   (or raw, with no factor).
-- **Use \<host\> Domain** — host-units gets the host's bounds verbatim.
+- **`Use <host> Domain`** — host-units gets the host's bounds verbatim.
 
 The z bounds are host-units only and are never scaled.
 
@@ -74,9 +74,8 @@ BIWT compares the data extent to the domain, in host units, and classifies the f
 | **small** | Data fits, but covers less than 50% of an axis or less than 50% of the 2D area — cells would be a small island in a large box |
 | *(none)* | Close enough; no dialog |
 
-The 50% threshold was picked against real data: a typical spatial dataset spanning
-[-278, 285] × [-497, 499] inside a ±500 domain covers about 56% of each axis, and correctly
-does *not* trigger the dialog.
+The 50% threshold is a sensible default, chosen so that a dataset comfortably filling most of
+the domain does not trigger the dialog.
 
 No dialog appears when the domain came from the fallback default, since there is nothing
 meaningful to compare against.
@@ -88,15 +87,19 @@ Three ways, in increasing scope:
 1. Dismiss it — OK or Cancel both mark the domain accepted, so it will not re-trigger when
    you navigate back and forward.
 2. Tick **Skip domain validation** on the import screen before importing.
-3. A host can set `BiwtInput.domain_accepted = True` to suppress it for every session.
+3. A host can set `BiwtInput.domain_accepted = True`. Note this currently suppresses the dialog
+   outright: the **Skip domain validation** checkbox is left unticked but has no effect, and
+   unticking it cannot bring the dialog back.
 
 ## What gets saved
 
-On **OK**: the host-units bounds become the domain used for placement, and the factor and
-checkbox state are remembered. On **Cancel**: the host's preferred domain is used unchanged.
-
-Either way the positions preview redraws, and the change is undoable from the
+On **OK**: the host-units bounds become the domain used for placement, the factor and checkbox
+state are remembered, the positions preview redraws, and the change is undoable from the
 [positions](positions.md) screen.
+
+On **Cancel**: nothing is written and nothing redraws — whatever domain was already in effect
+stays in effect. The first time the dialog opens that is the host's domain; if you had edited
+the domain earlier, your previous edit is kept, not discarded.
 
 !!! warning "Known limitation: non-micron host units"
     The auto-detected Visium factor is in µm per pixel. If the host works in different units

@@ -51,7 +51,7 @@ your application can supply them:
 
 | Field | Effect |
 |---|---|
-| `host_cell_type_names` | Cell types your app already defines. BIWT suggests the closest match as placeholder text at the [rename step](../guide/rename-cell-types.md), so imported types line up with existing definitions instead of duplicating them. |
+| `host_cell_type_names` | Cell types your app already defines, so imported types can line up with them instead of duplicating them. At the [rename step](../guide/rename-cell-types.md) BIWT offers a match as placeholder text: a case-insensitive exact match first, else the first host name that contains the label or is contained by it. Nothing is scored or ranked — it is a hint, not a best match. Two caveats: the placeholder only renders in an *empty* field, so it sits hidden behind the pre-filled original name; and pass nothing here and there are no suggestions at all. |
 | `host_name` | Your application's name, used in the [domain editor](../guide/domain.md) UI ("Use Studio Domain"). Defaults to `"Host"`, which looks unfinished. |
 | `extra_cell_template_paths` | TOML files of your own phenotype templates, which appear alongside the 29 built-ins at the [cell parameters step](../guide/cell-parameters.md). |
 

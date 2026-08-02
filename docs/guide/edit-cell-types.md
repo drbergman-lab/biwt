@@ -51,10 +51,6 @@ Use this for populations that are artifacts or are irrelevant to the model: doub
 low-quality clusters, ambient-RNA clusters, or tissue types outside the scope of what you are
 simulating.
 
-!!! warning "You cannot delete everything"
-    At least one cell type must survive. BIWT blocks the attempt rather than producing an
-    empty result.
-
 ## Thinking about it the right way
 
 Ask what your model actually distinguishes. A cell type in a PhysiCell simulation is a set of

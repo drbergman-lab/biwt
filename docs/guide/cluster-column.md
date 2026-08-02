@@ -9,7 +9,7 @@ A dropdown lists every column in your data's metadata table. You pick the one ho
 cell-type labels.
 
 <figure markdown>
-  ![The cluster column dropdown, listing every obs column](../assets/screenshots/cluster-column-dropdown.png)
+  ![The cluster column dropdown, listing every obs column](../assets/screenshots/cluster-column-dropdown.png){ width="291" }
   <figcaption>Every metadata column is offered, alphabetically. Only one of these is a
   cell-type annotation.</figcaption>
 </figure>

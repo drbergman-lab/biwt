@@ -1,7 +1,6 @@
 # Spot deconvolution
 
 **Shown when:** your data has per-cell-type probability columns **and** spatial coordinates.
-Otherwise this screen never appears.
 
 ## The question
 
@@ -27,24 +26,19 @@ mixture-valued spots.
 Choosing yes also means BIWT already knows what the cell types are — they come from the
 probability column names — so the [cluster column](cluster-column.md) screen is skipped.
 
-## Choosing no
-
-BIWT treats the file as ordinary per-row data and moves on to the
-[cluster column](cluster-column.md) screen, where you pick a single metadata column holding
-one label per row. The probability columns are ignored.
-
-This is the right answer when the probability columns are not really a deconvolution — for
-example, classifier confidence scores where you want the argmax, not a mixture.
-
-## Which to pick
-
-Choose **yes** if the rows are spots and you want cells. Choose **no** if the rows are
-already cells, or if you want exactly one cell per row at its recorded position.
-
 The counts matter here. Deconvolution multiplies your row count — a few thousand spots can
 become tens of thousands of cells. If that is more than your simulation wants, you can rein
 it in later at the [cell counts](cell-counts.md) screen only if you are *not* using spatial
 data; with spatial data the counts follow from the expansion.
+
+## Choosing no
+
+BIWT treats the file as ordinary per-row data — one cell per row, at its recorded position.
+It moves on to the [cluster column](cluster-column.md) screen, where you pick a single
+metadata column holding one label per row; the probability columns are ignored.
+
+This is the right answer when the probability columns are not really a deconvolution — for
+example, classifier confidence scores where you want the argmax, not a mixture.
 
 ## Next
 
