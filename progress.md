@@ -515,7 +515,7 @@ convention, still what rides out on `BiwtResult.domain_used`.
 Two tests pin this: one asserts the ratio format and the absence of the old prose, the other
 constructs the dialog with `nanometer`/`pixel` to prove neither side is hardcoded.
 
-`docs/assets/screenshots/domain.png` still shows the old prose label and needs a retake.
+`docs/assets/screenshots/domain.png` was retaken against the new label.
 
 ---
 
