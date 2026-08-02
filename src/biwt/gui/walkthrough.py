@@ -850,6 +850,7 @@ class BioinformaticsWalkthrough(QWidget):
                 "BIWT setup docs</a> for how to fix this."
             )
         else:
+            box.setTextFormat(Qt.PlainText)
             box.setText(str(err))
         box.exec_()
 

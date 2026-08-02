@@ -117,6 +117,7 @@ def test_file_error_dialog_has_no_docs_link(widget, monkeypatch):
 
     assert len(boxes) == 1
     text = boxes[0].text()
+    assert boxes[0].textFormat() == Qt.PlainText
     assert "<a href=" not in text
     assert "setup docs" not in text
     assert widget.session.data is None

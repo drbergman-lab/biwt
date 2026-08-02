@@ -327,7 +327,7 @@ gap was upstream — `pyproject.toml` had no `[project.urls]` at all, so the PyP
 zero outbound links. Work was sequenced to fix the outermost gap first:
 
 1. `[project.urls]` — Homepage / Repository / Documentation / Issues.
-2. `docs/installation.md` — the page those links point at.
+2. `docs/getting-started/installation.md` — the page those links point at.
 3. `LoadError.docs_url` — the pointer, decided at the raise site.
 4. The dialog — renders the pointer as a clickable link.
 
@@ -340,10 +340,10 @@ Studio's `bin/ics_tab.py` (`_warn_legacy_biwt_tab`) already showed a rich-text `
 linking to Studio's `doc/BIWT.md` — which is where BIWT's R/Seurat setup was documented. That
 runs the dependency backwards: a host-agnostic package's install instructions were maintained
 in one host's repo, and host #2 would have duplicated them. The content is now ported to
-`docs/installation.md` here (Studio-specific bits generalized: `studio` → `<env>`, no
+`docs/getting-started/installation.md` here (Studio-specific bits generalized: `studio` → `<env>`, no
 `bin/studio.py` invocations), and Studio's doc should link here rather than the reverse.
 
-`docs/installation.md` rather than a README anchor: the troubleshooting section is ~10 KB and
+`docs/getting-started/installation.md` rather than a README anchor: the troubleshooting section is ~10 KB and
 would swamp the README, and the URL is baked into shipped releases, so it needs a target that
 does not move when the README is reorganized.
 
@@ -393,7 +393,7 @@ errors, and HTML escaping of the message.
 
 ### Why a site rather than more markdown files
 
-The previous session added `docs/installation.md` and pointed the "Import failed" dialog at
+The previous session added `docs/getting-started/installation.md` and pointed the "Import failed" dialog at
 it via a `/blob/main/` GitHub URL. Two problems with stopping there. The URL is baked into
 released wheels but always resolves to tip-of-main, so an 0.3.2 user reads 0.5 docs. And the
 troubleshooting content alone is ~10 KB — a single flat file was already at the limit of what
