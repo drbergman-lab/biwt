@@ -316,6 +316,209 @@ Both auto-scale modes share the same normalized base coords (0→1 relative to d
 
 ---
 
+## 2026-08-01: Discoverable install docs + docs pointer on environment errors
+
+### Why: the reported symptom was not the one the obvious fix addresses
+
+Trigger: a host application that wanted to call BIWT could not find BIWT's docs. The natural
+reading is "the `.rds` import error message should link to setup instructions," but that only
+reaches someone who already installed BIWT, opened the wizard, and picked an `.rds`. The real
+gap was upstream — `pyproject.toml` had no `[project.urls]` at all, so the PyPI page carried
+zero outbound links. Work was sequenced to fix the outermost gap first:
+
+1. `[project.urls]` — Homepage / Repository / Documentation / Issues.
+2. `docs/installation.md` — the page those links point at.
+3. `LoadError.docs_url` — the pointer, decided at the raise site.
+4. The dialog — renders the pointer as a clickable link.
+
+Doing 4 before 1–3 would have shipped a link to a section that documented none of what it
+promised.
+
+### Docs live here, not in the host
+
+Studio's `bin/ics_tab.py` (`_warn_legacy_biwt_tab`) already showed a rich-text `QMessageBox`
+linking to Studio's `doc/BIWT.md` — which is where BIWT's R/Seurat setup was documented. That
+runs the dependency backwards: a host-agnostic package's install instructions were maintained
+in one host's repo, and host #2 would have duplicated them. The content is now ported to
+`docs/installation.md` here (Studio-specific bits generalized: `studio` → `<env>`, no
+`bin/studio.py` invocations), and Studio's doc should link here rather than the reverse.
+
+`docs/installation.md` rather than a README anchor: the troubleshooting section is ~10 KB and
+would swamp the README, and the URL is baked into shipped releases, so it needs a target that
+does not move when the README is reorganized.
+
+### `docs_url` on the exception, not a blanket append in the dialog
+
+The tempting one-liner is to append "see the installation docs" to every `LoadError` in
+`_import_cb`. But `str(e)` covers ten distinct raise sites, and telling a user whose CSV
+failed to parse to go read the Seurat setup is noise.
+
+Which failures warrant the pointer is a property of the raise site, so `LoadError` grew an
+optional `docs_url` (default `None`) and the GUI renders a link only when one is present.
+Four sites set it: missing `anndata`, missing `rpy2`/`anndata2ri`, `anndata2ri activation
+failed` (the 2.0+ `activate()` removal), and `Failed to read ... as R object` (missing
+`SeuratObject`, or an ABI-mismatched R — the segfault case). Six do not: unsupported
+extension, unreadable `.h5ad`, empty R workspace, unsupported R class, unreadable CSV,
+unreadable obs/obsm.
+
+Keeping the decision in `core/data_loader.py` also means a notebook or CLI host calling
+`data_loader.load()` gets the same pointer — putting the URL in the Qt callback would have
+made it GUI-only, against the package's pure-Python-core rule.
+
+### Verified rather than assumed: QMessageBox opens external links itself
+
+Qt sets `openExternalLinks=True` on the message box's text label (`qt_msgbox_label`), so an
+`<a href>` in rich-text mode opens in the default browser with no `linkActivated` →
+`QDesktopServices` wiring. Confirmed by introspecting the label under
+`QT_QPA_PLATFORM=offscreen`; no handler was added.
+
+`str(err)` is HTML-escaped before interpolation, since messages embed file paths and R error
+text that can contain `<`, `>`, and `&`.
+
+### Tests
+
+`TestLoadErrorDocsPointer` (`test_session.py`) asserts the pointer is present on dependency
+failures and absent on file failures; missing dependencies are simulated with
+`monkeypatch.setitem(sys.modules, "anndata2ri", None)`, which makes `import` raise
+`ImportError` without touching the real environment. One test resolves `DOCS_URL` back to a
+file in the repo, so renaming the docs page fails the suite instead of shipping a dead link.
+
+`test_gui_smoke.py` covers the dialog itself with `QMessageBox.exec_` monkeypatched to record
+the box instead of blocking: rich text plus anchor for dependency errors, plain text for file
+errors, and HTML escaping of the message.
+
+---
+
+## 2026-08-01: Documentation site (MkDocs Material → GitHub Pages)
+
+### Why a site rather than more markdown files
+
+The previous session added `docs/installation.md` and pointed the "Import failed" dialog at
+it via a `/blob/main/` GitHub URL. Two problems with stopping there. The URL is baked into
+released wheels but always resolves to tip-of-main, so an 0.3.2 user reads 0.5 docs. And the
+troubleshooting content alone is ~10 KB — a single flat file was already at the limit of what
+is navigable, and the three sections still missing (user guide, recipes, integration) are
+several times larger.
+
+Chose MkDocs Material over Sphinx: the source stays plain markdown that renders fine on
+GitHub, the setup is a single config file, and mkdocstrings covers the autodoc requirement
+without committing to reStructuredText.
+
+### Structure
+
+Four audiences, four top-level sections, because they want different things:
+
+- `getting-started/` — install, first walkthrough, R troubleshooting
+- `guide/` — one page per wizard step, written as user-facing prose rather than the PRD's
+  spec language, plus the domain editor (a dialog, not a step)
+- `recipes/` — Visium, non-spatial scRNA-seq, spot deconvolution; task-shaped, each naming
+  the traps specific to that data
+- `integration/` — the audience whose failure to find the docs started all of this
+- `reference/` — mkdocstrings
+
+The PRD stays the internal spec. It is not user documentation and was not linked into the
+nav; the guide pages were written *from* it, not as a copy of it.
+
+### Build is strict, and that is load-bearing
+
+`mkdocs build --strict` fails on broken internal links and nav entries pointing at missing
+files, so the docs cannot silently rot as pages are renamed. Because mkdocstrings imports the
+package to read docstrings, malformed docstrings are also build failures — the first strict
+run caught a real one (see below). CI runs the build on PRs and only deploys on push to
+`main`.
+
+### Two docs URLs, not one
+
+Splitting the guide into install and troubleshooting pages made the single `DOCS_URL` too
+coarse, so `data_loader` now exposes `INSTALL_DOCS_URL` and `TROUBLESHOOTING_DOCS_URL`:
+
+- Never-installed dependency (missing `anndata`, missing `rpy2`/`anndata2ri`) → install page.
+- R stack present but misbehaving (`anndata2ri` activation failure, R-object read failure) →
+  troubleshooting page, which has numbered entries for exactly those symptoms.
+
+The dialog's link text went from "BIWT installation docs" to "BIWT setup docs" so it reads
+correctly for both.
+
+The URL-resolution test was reworked: it now maps a published Pages path back to its source
+file under `docs/`, so renaming a page still fails the suite. A second test asserts
+`DOCS_BASE_URL` equals pyproject's `Documentation` entry, so the PyPI link and the in-app
+links cannot drift apart.
+
+### Two real docstring bugs, found by writing the docs
+
+Both were invisible until docstrings became rendered output:
+
+1. `create_biwt_widget`'s example passed `output_csv_path=` to `BiwtInput`, which has no such
+   field — the documented example raised `TypeError`. Replaced with `host_name` and a note
+   that persistence belongs in `on_complete`.
+2. `BiwtResult`'s "Future expansion" block sat inside its numpydoc `Parameters` section, so
+   griffe parsed it as a parameter named `Future`. Moved to a `Notes` section, explicitly
+   flagged as not-currently-attributes.
+
+### Deployment prerequisite
+
+GitHub Pages must be enabled with **Settings → Pages → Source: GitHub Actions** before the
+workflow can deploy. Until then the in-app links 404. Nothing in the repo can do this step.
+*(Done 2026-08-01; the site goes live on the first push to `main`.)*
+
+### Screenshot data generator
+
+`scripts/make_screenshot_data.py` builds a synthetic Visium-like `.h5ad` for documentation
+screenshots. Synthetic rather than a public 10x dataset because raw Visium carries no
+cell-type annotation — a real file would need a full clustering pass before BIWT's
+cluster-column dropdown showed anything worth photographing — and because the composition can
+be tuned to read clearly at screenshot resolution.
+
+It is built backwards from what each screen needs:
+
+- `uns["spatial"][lib]["scalefactors"]["spot_diameter_fullres"] = 110.0`. BIWT computes
+  `55.0 / spot_diameter_fullres`, so this yields exactly 0.5 µm/pixel and the domain editor's
+  factor field appears pre-filled — the entire point of that screenshot.
+- A ~2500 µm tissue extent, which `classify_domain_mismatch` calls `"outside"` against a
+  ±500 µm domain, so the domain editor auto-opens at the positions step instead of having to
+  be summoned.
+- Six cell types with two obvious merges (`Tumor_Core`/`Tumor_Edge`, `M1`/`M2 Macrophage`), so
+  edit-cell-types demonstrates merging rather than just listing.
+- Decoy obs columns (`orig.ident`, `nCount_RNA`, `percent.mt`, `seurat_clusters`, …) so the
+  cluster-column dropdown looks like a real object.
+- `--deconv` adds `*_probability` columns. Opt-in, because their presence changes the wizard's
+  path: BIWT asks the deconvolution question and then skips the cluster-column step.
+
+**Two passes over the same file** are needed for full coverage — verified by driving
+`_step_predicates` headlessly. Answering *yes* at the spatial query reaches ClusterColumn,
+EditCellTypes, RenameCellTypes, Positions, LoadCellParameters; answering *no* is the only way
+to reach CellCounts, which is skipped whenever spatial data is used.
+
+---
+
+## 2026-08-01: Scale-factor label as a ratio; data unit name made singular
+
+The domain editor's factor field read `micron per data unit`, which is wrong for a singular
+unit name — nobody says "0.5 micron per data unit". Pluralising needs a rule for an arbitrary
+host unit string, so the label is now a **ratio**: `micron/data unit`. A ratio denominator is
+singular by convention (km/h, mg/L), so no pluralisation logic is needed at all.
+
+That exposed an inconsistency in what `DomainSpec.units` holds. The host side stored a
+singular unit *name* (`"micron"`), but `_domain_from_coords` defaulted to the plural
+`"data units"`. Now both are singular names, so the same value reads correctly in both places
+it appears: as a bounds-column header, and as a term in the ratio.
+
+Both sides of the label are read from the two `DomainSpec`s rather than hardcoded, which
+means a data domain that ever carries a real unit name renders as `micron/pixel` with no
+further change to the dialog. Nothing sets one today — `_domain_from_coords` still passes the
+generic default even on the `imagerow`/`imagecol` path, where pixel-ness *is* known — so
+that remains an available follow-up rather than something implemented.
+
+`DomainSpec.units` on the host side is untouched: still `"micron"`, still the PhysiCell
+convention, still what rides out on `BiwtResult.domain_used`.
+
+Two tests pin this: one asserts the ratio format and the absence of the old prose, the other
+constructs the dialog with `nanometer`/`pixel` to prove neither side is hardcoded.
+
+`docs/assets/screenshots/domain.png` was retaken against the new label.
+
+---
+
 ## Open Questions
 
 - **Visium multi-library:** Current code takes the first library's scale factors. Multi-library arrays are uncommon but should be handled eventually.

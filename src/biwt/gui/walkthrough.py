@@ -33,6 +33,7 @@ removed from the fallback list.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from html import escape
 from typing import Optional, Callable, Type
 import logging
 
@@ -119,7 +120,10 @@ class DomainEditorDialog(QDialog):
         self._data_domain = data_domain            # raw bounds, data units
         self._preferred_domain = preferred_domain  # host bounds, host units
         self._file_factor = file_factor
+        # Both are singular unit *names* ("micron", "data unit"), so they read
+        # correctly both as a column header and as a ratio denominator.
         self._host_units = (preferred_domain.units or "micron")
+        self._data_units = (data_domain.units if data_domain else None) or "data unit"
 
         layout = QVBoxLayout(self)
 
@@ -130,7 +134,12 @@ class DomainEditorDialog(QDialog):
 
         # --- conversion factor row ---
         factor_hbox = QHBoxLayout()
-        factor_hbox.addWidget(QLabel(f"{self._host_units} per data unit:"))
+        # Ratio notation ("micron/data unit") rather than prose ("micron per
+        # data unit"): a ratio denominator is singular by convention, which
+        # sidesteps pluralising either unit name.  Reads straight off the two
+        # DomainSpecs, so a data domain that ever carries a real unit name
+        # renders as e.g. "micron/pixel" with no further change here.
+        factor_hbox.addWidget(QLabel(f"{self._host_units}/{self._data_units}:"))
         self._factor_edit = QLineEdit()
         fv = QDoubleValidator()
         fv.setBottom(0.0)
@@ -151,7 +160,7 @@ class DomainEditorDialog(QDialog):
 
         # --- two-column bounds grid (data units | host units) ---
         grid = QGridLayout()
-        grid.addWidget(QLabel("<b>data units</b>"), 0, 1)
+        grid.addWidget(QLabel(f"<b>{self._data_units}</b>"), 0, 1)
         grid.addWidget(QLabel(f"<b>{self._host_units}</b>"), 0, 2)
         self._du_fields: dict[str, QLineEdit] = {}    # x/y only
         self._host_fields: dict[str, QLineEdit] = {}  # x/y/z (the stored domain)
@@ -817,6 +826,34 @@ class BioinformaticsWalkthrough(QWidget):
     # File import
     # ------------------------------------------------------------------
 
+    def _show_import_error(self, err: LoadError) -> None:
+        """Show the modal error for a failed import.
+
+        Errors that carry a ``docs_url`` — a missing optional dependency or a
+        broken R stack — are rendered as rich text with a clickable pointer to
+        the setup guide.  Errors about the file itself stay plain text, so the
+        pointer only appears where it is actually the fix.
+        """
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Critical)
+        box.setWindowTitle("Import failed")
+        box.setStandardButtons(QMessageBox.Ok)
+
+        if err.docs_url:
+            # QMessageBox's text label sets openExternalLinks itself, so the
+            # anchor opens in the default browser with no extra wiring.
+            box.setTextFormat(Qt.RichText)
+            box.setTextInteractionFlags(Qt.TextBrowserInteraction)
+            box.setText(
+                escape(str(err)).replace("\n", "<br>")
+                + f'<br><br>See the <a href="{escape(err.docs_url, quote=True)}">'
+                "BIWT setup docs</a> for how to fix this."
+            )
+        else:
+            box.setTextFormat(Qt.PlainText)
+            box.setText(str(err))
+        box.exec_()
+
     def _import_cb(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
             self,
@@ -829,7 +866,7 @@ class BioinformaticsWalkthrough(QWidget):
         try:
             bdata = data_loader.load(path)
         except LoadError as e:
-            QMessageBox.critical(self, "Import failed", str(e))
+            self._show_import_error(e)
             return
 
         # Reset session so stale state from a previous run doesn't survive reimport.
@@ -1091,10 +1128,13 @@ def create_biwt_widget(
                 preferred_domain=DomainSpec(xmin=-500, xmax=500,
                                             ymin=-500, ymax=500),
                 host_cell_type_names=["default", "tumor", "immune"],
-                output_csv_path="./config/cells.csv",
+                host_name="My App",
             ),
             on_complete=lambda result: print(result.coordinates.head()),
         )
         widget.show()
+
+    BIWT never writes to disk.  To persist the result, do it in
+    ``on_complete`` — e.g. ``result.to_csv("./config/cells.csv")``.
     """
     return BioinformaticsWalkthrough(biwt_input=biwt_input, on_complete=on_complete)

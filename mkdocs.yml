@@ -1,0 +1,109 @@
+site_name: BIWT
+site_description: >-
+  BioInformatics WalkThrough — import single-cell data and generate
+  initial conditions for agent-based models.
+site_url: https://drbergman-lab.github.io/biwt/
+repo_url: https://github.com/drbergman-lab/biwt
+repo_name: drbergman-lab/biwt
+edit_uri: edit/main/docs/
+copyright: BSD-3-Clause
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.indexes
+    - toc.follow
+    - content.code.copy
+    - content.action.edit
+    - search.suggest
+    - search.highlight
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            show_source: true
+            show_root_heading: true
+            show_symbol_type_heading: true
+            members_order: source
+            docstring_style: numpy
+            separate_signature: true
+            show_signature_annotations: true
+            merge_init_into_class: true
+            filters: ["!^_"]
+
+extra_css:
+  - assets/stylesheets/extra.css
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - footnotes
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Getting started:
+      - getting-started/index.md
+      - Installation: getting-started/installation.md
+      - Your first walkthrough: getting-started/first-walkthrough.md
+      - Troubleshooting: getting-started/troubleshooting.md
+  # Deliberately unnumbered: BIWT numbers steps dynamically by which ones are
+  # shown, so the same screen is "Step 5" on one path and "Step 6" on another.
+  # Static numbers here would contradict both the app and guide/index.md.
+  - User guide:
+      - guide/index.md
+      - Import data: guide/import.md
+      - Spot deconvolution: guide/spot-deconvolution.md
+      - Cluster column: guide/cluster-column.md
+      - Spatial query: guide/spatial-query.md
+      - Edit cell types: guide/edit-cell-types.md
+      - Rename cell types: guide/rename-cell-types.md
+      - Cell counts: guide/cell-counts.md
+      - Positions: guide/positions.md
+      - Cell parameters: guide/cell-parameters.md
+      - The domain editor: guide/domain.md
+      - Finishing up: guide/result.md
+  - Recipes:
+      - recipes/index.md
+      - Visium spatial data: recipes/visium-spatial.md
+      - Non-spatial scRNA-seq: recipes/nonspatial-scrnaseq.md
+      - Spot deconvolution: recipes/spot-deconvolution.md
+  - Embedding BIWT:
+      - integration/index.md
+      - The API contract: integration/api-contract.md
+      - PhysiCell Studio: integration/studio.md
+  - API reference:
+      - reference/index.md
+      - biwt.types: reference/types.md
+      - biwt.core: reference/core.md
+      - biwt.gui: reference/gui.md

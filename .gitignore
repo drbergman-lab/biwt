@@ -19,3 +19,9 @@ test_biwt.py
 
 # R test fixtures regenerated on every CI run (see tests/fixtures/make_fixtures.R)
 tests/fixtures/toy_*.rds
+# MkDocs build output
+site/
+
+# Generated documentation-screenshot data (see scripts/make_screenshot_data.py)
+screenshot_data.h5ad
+screenshot_deconv.h5ad

@@ -5,9 +5,10 @@ Priority order for resolving the final DomainSpec:
   1. preferred    — host-supplied DomainSpec (always wins if provided)
   2. data_range   — min/max of the raw coordinate arrays (obsm or obs columns),
                     used exactly as found.  The units are reported generically as
-                    ``"data units"`` — BIWT infers no unit name from the data (a
+                    ``"data unit"`` — BIWT infers no unit name from the data (a
                     pixels→host-units scale factor is applied later, visibly, in
-                    the domain editor).
+                    the domain editor).  Singular, like every other unit name:
+                    ``DomainSpec.units`` holds "micron", not "microns".
   3. default      — ±500 µm × ±10 µm fallback
 
 Public entry point: ``infer_domain(preferred, obs, obsm)``
@@ -34,7 +35,7 @@ def infer_domain(
     """Return the best available DomainSpec given what the data provides.
 
     Coordinates are used exactly as found; the reported units are the generic
-    ``"data units"`` (BIWT infers no unit name — imagerow/imagecol are still
+    ``"data unit"`` (BIWT infers no unit name — imagerow/imagecol are still
     recognized and y-flipped, but not labeled "pixel").
 
     Parameters
@@ -53,7 +54,7 @@ def infer_domain(
         return preferred
 
     # Resolve obs columns once (needed for the obs-column branch and the y-flip
-    # of image columns).  The domain units are the generic "data units" — no
+    # of image columns).  The domain units are the generic "data unit" — no
     # unit name is inferred from the data.
     try:
         obs_cols = list(obs.columns) if obs is not None else []
@@ -82,7 +83,7 @@ def infer_domain(
 # ---------------------------------------------------------------------------
 
 def _domain_from_coords(coords: np.ndarray, source: str = "data_range",
-                        units: str = "data units") -> DomainSpec:
+                        units: str = "data unit") -> DomainSpec:
     """Build a DomainSpec from the bounding box of a coordinate array."""
     xmin, xmax = float(coords[:, 0].min()), float(coords[:, 0].max())
     ymin, ymax = float(coords[:, 1].min()), float(coords[:, 1].max())

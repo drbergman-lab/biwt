@@ -5,10 +5,37 @@ A guided wizard for importing single-cell bioinformatics data and generating ini
 ## Installation
 
 ```bash
-pip install -e .                    # core (CSV support only)
-pip install -e ".[anndata]"         # + .h5ad support
-pip install -e ".[seurat]"          # + .rds/.rda support (requires R + rpy2)
-pip install -e ".[dev]"             # + test dependencies
+pip install biwt                    # core (CSV support only)
+pip install "biwt[anndata]"         # + .h5ad support
+pip install "biwt[seurat]"          # + .rds/.rda support (also needs R — see below)
+pip install "biwt[gui]"             # + PyQt5 walkthrough UI
+pip install "biwt[all]"             # everything
+```
+
+Development install (from a clone):
+
+```bash
+pip install -e ".[dev]"             # editable + test dependencies
+```
+
+`.rds` / `.rda` import needs a working R with `Seurat` and `SingleCellExperiment` in addition
+to the pip extra. See the
+**[installation guide](https://drbergman-lab.github.io/biwt/getting-started/installation/)**
+for the conda recipe and a
+[troubleshooting guide](https://drbergman-lab.github.io/biwt/getting-started/troubleshooting/)
+for the R stack.
+
+## Documentation
+
+Full docs: **[drbergman-lab.github.io/biwt](https://drbergman-lab.github.io/biwt/)** — user
+guide for every wizard step, worked recipes for Visium / scRNA-seq / spot-deconvolution data,
+the host-integration contract, and a generated API reference.
+
+Build them locally with:
+
+```bash
+pip install -e ".[docs]"
+mkdocs serve
 ```
 
 ## Quick Start
@@ -61,8 +88,20 @@ src/biwt/
     widgets.py          — Shared Qt widgets
     windows/            — One file per walkthrough step
 tests/
-  test_session.py       — 43 tests covering session logic end-to-end
+  test_session.py       — 78 tests covering session logic end-to-end
+  test_gui_smoke.py     — Headless Qt import-path and error-dialog tests
+  test_positions_plot.py — Spatial placement / plot scaling tests
   fixtures/             — CSV test fixtures
+scripts/
+  make_screenshot_data.py — Synthetic Visium-like .h5ad for doc screenshots
+docs/                   — MkDocs Material site (published to GitHub Pages)
+  index.md
+  getting-started/      — Install matrix, first walkthrough, R/Seurat troubleshooting
+  guide/                — One page per wizard step, plus the domain editor
+  recipes/              — Visium, non-spatial scRNA-seq, spot deconvolution
+  integration/          — Host embedding: API contract + Studio bridge
+  reference/            — mkdocstrings API reference
+mkdocs.yml
 ```
 
 ## Key Design Decisions
@@ -79,7 +118,7 @@ tests/
 
 - [x] Data import: .h5ad, .rds/.rda/.rdata, .csv
 - [x] Spatial coordinate detection (obsm, obs columns)
-- [x] Pixel-coordinate fallback: recognize `imagecol`→x / `imagerow`→y (row-flipped) as a last-resort spatial source; domain reported in generic `data units` (no inferred unit name)
+- [x] Pixel-coordinate fallback: recognize `imagecol`→x / `imagerow`→y (row-flipped) as a last-resort spatial source; domain reported in a generic `data unit` (no inferred unit name)
 - [x] Spatial synthesis from obs columns (x/y/z or imagerow/imagecol → obsm["spatial"]) for CSV and AnnData/R, so the dim-reduction plot offers a Spatial view
 - [x] Domain inference with priority chain (preferred > data_range > default)
 - [x] Domain mismatch: two-tier detection (classify_domain_mismatch: "outside" / "small" / None)
@@ -106,7 +145,11 @@ tests/
 - [x] Session reset on reimport
 - [x] `tomli` in core dependencies (fixes import crash on Python 3.9/3.10)
 - [x] Step predicate extraction for testability
-- [x] 57 passing tests
+- [x] `[project.urls]` metadata so the PyPI page links to the repo, docs, and issues
+- [x] MkDocs Material documentation site published to GitHub Pages by `.github/workflows/docs.yml`
+- [x] Docs: user guide (all wizard steps), recipes (Visium / non-spatial / spot deconvolution), host-integration guide, mkdocstrings API reference
+- [x] `LoadError.docs_url`: environment-related import failures link to the setup docs from the "Import failed" dialog; file-related failures stay plain text. Missing dependencies point at the install page, broken R stacks at troubleshooting
+- [x] 98 passing tests
 
 ### In Progress
 
@@ -124,6 +167,7 @@ tests/
 
 ## Related Documents
 
+- [Documentation site](https://drbergman-lab.github.io/biwt/) — user guide, recipes, integration guide, API reference (source in [docs/](docs/))
 - [PRD.md](PRD.md) — Product requirements (behavioral specs, acceptance criteria)
 - [progress.md](progress.md) — Session decisions and reasoning
 - [CLAUDE.md](CLAUDE.md) — Claude agent guide for this repo

@@ -25,6 +25,7 @@ Run with:
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -33,7 +34,14 @@ import pytest
 from types import SimpleNamespace
 
 from biwt.core import data_loader
-from biwt.core.data_loader import BiwtData, _extract_visium_microns_per_pixel
+from biwt.core.data_loader import (
+    DOCS_BASE_URL,
+    INSTALL_DOCS_URL,
+    TROUBLESHOOTING_DOCS_URL,
+    BiwtData,
+    LoadError,
+    _extract_visium_microns_per_pixel,
+)
 from biwt.core.domain import classify_domain_mismatch, infer_domain
 from biwt.core.positioning import build_ic_dataframe
 from biwt.gui.walkthrough import WalkthroughSession, _step_predicates, _scale_domain
@@ -118,6 +126,65 @@ class TestDataLoader:
         # A bare imagerow/imagecol CSV carries no scale factor.
         data = data_loader.load(PIXEL_CSV)
         assert data.microns_per_data_unit is None
+
+
+# ---------------------------------------------------------------------------
+# LoadError docs pointer
+#
+# Only failures a user fixes by changing their environment carry docs_url;
+# failures about the file itself must not, or every bad CSV would send the
+# user to the R setup guide.
+# ---------------------------------------------------------------------------
+
+class TestLoadErrorDocsPointer:
+    def test_bare_load_error_has_no_docs_url(self):
+        assert LoadError("something went wrong").docs_url is None
+
+    def test_unsupported_extension_has_no_docs_url(self):
+        with pytest.raises(LoadError) as exc:
+            data_loader.load("sample.txt")
+        assert exc.value.docs_url is None
+
+    def test_unreadable_csv_has_no_docs_url(self):
+        with pytest.raises(LoadError) as exc:
+            data_loader.load(str(FIXTURES / "does_not_exist.csv"))
+        assert exc.value.docs_url is None
+
+    def test_missing_anndata_points_at_install_docs(self, monkeypatch):
+        # Setting a module to None in sys.modules makes `import` raise ImportError.
+        monkeypatch.setitem(sys.modules, "anndata", None)
+        with pytest.raises(LoadError) as exc:
+            data_loader.load("sample.h5ad")
+        assert exc.value.docs_url == INSTALL_DOCS_URL
+        assert "biwt[anndata]" in str(exc.value)
+
+    @pytest.mark.parametrize("suffix", [".rds", ".rda", ".rdata"])
+    def test_missing_rpy2_stack_points_at_install_docs(self, monkeypatch, suffix):
+        monkeypatch.setitem(sys.modules, "anndata2ri", None)
+        with pytest.raises(LoadError) as exc:
+            data_loader.load(f"sample{suffix}")
+        assert exc.value.docs_url == INSTALL_DOCS_URL
+        assert "biwt[seurat]" in str(exc.value)
+
+    @pytest.mark.parametrize("url", [INSTALL_DOCS_URL, TROUBLESHOOTING_DOCS_URL])
+    def test_docs_urls_resolve_to_a_page_in_the_repo(self, url):
+        # Guards the in-app links against a docs page being renamed or moved:
+        # the published Pages path maps 1:1 onto a source file under docs/.
+        repo_root = Path(__file__).resolve().parents[1]
+        rel = url.removeprefix(DOCS_BASE_URL).strip("/")
+        assert (repo_root / "docs" / f"{rel}.md").is_file(), \
+            f"{url} does not correspond to docs/{rel}.md"
+
+    def test_docs_base_url_matches_pyproject(self):
+        # The PyPI "Documentation" link and the in-app links must not drift apart.
+        try:
+            import tomllib
+        except ModuleNotFoundError:      # Python 3.9 / 3.10
+            import tomli as tomllib
+        repo_root = Path(__file__).resolve().parents[1]
+        with open(repo_root / "pyproject.toml", "rb") as f:
+            urls = tomllib.load(f)["project"]["urls"]
+        assert urls["Documentation"] == DOCS_BASE_URL
 
 
 # ---------------------------------------------------------------------------
@@ -285,10 +352,10 @@ class TestSetupSpatialData:
 class TestPixelDataDomain:
     def test_image_columns_recognized_and_flipped(self):
         # imagerow/imagecol still recognized + y-flipped, but NOT labeled "pixel":
-        # x = imagecol (10..50), y = flipped imagerow (0..40); units = "data units".
+        # x = imagecol (10..50), y = flipped imagerow (0..40); units = "data unit".
         data = data_loader.load(PIXEL_CSV)
         d = infer_domain(obs=data.obs, obsm=data.obsm)
-        assert d.units == "data units"
+        assert d.units == "data unit"
         assert (d.xmin, d.xmax) == (10, 50)
         assert (d.ymin, d.ymax) == (0, 40)
 
@@ -296,7 +363,7 @@ class TestPixelDataDomain:
         # BIWT infers no unit name from the data.
         data = data_loader.load(SPATIAL_CSV)
         d = infer_domain(obs=data.obs, obsm=data.obsm)
-        assert d.units == "data units"
+        assert d.units == "data unit"
 
 
 class TestScaleFactor:

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "biwt"
-version = "0.3.2"
+version = "0.4.0"
 description = "BioInformatics WalkThrough: import single-cell data and generate agent-based model initial conditions"
 authors = [
     { name = "Daniel Bergman", email = "dbergman1@som.umaryland.edu" },
@@ -45,6 +45,14 @@ dependencies = [
     "tomli>=1.2; python_version < '3.11'",
 ]
 
+# Surfaced on the PyPI project page — the entry point for host applications
+# and users who reach the package before the repository.
+[project.urls]
+Homepage = "https://github.com/drbergman-lab/biwt"
+Repository = "https://github.com/drbergman-lab/biwt"
+Documentation = "https://drbergman-lab.github.io/biwt/"
+Issues = "https://github.com/drbergman-lab/biwt/issues"
+
 [project.optional-dependencies]
 # pip install biwt[anndata]  — enables .h5ad import
 anndata = ["anndata>=0.9"]
@@ -57,6 +65,10 @@ gui = ["PyQt5>=5.15", "matplotlib>=3.5"]
 
 # pip install biwt[all]      — everything
 all = ["biwt[anndata,seurat,gui]"]
+
+# pip install biwt[docs]     — build the documentation site (mkdocs build)
+# black is not a linter here — mkdocstrings uses it to format rendered signatures.
+docs = ["mkdocs>=1.5", "mkdocs-material>=9.5", "mkdocstrings[python]>=0.24", "black>=24"]
 
 # pip install biwt[dev]      — development / testing extras
 dev = ["pytest>=7", "pytest-qt", "biwt[anndata,gui]"]
