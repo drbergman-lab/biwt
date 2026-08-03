@@ -477,6 +477,9 @@ class WalkthroughSession:
     cell_definitions_registry: dict = field(default_factory=dict)
     parameters_loaded: bool = False
 
+    # ---- after generate-cell-parameters step ---------------------------------
+    parameter_generation_done: bool = False
+    
     # ---- legacy CellTypeConfig (new-style, not yet fully wired) ----------
     cell_type_config: CellTypeConfig = field(default_factory=CellTypeConfig)
 
@@ -669,6 +672,11 @@ def _step_predicates(s: "WalkthroughSession") -> list:
             lambda: not s.parameters_loaded,
             "LoadCellParameters",
         ),
+
+        (
+            lambda: not s.parameter_generation_done,
+            "ParameterGeneration",
+        )
     ]
 
 
@@ -679,7 +687,7 @@ def _step_predicates(s: "WalkthroughSession") -> list:
 _STEP_ORDER = [
     "SpotDeconvQuery", "ClusterColumn", "SpatialQuery",
     "EditCellTypes", "RenameCellTypes", "CellCounts",
-    "Positions", "LoadCellParameters",
+    "Positions", "LoadCellParameters", "ParameterGeneration",
 ]
 
 # For each step label: (session_field, reset_value) pairs.
@@ -724,6 +732,11 @@ _STEP_FIELDS: dict[str, list] = {
         ("parameters_loaded", False),
         ("cell_definitions_registry", {}),
         ("cell_definitions_xml", None),
+    ],
+
+    "ParameterGeneration": [
+    ("parameter_generation_done", False),
+    ("parameter_generation", {}),
     ],
 }
 
@@ -1026,6 +1039,7 @@ class BioinformaticsWalkthrough(QWidget):
         from biwt.gui.windows.cell_counts import CellCountsWindow
         from biwt.gui.windows.positions import PositionsWindow
         from biwt.gui.windows.load_cell_parameters import LoadCellParametersWindow
+        from biwt.gui.windows.generate_cell_parameters import ParameterGenerationWindow
 
         s = self.session
 
@@ -1039,14 +1053,15 @@ class BioinformaticsWalkthrough(QWidget):
             return EditCellTypesWindow(self)
 
         _factories = {
-            "SpotDeconvQuery":    lambda: SpotDeconvolutionQueryWindow(self),
-            "ClusterColumn":      lambda: ClusterColumnWindow(self),
-            "SpatialQuery":       _make_spatial_query,
-            "EditCellTypes":      _make_edit_cell_types,
-            "RenameCellTypes":    lambda: RenameCellTypesWindow(self),
-            "CellCounts":         lambda: CellCountsWindow(self),
-            "Positions":          lambda: PositionsWindow(self),
-            "LoadCellParameters": lambda: LoadCellParametersWindow(self),
+            "SpotDeconvQuery":     lambda: SpotDeconvolutionQueryWindow(self),
+            "ClusterColumn":       lambda: ClusterColumnWindow(self),
+            "SpatialQuery":        _make_spatial_query,
+            "EditCellTypes":       _make_edit_cell_types,
+            "RenameCellTypes":     lambda: RenameCellTypesWindow(self),
+            "CellCounts":          lambda: CellCountsWindow(self),
+            "Positions":           lambda: PositionsWindow(self),
+            "LoadCellParameters":  lambda: LoadCellParametersWindow(self),
+            "ParameterGeneration": lambda: ParameterGenerationWindow(self),
 
         }
 
@@ -1084,6 +1099,10 @@ class BioinformaticsWalkthrough(QWidget):
             s.cell_definitions_xml = ET.tostring(
                 root, encoding="unicode", xml_declaration=False
             )
+
+            # TODO: remove this xml generation once we are confident.
+            with open("xml_debug/cell_definitions_debug.xml", "w") as f:
+                f.write(s.cell_definitions_xml)
 
         result = BiwtResult(
             coordinates=coords_df,
