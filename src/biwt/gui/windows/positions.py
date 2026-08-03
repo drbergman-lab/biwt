@@ -218,6 +218,9 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
 
         self.setLayout(vbox)
         self._plotter_changed()  # sync par area + enable plot button now that canvas exists
+        # Zero-count types start out "placed", so if none are placeable there is
+        # nothing to wait for and Continue should already be live.
+        self._refresh_continue_gate()
         self._maybe_show_domain_editor()
 
     # ------------------------------------------------------------------
@@ -344,8 +347,10 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
         self.checkbox_dict: dict[str, QCheckBox_custom] = {}
         for ct in s.cell_types_list_final:
             cb = QCheckBox_custom(ct)
-            cb.setChecked(s.use_spatial_data)  # pre-select all when spatial plotter is default
-            cb.setEnabled(True)
+            placeable = self._is_placeable(ct)
+            # Pre-select all when the spatial plotter is the default.
+            cb.setChecked(s.use_spatial_data and placeable)
+            cb.setEnabled(placeable)
             vbox_checks.addWidget(cb)
             self.cell_type_button_group.addButton(cb)
             self.checkbox_dict[ct] = cb
@@ -544,6 +549,22 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
         else:
             self.plot_cells_button.setEnabled(False)
 
+    def _is_placeable(self, ct: str) -> bool:
+        """False when *ct* has no cells to place, i.e. a count of zero.
+
+        A zero count is legitimate — the type still gets a ``<cell_definition>``
+        in the output config, it just contributes no cells.  Such a type is
+        treated as already placed: its checkbox stays disabled so it cannot be
+        selected and does not hold up ``_refresh_continue_gate``.
+        """
+        counts = self.walkthrough.session.cell_counts or {}
+        return counts.get(ct, 0) > 0
+
+    def _refresh_continue_gate(self) -> None:
+        """Continue unlocks once no cell type is still waiting to be placed."""
+        pending = any(cb.isEnabled() for cb in self.checkbox_dict.values())
+        self.continue_to_write_button.setEnabled(not pending)
+
     def _select_all_cb(self) -> None:
         for cb in self.checkbox_dict.values():
             if cb.isEnabled():
@@ -565,7 +586,9 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
     def _undo_cell_type(self, ct: str, undo_all_flag: bool = False) -> None:
         s = self.walkthrough.session
         s.coords_by_type[ct] = np.empty((0, 3))
-        self.checkbox_dict[ct].setEnabled(True)
+        # A zero-count type has nothing to place, so undo must not put it back
+        # into the "waiting to be placed" state.
+        self.checkbox_dict[ct].setEnabled(self._is_placeable(ct))
         self.checkbox_dict[ct].setChecked(False)
         self.undo_button[ct].setEnabled(False)
         if undo_all_flag:
@@ -611,7 +634,7 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
 
         self.update_legend_window()
         self.sync_par_area()
-        self.continue_to_write_button.setEnabled(False)
+        self._refresh_continue_gate()
 
     def _undo_all_cb(self) -> None:
         for ct in self.checkbox_dict:
@@ -1459,10 +1482,7 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
         self.update_legend_window()
 
         # Enable continue when all types placed
-        for cb in self.checkbox_dict.values():
-            if cb.isEnabled():
-                return
-        self.continue_to_write_button.setEnabled(True)
+        self._refresh_continue_gate()
 
     def _plot_spatial(self, n_per_spot: int) -> None:
         s = self.walkthrough.session
@@ -1647,10 +1667,14 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
         r = (0.75 * vol / np.pi) ** (1 / 3)
         self.circles(new_pos, s=r, color=self.color_by_celltype[ct],
                      edgecolor="none", linewidth=0.5, alpha=self.alpha_value)
-        self.legend_artists.append(
-            Patch(facecolor=self.color_by_celltype[ct], edgecolor="none")
-        )
-        self.legend_labels.append(ct)
+        if new_pos.shape[0]:
+            # Skip the legend entry when nothing was drawn, matching
+            # _replot_all_after_undo — otherwise the entry appears on the first
+            # plot and then vanishes at the first redraw.
+            self.legend_artists.append(
+                Patch(facecolor=self.color_by_celltype[ct], edgecolor="none")
+            )
+            self.legend_labels.append(ct)
         self.checkbox_dict[ct].setEnabled(False)
         self.checkbox_dict[ct].setChecked(False)
         self.undo_button[ct].setEnabled(True)
@@ -1679,6 +1703,10 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
             return
 
         if new_pos.shape[0] == 0:
+            # The sampler gave up (see _wedge_sample_3d's rejection limit), so the
+            # region is unusable: leave the type selectable and let the user pick
+            # a different one.  This is *not* the zero-count case — a type with a
+            # count of zero is never selectable, so N > 0 here.
             return
         s.coords_by_type[ct] = np.append(s.coords_by_type[ct], new_pos, axis=0)
         vol = (s.cell_volume or {}).get(ct, 2494.0)

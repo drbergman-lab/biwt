@@ -52,9 +52,20 @@ metastasis, a sensitivity sweep over one population's size.
 
 ## Rules
 
-**Zero counts are blocked.** Every surviving type must place at least one cell. If you want
-none of a type, [delete it](edit-cell-types.md) rather than setting its count to zero — that
-is the same outcome, expressed where it belongs.
+**Zero is allowed, and it is not the same as deleting.** A count of zero means *define this
+cell type, but place none of it*: the type still gets a `<cell_definition>` in the generated
+config, it just contributes no rows to the output. That is how you pull a phenotype template
+into your model without seeding any of those cells — useful when the population is meant to
+appear later, through division or differentiation, rather than at t = 0.
+
+[Deleting the type](edit-cell-types.md) is the other choice: it removes the type outright, so
+no definition is written for it at all. Zero keeps the definition; delete removes it.
+
+Every type may be zero if you want, which gives you a config full of cell definitions and an
+empty positions file.
+
+At the [positions](positions.md) screen a zero-count type arrives already greyed out — there
+is nothing to place — so it will not hold up **Continue**.
 
 **Counts interact with the domain.** A confluence figure is meaningless without a domain
 area, and a large manual count in a small domain produces heavy overlap. If you are also

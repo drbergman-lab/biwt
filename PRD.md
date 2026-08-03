@@ -228,12 +228,16 @@ The `BiwtInput.extra_cell_template_paths` mechanism (TOML files of `name = """<p
 - Shown only when NOT using spatial data (spatial data determines counts from the data itself).
 - Four modes: (1) use data counts as-is, (2) proportional to the counts data, (3) specify by confluence percentage, (4) specify by total cell count.
 - Confluence mode pre-populates from current counts.
-- Zero-count types are blocked with a warning.
+- A count of zero is **allowed**, and means "define this cell type in the output config but place none of it". The type keeps its `<cell_definition>` — definitions are driven by `cell_types_list_final`, never by counts — and contributes no rows to the coordinates DataFrame. Deleting the type at the edit step (F6) remains the way to remove it from the config entirely. There is no floor on the total either: every type may be zero, yielding a definitions-only config and a header-only CSV.
+- A zero-count type is treated as already placed at the positions step (F9): its checkbox is disabled so it cannot be selected and does not hold up the Continue gate.
+- Proportional mode leaves the other types untouched when the edited type's share of the data is zero, rather than scaling them all by a zero multiplier.
 
 **Acceptance criteria:**
 - [x] Step skipped when using spatial data.
 - [x] All four modes produce valid counts.
-- [x] Zero counts blocked.
+- [x] Zero counts allowed; the type is absent from `BiwtResult.coordinates` but still present in `cell_definitions_xml`.
+- [x] All-zero counts produce an empty coordinates DataFrame that keeps `float64` x/y/z dtypes.
+- [x] A zero-count type does not block Continue at the positions step, in 2D or 3D.
 - [x] Confluence fields auto-populated.
 
 ---

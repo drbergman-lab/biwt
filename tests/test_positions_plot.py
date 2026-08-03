@@ -79,7 +79,7 @@ class TestReplotOrdering:
             _recompute_scatter_sizes=lambda: calls.append("recompute_scatter_sizes"),
             update_legend_window=lambda: calls.append("update_legend_window"),
             sync_par_area=lambda: calls.append("sync_par_area"),
-            continue_to_write_button=SimpleNamespace(setEnabled=lambda v: None),
+            _refresh_continue_gate=lambda: calls.append("refresh_continue_gate"),
         )
 
         PositionsWindow._replot_all_after_undo(d)
@@ -136,3 +136,64 @@ class TestComputeSpatialPlacement:
         base = (data - dmin) / extent           # normalized [0,1] (matches the plotter)
         mapped = base * [w, h] + [x0, y0]
         np.testing.assert_allclose(mapped, data * F)
+
+
+class TestZeroCountPlacement:
+    """A cell type with a count of zero is treated as already placed.
+
+    It has nothing to contribute, so it must not be selectable and must not hold
+    up the Continue gate. Before this, a zero-count type in a 3D domain made the
+    positions step unexitable: _plot_single_3d returned on the empty result
+    before disabling the checkbox, and Continue waits for every checkbox to be
+    disabled.
+    """
+
+    @staticmethod
+    def _win(counts):
+        return SimpleNamespace(
+            walkthrough=SimpleNamespace(session=SimpleNamespace(cell_counts=counts))
+        )
+
+    def test_positive_count_is_placeable(self):
+        w = self._win({"Tumor": 7})
+        assert PositionsWindow._is_placeable(w, "Tumor") is True
+
+    def test_zero_count_is_not_placeable(self):
+        w = self._win({"Tumor": 7, "Ghost": 0})
+        assert PositionsWindow._is_placeable(w, "Ghost") is False
+
+    def test_unknown_type_is_not_placeable(self):
+        assert PositionsWindow._is_placeable(self._win({}), "Missing") is False
+
+    def test_missing_cell_counts_does_not_raise(self):
+        """cell_counts is Optional; the window must not explode before it is set."""
+        assert PositionsWindow._is_placeable(self._win(None), "Tumor") is False
+
+    # -- the Continue gate ------------------------------------------------
+
+    @staticmethod
+    def _gate(enabled_flags):
+        state = {}
+        w = SimpleNamespace(
+            checkbox_dict={
+                name: SimpleNamespace(isEnabled=lambda e=en: e)
+                for name, en in enabled_flags.items()
+            },
+            continue_to_write_button=SimpleNamespace(
+                setEnabled=lambda v: state.__setitem__("enabled", v)
+            ),
+        )
+        PositionsWindow._refresh_continue_gate(w)
+        return state["enabled"]
+
+    def test_gate_closed_while_a_type_is_pending(self):
+        assert self._gate({"Tumor": True, "Ghost": False}) is False
+
+    def test_gate_opens_once_every_type_is_settled(self):
+        assert self._gate({"Tumor": False, "Ghost": False}) is True
+
+    def test_gate_opens_when_every_type_has_zero_count(self):
+        """All-zero is allowed, and nothing can ever be plotted — so Continue
+        must be live immediately rather than waiting for a plot that cannot
+        happen."""
+        assert self._gate({"Ghost": False, "Phantom": False}) is True

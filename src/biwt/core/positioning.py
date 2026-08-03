@@ -129,11 +129,10 @@ def build_ic_dataframe(
     Returns
     -------
     DataFrame with columns ``["x", "y", "z", "type"]``.
-    Empty DataFrame (same columns) if *coords_by_type* is empty.
+    A cell type whose array is empty contributes no rows — that is how a
+    zero-count type reaches the output: defined, but placing nothing.
+    Empty DataFrame (same columns, same dtypes) if no rows result at all.
     """
-    if not coords_by_type:
-        return pd.DataFrame(columns=["x", "y", "z", "type"])
-
     rows = []
     for cell_type, coords in coords_by_type.items():
         coords = np.asarray(coords)
@@ -145,7 +144,22 @@ def build_ic_dataframe(
                 "type": cell_type,
             })
 
+    if not rows:
+        # pd.DataFrame([]) types every column as object, which would then
+        # propagate into a host's concat/append of real coordinates.
+        return _empty_ic_dataframe()
+
     return pd.DataFrame(rows, columns=["x", "y", "z", "type"])
+
+
+def _empty_ic_dataframe() -> pd.DataFrame:
+    """Zero-row IC DataFrame with the dtypes a populated one would have."""
+    return pd.DataFrame({
+        "x": pd.Series(dtype="float64"),
+        "y": pd.Series(dtype="float64"),
+        "z": pd.Series(dtype="float64"),
+        "type": pd.Series(dtype="object"),
+    })
 
 
 # ---------------------------------------------------------------------------
