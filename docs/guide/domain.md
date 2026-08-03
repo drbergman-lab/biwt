@@ -52,6 +52,24 @@ Two buttons fill the columns for you:
 
 The z bounds are host-units only and are never scaled.
 
+### Width, height and depth
+
+Below the bounds sit the domain's extents, in host units only. They are two-way: editing a
+bound updates the extent, and typing an extent moves that axis' **maximum**, leaving the
+minimum where you put it. Other axes are untouched.
+
+Anchoring the minimum means exactly one bound moves, so the two are independently settable —
+set `X min` to `-300`, then set `Width` to `1000`, and you get `-300 … 700`. The width does not
+drag the left edge back.
+
+### The OK button is gated
+
+**OK** stays disabled until every bound is a number and each minimum is below its maximum;
+the offending fields are highlighted so you can see which ones are blocking. Equal bounds
+count as invalid too — a zero-width axis has no area to place cells into.
+
+**Cancel** is never gated, so a domain you cannot fix is always escapable.
+
 ## Apply scale factor to data
 
 A checkbox, on by default.
@@ -87,9 +105,8 @@ Three ways, in increasing scope:
 1. Dismiss it — OK or Cancel both mark the domain accepted, so it will not re-trigger when
    you navigate back and forward.
 2. Tick **Skip domain validation** on the import screen before importing.
-3. A host can set `BiwtInput.domain_accepted = True`. Note this currently suppresses the dialog
-   outright: the **Skip domain validation** checkbox is left unticked but has no effect, and
-   unticking it cannot bring the dialog back.
+3. A host can set `BiwtInput.domain_accepted = True`, which ticks that checkbox for you on
+   arrival. It is a default, not an override — untick it and the dialog comes back.
 
 ## What gets saved
 

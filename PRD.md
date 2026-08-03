@@ -94,7 +94,7 @@ The `BiwtInput.extra_cell_template_paths` mechanism (TOML files of `name = """<p
 **One-line description:** Determine spatial domain from data and warn if it conflicts with the host's domain.
 
 **Behavioral specification:**
-- When the host provides a preferred domain (via `BiwtInput.preferred_domain`), it always wins for placement.
+- The host's preferred domain (`BiwtInput.preferred_domain`) always wins for placement. The field defaults to `DomainSpec.default()` (±500 µm × ±10 µm), the same fallback `infer_domain` already used, so a host may omit it and `BiwtInput()` is valid.
 - After import, BIWT independently computes the data's coordinate range and stores it as `session.data_domain`.
 - The `DomainEditorDialog` is shown automatically when the **positions window first opens** (not at import time), using `classify_domain_mismatch()` to detect two-tier mismatches:
   - **"outside"**: any data boundary exceeds the preferred domain (cells would be excluded).
@@ -104,9 +104,11 @@ The `BiwtInput.extra_cell_template_paths` mechanism (TOML files of `name = """<p
   - **Two bounds columns** shown side by side, headed with the two unit names — `{data unit}` and `{host unit}` — kept in sync by the factor (edit either, the other updates via ×/÷ F). With no factor, the data-units column is disabled and only the host-units column (the stored domain) is editable.
   - **"Use Data Domain"**: fills data-units = raw data bounds and host-units = raw × factor (or, with no factor, host-units = raw). **"Use {host} Domain"**: fills host-units = the host bounds verbatim. Z is host-units only and never scaled.
   - **"Apply scale factor to data"** checkbox (on by default) — when on, placement scales the cells by the factor; when off, cells are placed at their raw extent (centered). It never disables the factor field or the column sync.
+  - **Width / height / depth rows**, host-units only, two-way with the bounds: a bound edit re-derives the extent, and an extent edit moves that axis' **maximum**, anchoring the minimum (`x = [-300, 500]`, width set to 1000 → `[-300, 700]`). Only one bound moves, so a minimum and an extent can be set independently; other axes are untouched.
+- **OK is gated on a usable domain.** It is disabled unless all six bounds parse as numbers and `xmin < xmax`, `ymin < ymax`, `zmin < zmax`; equal bounds are invalid, since a zero-width axis divides by zero in the placement scaling. Offending fields are highlighted. Cancel is never gated. Because OK is gated, `result()` no longer coerces an unparseable field to `0.0` — it raises instead.
 - When OK is clicked, the **host-units** bounds become `session.user_domain`; the factor and checkbox persist to `session.scale_factor` / `session.apply_scale`.
-- When Cancel is clicked, the preferred domain is used unchanged.
-- `session.domain_accepted`, `BiwtInput.domain_accepted`, the "Skip domain validation" checkbox, and the "Domain Settings…" button behave as before.
+- When Cancel is clicked, nothing is written: whatever domain was already in effect stays — the host's on first open, a previous user edit thereafter.
+- `BiwtInput.domain_accepted` **seeds** the "Skip domain validation" checkbox rather than overriding it; the checkbox alone determines `session.domain_accepted`, so the user can turn validation back on. The "Domain Settings…" button behaves as before.
 - **Placement (`_default_spatial_pars` via `compute_spatial_placement`):** cells are scaled by `session.effective_scale()` (`scale_factor` when `apply_scale` and a positive factor exist, else `1.0`) and **centered** in the domain — a pure uniform scale + translate. Aspect ratio is always preserved; editing the domain resizes the container without changing the cell scale. On a domain change the spatial default is recomputed and any user edit is preserved as an undo step (`_apply_domain_change_and_redraw`).
 
 **Acceptance criteria:**
@@ -117,6 +119,9 @@ The `BiwtInput.extra_cell_template_paths` mechanism (TOML files of `name = """<p
 - [x] `session.effective_scale()` truth table (factor × apply); `compute_spatial_placement` scales data by F and centers (uniform → exact F× when domain = data×F).
 - [x] User-edited **host-units** domain stored in `session.user_domain`; `scale_factor`/`apply_scale` persisted.
 - [x] Tests cover extractor, `_scale_domain`, units label, `effective_scale`, and `compute_spatial_placement` invariant.
+- [x] OK disabled on an inverted, zero-width, or unparseable bound, per axis, with the offending fields flagged; Cancel always enabled.
+- [x] Extent rows derive from the bounds; editing one moves that axis' maximum and anchors its minimum, leaving the other axes unaffected.
+- [x] `BiwtInput.domain_accepted` seeds the checkbox and the user can override it either way; `BiwtInput()` constructs with the default domain.
 
 **Edge cases:**
 - No factor (CSV / imagerow/imagecol / non-Visium): data-units column disabled; work in host units; placement scale `1.0` (raw extent, centered). Out-of-domain cells → existing `_check_out_of_bounds_cells` warning/undo.
