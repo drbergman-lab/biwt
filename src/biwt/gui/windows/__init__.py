@@ -8,7 +8,6 @@ from biwt.gui.windows.rename_cell_types import RenameCellTypesWindow
 from biwt.gui.windows.cell_counts import CellCountsWindow
 from biwt.gui.windows.positions import PositionsWindow
 from biwt.gui.windows.load_cell_parameters import LoadCellParametersWindow
-from biwt.gui.windows.write_positions import WritePositionsWindow
 
 __all__ = [
     "ClusterColumnWindow",
@@ -19,5 +18,4 @@ __all__ = [
     "CellCountsWindow",
     "PositionsWindow",
     "LoadCellParametersWindow",
-    "WritePositionsWindow",
 ]

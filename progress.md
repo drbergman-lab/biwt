@@ -637,3 +637,53 @@ normal thing to do.
 Test coverage went from nothing on this dialog to 24 cases in `test_gui_smoke.py`, which
 already had the offscreen-QApplication harness. Confirmed load-bearing: neutering the gate
 fails 9 of them.
+
+---
+
+## 2026-08-02 (later still): `output_csv_path` removed; two placement bugs fixed
+
+**`BiwtResult.output_csv_path` is gone.** BIWT does not choose where output goes, so carrying
+a path was state it had no claim to. `to_csv(path)` remains as a convenience but no longer
+records anything. Checked before removing: Studio's `feature/biwt-package` bridge never reads
+the field — it calls `result.to_csv(out_path)` with a path it already owns — so nothing on the
+host side depends on it.
+
+While tracing it, found `create_biwt_widget`'s module-docstring example still passing
+`output_csv_path=` to `BiwtInput`, which has no such field and would raise `TypeError`. That
+example renders on the API reference page. Fixed.
+
+**`write_positions.py` deleted.** The 2026-03-29 host-owns-write change (below) unwired
+`WritePositionsWindow` from `_step_predicates` and `_factories` and dropped `output_csv_path`
+from `BiwtInput`, but left the module on disk and still exported from
+`gui/windows/__init__.py`. It had been quietly broken ever since: line 30 read
+`s.biwt_input.output_csv_path`, a field removed in that same change, so the window would have
+raised `AttributeError` the moment anything constructed it. Nothing did. Beyond being dead, its
+entire purpose — asking the user for an output path and writing the file — is the thing that
+change existed to remove, so there was nothing to salvage. `s.output_written` went with it; it
+had no other reader.
+
+**Deconvolution tie-breaks were biased.** `max(priorities, key=priorities.get)` breaks ties by
+dict insertion order, which traces back to `obs` column order. With two genuinely balanced
+types and an odd `n_per_spot`, the first-listed type collected the surplus cell in *every*
+spot — a tissue-wide population skew, not per-spot noise that averages out. Ties are now broken
+at random among the tied set.
+
+Rejected a per-spot rotation, which would also remove the skew and needs no RNG: spots are
+usually ordered row-major, so alternating by index would paint a stripe or checkerboard
+artifact across the tissue. Trading a population bias for a spatial one is a bad deal in
+spatial data. The rest of the placement code already uses unseeded `np.random`, so this is
+consistent with it, and tests pin it with `np.random.seed`.
+
+The apportionment moved out of `_plot_spot_deconvolution` into
+`core.positioning.apportion_spot_cells`. It was ~10 lines buried in a 90-line Qt method and
+therefore untestable; it is the one genuinely non-obvious algorithm in the placement path, and
+it belongs in `core` next to the other pure functions. Its docstring explains the shifted
+divisor, since that is what stops every reference type getting a free cell in every spot.
+
+**3-D spatial drag wrote into the wrong fields.** `_rect_helper` hard-coded parameter indices
+0–3 as `(x0, y0, width, height)`. That is right in 2-D, but the 3-D layout is
+`(x0, y0, z0, width, height, depth)` — so a ⇧-drag put the drag's x-span into `z0` and its
+y-span into `width`. Only the spatial plotter could hit this, since it is the only one that
+wires mouse handling in 3-D (the others are keyboard-only there), which is presumably why it
+went unnoticed. The extent slots are now chosen by dimensionality; `z0` and `depth` are left as
+typed, a drag being an xy-plane gesture.

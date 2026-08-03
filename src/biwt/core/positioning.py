@@ -166,6 +166,52 @@ def _empty_ic_dataframe() -> pd.DataFrame:
 # Spot deconvolution helpers
 # ---------------------------------------------------------------------------
 
+def apportion_spot_cells(
+    probabilities: dict[str, float],
+    n_cells: int,
+) -> dict[str, int]:
+    """Divide *n_cells* among the cell types in *probabilities*.
+
+    Equal-proportions (Huntington–Hill) apportionment with a **shifted
+    divisor**: a type already holding ``c`` cells competes for the next one at
+    priority ``p / sqrt((c+1)(c+2))``, starting from ``p / sqrt(2)``.
+
+    The shift is the important part.  Textbook Huntington–Hill gives every party
+    a free first seat — its divisor is ``sqrt(0*1) = 0``, i.e. infinite priority
+    — which here would drop one cell of *every* reference type into *every*
+    spot, including the ~1e-4 probabilities a deconvolution emits for types that
+    are not really present.  Making the first cell compete like any other means
+    a type appears only once its probability is a meaningful fraction of the
+    leading type's.
+
+    The rule is scale-invariant: multiplying every probability by a constant
+    leaves the result unchanged.  So *probabilities* need not sum to 1, and
+    filtering to a subset of types without renormalizing is safe.
+
+    Ties are broken **at random**.  Exact ties are common — two types at 0.5
+    across many spots — and breaking them deterministically (by ``max()``, i.e.
+    by dict order, i.e. by ``obs`` column order) would award the surplus to the
+    same type in every spot.  That is a tissue-wide population skew, not
+    per-spot noise that averages out.
+
+    Returns ``{cell_type: count}`` over exactly the keys of *probabilities*,
+    summing to ``max(n_cells, 0)``.
+    """
+    counts = {k: 0 for k in probabilities}
+    if n_cells <= 0 or not probabilities:
+        return counts
+
+    priorities = {k: v / np.sqrt(2) for k, v in probabilities.items()}
+    for _ in range(n_cells):
+        best = max(priorities.values())
+        tied = [k for k, v in priorities.items() if v == best]
+        winner = tied[0] if len(tied) == 1 else tied[np.random.randint(len(tied))]
+        counts[winner] += 1
+        priorities[winner] = probabilities[winner] / np.sqrt(
+            (counts[winner] + 1) * (counts[winner] + 2)
+        )
+    return counts
+
 def expand_spot_to_cells(
     spot_center: np.ndarray,
     cell_type_fractions: dict[str, float],

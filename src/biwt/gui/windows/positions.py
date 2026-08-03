@@ -27,7 +27,7 @@ from biwt.gui.widgets import (
     GoBackButton, ContinueButton, LegendWindow, QCheckBox_custom, QLineEdit_custom,
 )
 from biwt.core.domain import classify_domain_mismatch
-from biwt.core.positioning import compute_spatial_placement
+from biwt.core.positioning import apportion_spot_cells, compute_spatial_placement
 from biwt.gui.walkthrough import DomainEditorDialog, _build_mismatch_message, _scale_domain
 
 
@@ -1236,10 +1236,16 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
 
     def _rect_helper(self, event, xL, yL) -> None:
         xR, yR = event.xdata, event.ydata
+        # The parameter slots differ by dimensionality: 2-D is
+        # (x0, y0, width, height); 3-D is (x0, y0, z0, width, height, depth).
+        # Hard-coding 2/3 for the extents wrote the drag's x-span into z0 and
+        # its y-span into width whenever the 3-D spatial plotter was dragged.
+        # A drag is an xy-plane gesture, so z0 and depth are left as typed.
+        w_idx, h_idx = (2, 3) if self.plot_is_2d else (3, 4)
         self._assign_par(min(xL, xR), 0)
         self._assign_par(min(yL, yR), 1)
-        self._assign_par(abs(xR - xL), 2)
-        self._assign_par(abs(yR - yL), 3)
+        self._assign_par(abs(xR - xL), w_idx)
+        self._assign_par(abs(yR - yL), h_idx)
 
     def _rect_motion(self, event) -> None:
         if event.inaxes is None or not self.mouse_pressed:
@@ -1575,15 +1581,7 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
             if not probs:
                 continue
 
-            # Equal-proportions apportionment
-            priorities = {k: v / np.sqrt(2) for k, v in probs.items()}
-            spot_counts: dict[str, int] = {k: 0 for k in probs}
-            for _ in range(n_per_spot):
-                nk = max(priorities, key=priorities.get)
-                spot_counts[nk] += 1
-                priorities[nk] = probs[nk] / np.sqrt(
-                    (spot_counts[nk] + 1) * (spot_counts[nk] + 2)
-                )
+            spot_counts = apportion_spot_cells(probs, n_per_spot)
 
             color_seq: list[str] = []
             type_seq:  list[str] = []

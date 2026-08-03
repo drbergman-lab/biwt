@@ -144,6 +144,7 @@ The `BiwtInput.extra_cell_template_paths` mechanism (TOML files of `name = """<p
 **Acceptance criteria:**
 - [x] Step shown only when both probability columns and spatial data exist.
 - [x] Accepting sets up deconvolution data structures.
+- [x] Per-spot cells are apportioned by `apportion_spot_cells` (`core/positioning.py`): equal-proportions (Huntington–Hill) with a **shifted divisor**, so the first cell is contested like any other and a trivially-probable type wins none. Scale-invariant, so filtering the mixture to the kept types needs no renormalizing. **Ties are broken at random** — breaking them by dict order awarded the surplus to the first-listed `obs` column in every spot, skewing the whole tissue.
 - [x] Declining moves to cluster column selection.
 
 ---
@@ -288,13 +289,13 @@ The `BiwtInput.extra_cell_template_paths` mechanism (TOML files of `name = """<p
   - `cell_type_map`: dict mapping original labels to final names (or `None` for deleted types).
   - `domain_used`: the DomainSpec used for placement.
   - `cell_definitions_xml`: optional serialized PhysiCell cell-defs XML.
-- BIWT never writes to disk. The host decides how to persist the result.
+- BIWT never writes to disk. The host decides how to persist the result — and **where**: the result carries no output-path field. `to_csv(path)` is a convenience that writes and returns nothing; it records no state, because BIWT does not choose the output location and so has no business remembering one.
 - The `on_complete` callback is invoked with the `BiwtResult`.
 
 **Acceptance criteria:**
 - [x] `BiwtResult.coordinates` has correct columns.
 - [x] `BiwtResult.to_csv()` writes with `type` header (not `cell_type`).
-- [x] No file I/O in BIWT; host owns writing.
+- [x] No file I/O in BIWT; host owns writing, and owns the path.
 - [x] XML assembly includes all selected cell templates.
 
 ---

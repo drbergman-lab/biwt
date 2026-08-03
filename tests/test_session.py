@@ -969,3 +969,82 @@ class TestZeroCellCounts:
         assert "Macrophage" not in set(df["type"])
         assert set(df["type"].unique()) == {"T_cell", "Tumor"}
         assert len(df) == sum(s.cell_counts.values())
+
+
+# ---------------------------------------------------------------------------
+# Spot-deconvolution apportionment
+# ---------------------------------------------------------------------------
+
+from biwt.core.positioning import apportion_spot_cells  # noqa: E402
+
+
+class TestApportionSpotCells:
+    """Equal-proportions apportionment with a shifted divisor.
+
+    The shift means the first cell is contested like any other, so a type a
+    deconvolution reports at ~1e-4 does not get a free cell in every spot.
+    """
+
+    def test_places_exactly_n_cells(self):
+        for n in (1, 2, 3, 7, 50):
+            got = apportion_spot_cells({"A": 0.5, "B": 0.3, "C": 0.2}, n)
+            assert sum(got.values()) == n
+
+    def test_keys_are_preserved_even_at_zero(self):
+        got = apportion_spot_cells({"A": 0.9, "B": 0.1}, 1)
+        assert set(got) == {"A", "B"}
+
+    def test_non_positive_n_places_nothing(self):
+        for n in (0, -3):
+            assert apportion_spot_cells({"A": 1.0}, n) == {"A": 0}
+
+    def test_no_types_is_not_an_error(self):
+        assert apportion_spot_cells({}, 5) == {}
+
+    def test_dominant_type_wins_the_first_cell(self):
+        assert apportion_spot_cells({"A": 0.7, "B": 0.3}, 1) == {"A": 1, "B": 0}
+
+    def test_trivial_probability_gets_no_cell_at_realistic_counts(self):
+        """The whole point of the shifted divisor: no thin film of spurious cells."""
+        for n in (1, 2, 3, 5, 10, 25):
+            got = apportion_spot_cells({"A": 0.4, "B": 0.4, "C": 0.0001}, n)
+            assert got["C"] == 0
+
+    def test_a_leader_gets_its_second_cell_before_a_trivial_type_gets_its_first(self):
+        got = apportion_spot_cells({"A": 0.7, "B": 0.2999, "C": 0.0001}, 3)
+        assert got["A"] == 2 and got["C"] == 0
+
+    def test_scale_invariant(self):
+        """Probabilities need not sum to 1, so filtering to kept types is safe."""
+        np.random.seed(0)
+        a = apportion_spot_cells({"A": 0.6, "B": 0.3, "C": 0.1}, 9)
+        np.random.seed(0)
+        b = apportion_spot_cells({"A": 6.0, "B": 3.0, "C": 1.0}, 9)
+        assert a == b
+
+    def test_proportions_are_respected_at_larger_counts(self):
+        got = apportion_spot_cells({"A": 0.5, "B": 0.3, "C": 0.2}, 100)
+        assert got["A"] > got["B"] > got["C"]
+        assert abs(got["A"] - 50) <= 2
+
+    def test_ties_do_not_always_favour_the_first_listed_type(self):
+        """The regression: max() broke ties by dict order, i.e. obs column order,
+        so with balanced types the first-listed one collected the surplus in
+        *every* spot — a tissue-wide skew rather than per-spot noise."""
+        np.random.seed(1234)
+        winners = [
+            max(apportion_spot_cells({"A": 0.5, "B": 0.5}, 1).items(),
+                key=lambda kv: kv[1])[0]
+            for _ in range(400)
+        ]
+        assert set(winners) == {"A", "B"}
+        # Roughly balanced rather than 400/0.
+        assert 140 < winners.count("A") < 260
+
+    def test_tie_break_order_does_not_matter(self):
+        """Same mixture, different dict insertion order, same distribution."""
+        np.random.seed(7)
+        ab = sum(apportion_spot_cells({"A": 0.5, "B": 0.5}, 1)["A"] for _ in range(400))
+        np.random.seed(7)
+        ba = sum(apportion_spot_cells({"B": 0.5, "A": 0.5}, 1)["A"] for _ in range(400))
+        assert 140 < ab < 260 and 140 < ba < 260

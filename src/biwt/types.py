@@ -120,9 +120,6 @@ class BiwtResult:
         The DomainSpec that was actually applied when placing cells.
         ``domain_used.source`` tells the host whether this differs from
         what it passed in.
-    output_csv_path:
-        Path where BIWT wrote the cells.csv, or ``None`` if the host is
-        responsible for writing.
     cell_definitions_xml:
         Serialized PhysiCell cell-definitions XML assembled from the phenotype
         templates chosen at the parameters step, or ``None`` if none were
@@ -137,10 +134,12 @@ class BiwtResult:
     coordinates: pd.DataFrame       # columns: x, y, z, type
     cell_type_map: dict              # original_label → final_name | None
     domain_used: DomainSpec
-    output_csv_path: Optional[str] = None
     cell_definitions_xml: Optional[str] = None   # serialized PhysiCell cell-defs XML
 
     def to_csv(self, path: str) -> None:
-        """Write ``coordinates`` to a PhysiCell-compatible cells.csv."""
+        """Write ``coordinates`` to a PhysiCell-compatible cells.csv.
+
+        A convenience for the host, which owns the output location: the path is
+        not recorded on the result.  BIWT does not choose where anything goes.
+        """
         self.coordinates[["x", "y", "z", "type"]].to_csv(path, index=False)
-        self.output_csv_path = path
