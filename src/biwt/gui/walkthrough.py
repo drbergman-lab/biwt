@@ -100,6 +100,15 @@ class DomainEditorDialog(QDialog):
     _ROWS = [("X min", "xmin"), ("X max", "xmax"),
              ("Y min", "ymin"), ("Y max", "ymax"),
              ("Z min", "zmin"), ("Z max", "zmax")]
+    # ``(label, key, min_attr, max_attr)`` — the domain's extent along each axis.
+    # Derived from the bounds and shown in host units only: there is no
+    # data-units counterpart because the factor already relates the two columns
+    # and z is never scaled by it.  Editing an extent moves the **maximum** and
+    # anchors the minimum, so exactly one bound changes: set the left edge, then
+    # set the width, and the width does not shift the left edge back.
+    _EXTENTS = [("Width", "width", "xmin", "xmax"),
+                ("Height", "height", "ymin", "ymax"),
+                ("Depth", "depth", "zmin", "zmax")]
 
     def __init__(
         self,
@@ -120,6 +129,9 @@ class DomainEditorDialog(QDialog):
         self._data_domain = data_domain            # raw bounds, data units
         self._preferred_domain = preferred_domain  # host bounds, host units
         self._file_factor = file_factor
+        # Re-entrancy guard: bounds and extents write to each other, so whichever
+        # side the user is editing must not be overwritten mid-keystroke.
+        self._syncing = False
         # Both are singular unit *names* ("micron", "data unit"), so they read
         # correctly both as a column header and as a ratio denominator.
         self._host_units = (preferred_domain.units or "micron")
@@ -178,6 +190,17 @@ class DomainEditorDialog(QDialog):
                 du_le.setStyleSheet(_LE_STYLE)
                 self._du_fields[attr] = du_le
                 grid.addWidget(du_le, i, 1)
+
+        self._extent_fields: dict[str, QLineEdit] = {}
+        for j, (label, key, _lo, _hi) in enumerate(
+            self._EXTENTS, start=len(self._ROWS) + 1
+        ):
+            grid.addWidget(QLabel(label), j, 0)
+            ext_le = QLineEdit_custom(ndigits=2)
+            ext_le.setValidator(dv)
+            ext_le.setStyleSheet(_LE_STYLE)
+            self._extent_fields[key] = ext_le
+            grid.addWidget(ext_le, j, 2)
         layout.addLayout(grid)
 
         # --- preset buttons ---
@@ -197,6 +220,9 @@ class DomainEditorDialog(QDialog):
 
         # --- OK / Cancel ---
         btn_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        # Kept so _validate can gate it; Cancel stays enabled unconditionally, so
+        # an unusable domain is always escapable.
+        self._ok_btn = btn_box.button(QDialogButtonBox.Ok)
         btn_box.accepted.connect(self.accept)
         btn_box.rejected.connect(self.reject)
         layout.addWidget(btn_box)
@@ -208,6 +234,8 @@ class DomainEditorDialog(QDialog):
             self._fill_data()                 # first open: host = raw×F (or raw)
         self._update_data_units_enabled()
         self._update_reset_enabled()
+        self._sync_extents_from_host()
+        self._validate()
 
         # --- wire signals (after population, so programmatic fills don't loop) ---
         # textEdited fires only on user input (not setText) → no sync loops.
@@ -216,6 +244,12 @@ class DomainEditorDialog(QDialog):
             le.textEdited.connect(lambda _t, a=attr: self._on_du_edited(a))
         for attr in self._XY:
             self._host_fields[attr].textEdited.connect(lambda _t, a=attr: self._on_host_edited(a))
+        # textChanged, not textEdited: a bound also moves via the presets and the
+        # factor sync, and the extents and the OK gate must follow every time.
+        for le in self._host_fields.values():
+            le.textChanged.connect(self._on_host_changed)
+        for key, le in self._extent_fields.items():
+            le.textEdited.connect(lambda _t, k=key: self._on_extent_edited(k))
 
     # ------------------------------------------------------------------
     # Factor
@@ -331,12 +365,101 @@ class DomainEditorDialog(QDialog):
         self._sync_du_from_host()
 
     # ------------------------------------------------------------------
+    # Extents
+    # ------------------------------------------------------------------
+
+    def _on_host_changed(self, _text: str = "") -> None:
+        self._sync_extents_from_host()
+        self._validate()
+
+    def _sync_extents_from_host(self) -> None:
+        """Re-derive width/height/depth from the bounds."""
+        if self._syncing:
+            return
+        self._syncing = True
+        try:
+            for _label, key, lo, hi in self._EXTENTS:
+                a = self._parse(self._host_fields[lo])
+                b = self._parse(self._host_fields[hi])
+                self._extent_fields[key].setText(
+                    "" if a is None or b is None else self._fmt(b - a)
+                )
+        finally:
+            self._syncing = False
+
+    def _on_extent_edited(self, key: str) -> None:
+        """Move that axis' maximum, anchoring the minimum where the user put it.
+
+        Exactly one bound moves, which is what makes the minimum and the extent
+        independently settable — type the left edge, then type the width, and
+        the width does not drag the left edge with it.  The other axes are
+        untouched either way.
+        """
+        if self._syncing:
+            return
+        lo, hi = next((l, h) for _lbl, k, l, h in self._EXTENTS if k == key)
+        size = self._parse(self._extent_fields[key])
+        a = self._parse(self._host_fields[lo])
+        if size is None or a is None:
+            self._validate()
+            return
+        self._syncing = True
+        try:
+            self._host_fields[hi].setText(self._fmt(a + size))
+        finally:
+            self._syncing = False
+        self._sync_du_from_host()
+        self._validate()
+
+    # ------------------------------------------------------------------
+    # Validation
+    # ------------------------------------------------------------------
+
+    def _invalid_bounds(self) -> set[str]:
+        """Host-bound attrs that make the domain unusable.
+
+        A bound is flagged when it is not a number, or when it is on the wrong
+        side of its partner.  Equal bounds count as wrong: a zero-width axis
+        divides by zero in the placement scaling, and a zero-area domain makes
+        the confluence counts meaningless.
+        """
+        bad: set[str] = set()
+        vals: dict[str, Optional[float]] = {}
+        for attr, le in self._host_fields.items():
+            v = self._parse(le)
+            vals[attr] = v
+            if v is None:
+                bad.add(attr)
+        for _label, _key, lo, hi in self._EXTENTS:
+            if vals[lo] is not None and vals[hi] is not None and vals[lo] >= vals[hi]:
+                bad.update((lo, hi))
+        return bad
+
+    def _validate(self) -> None:
+        """Flag the offending bounds and gate OK on there being none."""
+        bad = self._invalid_bounds()
+        for attr, le in self._host_fields.items():
+            le.setStyleSheet(le.invalid_style if attr in bad else _LE_STYLE)
+        self._ok_btn.setEnabled(not bad)
+        self._ok_btn.setToolTip(
+            "" if not bad else
+            "Every bound must be a number, and each minimum must be "
+            "below its maximum."
+        )
+
+    # ------------------------------------------------------------------
 
     def result(self) -> tuple[DomainSpec, Optional[float], bool]:
-        """Return ``(host-units DomainSpec, scale_factor, apply_scale)``."""
+        """Return ``(host-units DomainSpec, scale_factor, apply_scale)``.
+
+        Only meaningful after ``exec_()`` returned ``Accepted``; OK is disabled
+        while any bound is unparseable, so every field reads as a float here.
+        """
         def hv(attr):
             v = self._parse(self._host_fields[attr])
-            return v if v is not None else 0.0
+            if v is None:                      # unreachable while OK is gated
+                raise ValueError(f"domain bound {attr!r} is not a number")
+            return v
         domain = DomainSpec(
             xmin=hv("xmin"), xmax=hv("xmax"),
             ymin=hv("ymin"), ymax=hv("ymax"),
@@ -816,6 +939,9 @@ class BioinformaticsWalkthrough(QWidget):
         self._domain_accepted_cb.setToolTip(
             "When checked, the domain editor will not appear automatically at the positions step."
         )
+        # The host sets the *default* for this box, not the outcome — the user
+        # stays able to turn domain validation back on.
+        self._domain_accepted_cb.setChecked(self.session.biwt_input.domain_accepted)
         vbox.addWidget(self._domain_accepted_cb)
 
         vbox.addWidget(QHLine())
@@ -889,23 +1015,13 @@ class BioinformaticsWalkthrough(QWidget):
         )
         self.session.data_domain = data_domain
 
-        # Default effective domain (host units): the host's preferred domain wins;
-        # otherwise the raw range converted by the seed factor (raw × factor).
-        preferred = self.session.biwt_input.preferred_domain
-        if preferred is not None:
-            self.session.inferred_domain = preferred
-        elif self.session.scale_factor:
-            self.session.inferred_domain = _scale_domain(
-                data_domain, self.session.scale_factor
-            )
-        else:
-            self.session.inferred_domain = data_domain
+        # Default effective domain (host units): the host's preferred domain,
+        # which always exists — BiwtInput defaults it to DomainSpec.default().
+        self.session.inferred_domain = self.session.biwt_input.preferred_domain
 
-        # domain_accepted: host can pre-accept, or user can check the checkbox.
-        self.session.domain_accepted = (
-            self.session.biwt_input.domain_accepted
-            or self._domain_accepted_cb.isChecked()
-        )
+        # The checkbox is the single source of truth; BiwtInput.domain_accepted
+        # only seeded its initial state (see _build_home_ui).
+        self.session.domain_accepted = self._domain_accepted_cb.isChecked()
 
         log.info(
             "Loaded %d cells from '%s'. Domain source: %s.",

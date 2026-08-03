@@ -91,7 +91,7 @@ class BiwtInput:
         tab).  Passed as hints for renaming suggestions; BIWT does not
         require them.
     """
-    preferred_domain: DomainSpec
+    preferred_domain: DomainSpec = field(default_factory=lambda: DomainSpec.default())
     host_cell_type_names: list = field(default_factory=list)
     domain_accepted: bool = False   # True → skip auto domain-check at positions step
     host_name: str = "Host"         # used in domain editor UI ("Use <host_name> Domain")

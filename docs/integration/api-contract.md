@@ -57,7 +57,7 @@ most one default PhysiCell voxel (20 µm). `DomainSpec.default()` builds the fal
 
 ```python
 BiwtInput(
-    preferred_domain=domain,              # required
+    preferred_domain=domain,              # optional; defaults to ±500 × ±500 × ±10 µm
     host_cell_type_names=[],              # optional
     domain_accepted=False,                # optional
     host_name="Host",                     # optional
@@ -65,17 +65,21 @@ BiwtInput(
 )
 ```
 
-**`preferred_domain`** is the only required field. BIWT uses it for placement unless the user
-overrides it.
+Every field has a default, so `BiwtInput()` is valid.
+
+**`preferred_domain`** is the domain BIWT places into unless the user overrides it in the
+[domain editor](../guide/domain.md). It defaults to `DomainSpec.default()` — the ±500 µm ×
+±10 µm box from the PhysiCell XML defaults, the same fallback BIWT already used internally
+when it could not infer a domain from the data. Pass your own if your application has a
+meaningful one; that is the normal case and worth doing.
 
 **`host_cell_type_names`** — a list of the cell types your application already defines. Used
 only for rename suggestions; BIWT does not require them and does not constrain the user to
 them.
 
-**`domain_accepted`** — set `True` to suppress the automatic domain-mismatch dialog for every
-session. Be aware this currently overrides the user rather than defaulting them: the **Skip
-domain validation** checkbox stays unticked and inert, and the user cannot untick their way
-back to the dialog.
+**`domain_accepted`** — set `True` to pre-tick **Skip domain validation** on the import screen,
+suppressing the automatic domain-mismatch dialog. This sets the checkbox's default; the user
+can untick it and get the dialog back.
 
 **`host_name`** — appears in the domain editor as `Use <host_name> Domain`. Set it; the
 default `"Host"` reads like a placeholder because it is one.

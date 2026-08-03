@@ -584,3 +584,56 @@ and placing cells later is a reasonable thing to want.
 `CellCountsWindow` had no test coverage at all. The new tests cover `build_ic_dataframe`'s
 zero/empty behavior and the placement gate logic (`_is_placeable`, `_refresh_continue_gate`),
 following the existing unbound-call-with-stub pattern in `test_positions_plot.py`.
+
+---
+
+## 2026-08-02 (later): Domain editor — OK gating, extents, and honest defaults
+
+Four related changes to `DomainEditorDialog` and `BiwtInput`.
+
+**Nothing validated the bounds.** `DomainSpec` has no `__post_init__`, the dialog had no
+`accept()` override, and the shared `QDoubleValidator` had no range — so `xmin > xmax` was
+accepted verbatim and flowed into `plot_dx`, the placement scaling, and the emitted
+`<x_min>/<x_max>`. An unparseable field silently became `0.0` in `result()`.
+
+OK is now gated: disabled unless all six bounds parse and each minimum is strictly below its
+maximum, with the offending fields flagged using `QLineEdit_custom.invalid_style`. Equality
+counts as invalid — a zero-width axis divides by zero in the placement scaling and makes the
+confluence counts meaningless. Cancel is deliberately left ungated so an unusable domain is
+always escapable. With OK gated the `0.0` coercion became unreachable, so it now raises rather
+than sitting there as a silent fallback.
+
+**Extents are editable.** Width/height/depth rows, host units only — there is no data-units
+counterpart because the factor already relates the two columns and z is never scaled. Editing
+an extent moves the axis' **maximum** and anchors the minimum, so `x = [-300, 500]` with the
+width set to 1000 becomes `[-300, 700]`.
+
+The first attempt resized about the axis center, reasoning that simulation domains are usually
+symmetric about the origin. That was the wrong instinct: centering means an extent edit moves
+*both* bounds, so a minimum the user has just typed silently shifts when they then set the
+width, and there is no way to specify "left edge here, this wide". Anchoring the minimum moves
+exactly one field and makes the two independently settable. A symmetric domain stays symmetric
+anyway if the user edits the bounds rather than the extent.
+
+A side effect worth keeping: the maximum is written rather than read, so typing a width repairs
+an unparseable maximum instead of refusing to act on it.
+
+Bounds and extents write to each other, so `_syncing` guards against clobbering whichever side
+the user is mid-keystroke on. Bound → extent runs off `textChanged` rather than `textEdited`,
+because a bound also moves via the presets and the factor sync.
+
+**`domain_accepted` was an override, not a default.** `_import_cb` OR-ed the host value with
+the checkbox, and nothing ever seeded the checkbox from it — so a host passing `True` left the
+user looking at an *unticked* "Skip domain validation" box that did nothing, with no way to get
+the dialog back. The host value now sets the checkbox's initial state and the checkbox alone
+decides. Same outcome for a host that sets it, but the user stays in control.
+
+**`preferred_domain` now defaults.** `infer_domain` already falls back to `DomainSpec.default()`
+internally, so requiring hosts to supply the same box was ceremony. It is now
+`field(default_factory=...)`, which also retired a defensive `preferred is None` branch in
+`_import_cb` that the type contract had made unreachable. Passing a real domain remains the
+normal thing to do.
+
+Test coverage went from nothing on this dialog to 24 cases in `test_gui_smoke.py`, which
+already had the offscreen-QApplication harness. Confirmed load-bearing: neutering the gate
+fails 9 of them.
