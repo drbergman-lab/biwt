@@ -129,7 +129,8 @@ mkdocs.yml
 - [x] Domain editor shows the live extents of the domain being edited
 - [x] BiwtInput.domain_accepted + "Skip domain validation" checkbox bypass auto-check
 - [x] Z-fields default to ±10 for 2D data in domain editor
-- [x] Data-unit→host-unit scale factor in the domain editor: auto-detected Visium µm/pixel (`_extract_visium_microns_per_pixel`), editable, with dual data-units/host-units bounds columns synced by the factor and a reset-to-file button
+- [x] Data-unit→host-unit scale factor in the domain editor: auto-detected Visium µm/pixel (`_extract_visium_microns_per_pixel`), editable, with each value shown in host units beside its parenthesized data-units mirror, synced by the factor, plus a reset-to-file button
+- [x] Domain editor is an axis-major ruled grid — one row per axis (`X (width)`, `Y (height)`, `Z (depth)`) against min / max / size columns — so an axis' extent sits beside the bounds that span it instead of in a separate block six rows below. `_DOMAIN_AXES` is the single source of truth for the layout, the extent derivation, and the validation
 - [x] Placement scales cells by the factor and centers them in the domain (`compute_spatial_placement`; `session.effective_scale()`) — uniform, aspect-preserving; the domain is an independent host-units container
 - [x] "Domain Settings…" button in positions plot window for manual domain editing
 - [x] Spot deconvolution query and cell expansion; per-spot apportionment lives in `core.positioning.apportion_spot_cells` (shifted-divisor equal proportions), with ties broken at random so the surplus cell no longer lands on the first-listed `obs` column in every spot

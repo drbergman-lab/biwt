@@ -159,9 +159,10 @@ def test_scale_factor_label_is_derived_from_both_domains(qapp):
     """
     labels = _labels(_domain_editor(qapp, data_units="pixel", host_units="nanometer"))
     assert "nanometer/pixel:" in labels
-    # ...and the bounds column headers use the same names.
-    assert "<b>pixel</b>" in labels
-    assert "<b>nanometer</b>" in labels
+    # ...and so does the grid legend, which names the primary column and its
+    # parenthesized mirror rather than heading two separate columns.
+    legend = next(t for t in labels if "<b>nanometer</b>" in t)
+    assert "(pixel)" in legend
 
 
 def test_error_message_is_html_escaped(widget, monkeypatch):

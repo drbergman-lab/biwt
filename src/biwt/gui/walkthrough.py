@@ -33,7 +33,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from html import escape
-from typing import Optional, Callable, Type
+from typing import Optional, Callable, NamedTuple, Type
 import logging
 
 import numpy as np
@@ -53,7 +53,7 @@ from biwt.core.data_loader import BiwtData, LoadError
 from biwt.core import domain as domain_module
 from biwt.core.cell_types import CellTypeConfig, CellTypeAction, suggest_name_mappings
 from biwt.core.positioning import build_ic_dataframe
-from biwt.gui.widgets import QHLine, QLineEdit_custom, SectionHeader
+from biwt.gui.widgets import QHLine, QLineEdit_custom, QVLine, SectionHeader
 
 log = logging.getLogger(__name__)
 
@@ -62,10 +62,46 @@ _LE_STYLE = (
     " border-radius: 2px; padding: 1px 4px;"
 )
 
+# For fields that are present but switched off.  A disabled QLineEdit carrying
+# _LE_STYLE keeps its white background, so it reads as empty-and-editable rather
+# than inert — which matters for the domain editor's z row, where the widgets
+# exist only so the row matches x and y.
+_LE_STYLE_INERT = (
+    "background-color: #ececec; border: 1px solid #bbb; color: #999;"
+    " border-radius: 2px; padding: 1px 4px;"
+)
+
 
 # ---------------------------------------------------------------------------
 # Domain editor dialog
 # ---------------------------------------------------------------------------
+
+class _Axis(NamedTuple):
+    """One axis of the domain: its label, its two bounds, and its extent.
+
+    Bundling them in a single record is what keeps "width belongs to x" true by
+    construction.  Everything that walks the domain — the grid layout, the
+    extent derivation, and the bounds validation — iterates this one table, so
+    no caller has to know that ``width`` is the span of ``xmin``…``xmax``, and
+    nothing addresses a bound or an extent by position.
+    """
+    label: str            # "X" — the axis, shown as the row label
+    extent: str           # "width" — both the dict key and the displayed word
+    lo: str               # "xmin" — DomainSpec attribute for the minimum
+    hi: str               # "xmax" — DomainSpec attribute for the maximum
+    factor_scaled: bool   # does the data-unit ⇄ host-unit factor apply?
+
+
+# z is not ``factor_scaled``: it is a 2-D slab / synthetic depth rather than a
+# measurement in data units, so the factor has nothing to convert.  Its
+# data-units cells are still built, so the Z row matches the others and wiring
+# them up later is a matter of flipping this flag.
+_DOMAIN_AXES = (
+    _Axis("X", "width",  "xmin", "xmax", True),
+    _Axis("Y", "height", "ymin", "ymax", True),
+    _Axis("Z", "depth",  "zmin", "zmax", False),
+)
+
 
 def _scale_domain(d: DomainSpec, factor: float,
                   source: str = "data_range", units: str = "micron") -> DomainSpec:
@@ -95,19 +131,16 @@ class DomainEditorDialog(QDialog):
     ``exec_()`` returns ``QDialog.Accepted``.
     """
 
-    _XY = ("xmin", "xmax", "ymin", "ymax")
-    _ROWS = [("X min", "xmin"), ("X max", "xmax"),
-             ("Y min", "ymin"), ("Y max", "ymax"),
-             ("Z min", "zmin"), ("Z max", "zmax")]
-    # ``(label, key, min_attr, max_attr)`` — the domain's extent along each axis.
-    # Derived from the bounds and shown in host units only: there is no
-    # data-units counterpart because the factor already relates the two columns
-    # and z is never scaled by it.  Editing an extent moves the **maximum** and
-    # anchors the minimum, so exactly one bound changes: set the left edge, then
-    # set the width, and the width does not shift the left edge back.
-    _EXTENTS = [("Width", "width", "xmin", "xmax"),
-                ("Height", "height", "ymin", "ymax"),
-                ("Depth", "depth", "zmin", "zmax")]
+    # The grid is laid out one row per axis, so an axis' extent sits on the same
+    # row as the two bounds that define it.  Editing an extent moves the
+    # **maximum** and anchors the minimum, so exactly one bound changes: set the
+    # left edge, then set the width, and the width does not shift the left edge
+    # back.
+    _AXES = _DOMAIN_AXES
+    # Bound attrs the factor applies to, in grid order.  Derived rather than
+    # spelled out so it cannot drift from _AXES.
+    _XY = tuple(a for ax in _DOMAIN_AXES if ax.factor_scaled
+                for a in (ax.lo, ax.hi))
 
     def __init__(
         self,
@@ -123,7 +156,8 @@ class DomainEditorDialog(QDialog):
     ):
         super().__init__(parent)
         self.setWindowTitle("Domain Settings")
-        self.setMinimumWidth(460)
+        # Three paired columns (min | max | size), each holding two fields.
+        self.setMinimumWidth(660)
 
         self._data_domain = data_domain            # raw bounds, data units
         self._preferred_domain = preferred_domain  # host bounds, host units
@@ -157,7 +191,7 @@ class DomainEditorDialog(QDialog):
         self._factor_edit.setValidator(fv)
         self._factor_edit.setStyleSheet(_LE_STYLE)
         self._factor_edit.setMaximumWidth(120)
-        self._factor_edit.setPlaceholderText("none found in file")
+        self._factor_edit.setPlaceholderText(self._placeholder_for_empty())
         F0 = current_factor if current_factor is not None else file_factor
         if F0 is not None:
             self._factor_edit.setText(f"{F0:g}")
@@ -169,37 +203,76 @@ class DomainEditorDialog(QDialog):
         factor_hbox.addStretch()
         layout.addLayout(factor_hbox)
 
-        # --- two-column bounds grid (data units | host units) ---
-        grid = QGridLayout()
-        grid.addWidget(QLabel(f"<b>{self._data_units}</b>"), 0, 1)
-        grid.addWidget(QLabel(f"<b>{self._host_units}</b>"), 0, 2)
-        self._du_fields: dict[str, QLineEdit] = {}    # x/y only
-        self._host_fields: dict[str, QLineEdit] = {}  # x/y/z (the stored domain)
-        dv = QDoubleValidator()
-        for i, (label, attr) in enumerate(self._ROWS, start=1):
-            grid.addWidget(QLabel(label), i, 0)
-            host_le = QLineEdit_custom(ndigits=2)
-            host_le.setValidator(dv)
-            host_le.setStyleSheet(_LE_STYLE)
-            self._host_fields[attr] = host_le
-            grid.addWidget(host_le, i, 2)
-            if attr in self._XY:
-                du_le = QLineEdit_custom(ndigits=2)
-                du_le.setValidator(dv)
-                du_le.setStyleSheet(_LE_STYLE)
-                self._du_fields[attr] = du_le
-                grid.addWidget(du_le, i, 1)
+        # --- axis grid: one row per axis, columns min | max | size ---
+        # Each cell pairs the host-units field with its data-units mirror in
+        # parentheses.  Host units lead because that is what the domain is
+        # stored in and what placement and BiwtResult consume; the data-units
+        # value is the annotation.  Laying it out per axis rather than per field
+        # is what puts "width" on the X row instead of six rows below it.
+        legend = QLabel(
+            f"<b>{escape(self._host_units)}</b> "
+            f"<span style='color:#666;'>({escape(self._data_units)})</span>"
+        )
+        layout.addWidget(legend)
 
+        # Ruled like a table: separators sit in their own grid tracks, so the
+        # data columns keep odd indices and the axis rows keep even ones.  Six
+        # paired fields in a row is too many to delimit by whitespace alone —
+        # without rules it is not obvious where "min" stops and "max" starts.
+        _LABEL_COL, _DATA_COLS, _STRETCH_COL = 0, (2, 4, 6), 7
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(8)
+        grid.setVerticalSpacing(5)
+
+        for col, head in zip(_DATA_COLS, ("min", "max", "size")):
+            lbl = QLabel(f"<b>{head}</b>")
+            lbl.setAlignment(Qt.AlignCenter)
+            grid.addWidget(lbl, 0, col)
+
+        self._du_fields: dict[str, QLineEdit] = {}     # every bound; z stays inert
+        self._host_fields: dict[str, QLineEdit] = {}   # x/y/z (the stored domain)
         self._extent_fields: dict[str, QLineEdit] = {}
-        for j, (label, key, _lo, _hi) in enumerate(
-            self._EXTENTS, start=len(self._ROWS) + 1
-        ):
-            grid.addWidget(QLabel(label), j, 0)
-            ext_le = QLineEdit_custom(ndigits=2)
-            ext_le.setValidator(dv)
-            ext_le.setStyleSheet(_LE_STYLE)
-            self._extent_fields[key] = ext_le
-            grid.addWidget(ext_le, j, 2)
+        self._du_extent_fields: dict[str, QLineEdit] = {}
+        dv = QDoubleValidator()
+
+        def edit(width: int) -> QLineEdit_custom:
+            le = QLineEdit_custom(ndigits=2)
+            le.setValidator(dv)
+            le.setStyleSheet(_LE_STYLE)
+            # Fixed rather than expanding: a stretched field drags its closing
+            # parenthesis away from the number it is supposed to be wrapping.
+            le.setFixedWidth(width)
+            return le
+
+        # Axis rows are 2, 4, 6 — the odd rows in between hold the rules.
+        for row, ax in zip(range(2, 2 * len(self._AXES) + 1, 2), self._AXES):
+            grid.addWidget(QLabel(f"{ax.label} ({ax.extent})"), row, _LABEL_COL)
+            for col, attr in zip(_DATA_COLS, (ax.lo, ax.hi)):
+                self._host_fields[attr] = edit(86)
+                self._du_fields[attr] = edit(74)
+                grid.addWidget(
+                    self._pair_cell(self._host_fields[attr], self._du_fields[attr]),
+                    row, col,
+                )
+            self._extent_fields[ax.extent] = edit(86)
+            self._du_extent_fields[ax.extent] = edit(74)
+            grid.addWidget(
+                self._pair_cell(self._extent_fields[ax.extent],
+                                self._du_extent_fields[ax.extent]),
+                row, _DATA_COLS[-1],
+            )
+
+        last_row = 2 * len(self._AXES)
+        # Rules last, so they span tracks whose sizes are already established.
+        for col in (1, 3, 5):
+            grid.addWidget(QVLine(), 0, col, last_row + 1, 1)
+        for row in range(1, last_row, 2):
+            grid.addWidget(QHLine(), row, _LABEL_COL, 1, _STRETCH_COL)
+        # Soak up the leftover width here rather than letting the cells stretch.
+        grid.setColumnStretch(_STRETCH_COL, 1)
+        # Kept so the axis-major invariant is assertable: an extent must share a
+        # grid row with the two bounds it spans.
+        self._grid = grid
         layout.addLayout(grid)
 
         # --- preset buttons ---
@@ -239,26 +312,62 @@ class DomainEditorDialog(QDialog):
         # --- wire signals (after population, so programmatic fills don't loop) ---
         # textEdited fires only on user input (not setText) → no sync loops.
         self._factor_edit.textChanged.connect(self._on_factor_changed)
-        for attr, le in self._du_fields.items():
-            le.textEdited.connect(lambda _t, a=attr: self._on_du_edited(a))
+        # Only the factor-scaled axes are wired on the data-units side; z owns
+        # the widgets purely so its row matches the others.
         for attr in self._XY:
-            self._host_fields[attr].textEdited.connect(lambda _t, a=attr: self._on_host_edited(a))
+            self._du_fields[attr].textEdited.connect(
+                lambda _t, a=attr: self._on_du_edited(a))
+            self._host_fields[attr].textEdited.connect(
+                lambda _t, a=attr: self._on_host_edited(a))
         # textChanged, not textEdited: a bound also moves via the presets and the
         # factor sync, and the extents and the OK gate must follow every time.
         for le in self._host_fields.values():
             le.textChanged.connect(self._on_host_changed)
         for key, le in self._extent_fields.items():
             le.textEdited.connect(lambda _t, k=key: self._on_extent_edited(k))
+        for ax in self._AXES:
+            if ax.factor_scaled:
+                self._du_extent_fields[ax.extent].textEdited.connect(
+                    lambda _t, k=ax.extent: self._on_du_extent_edited(k))
+
+    # ------------------------------------------------------------------
+    # Layout helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _pair_cell(host_le: QLineEdit, du_le: QLineEdit) -> QWidget:
+        """One grid cell: *host_le*, with *du_le* beside it in parentheses.
+
+        Wrapped in its own widget rather than spread across four grid columns,
+        which would leave the grid 13 columns wide and reintroduce exactly the
+        positional addressing this layout exists to remove.
+        """
+        cell = QWidget()
+        hbox = QHBoxLayout(cell)
+        hbox.setContentsMargins(0, 0, 0, 0)
+        hbox.setSpacing(2)
+        hbox.addWidget(host_le)
+        for text, widget in (("(", None), (None, du_le), (")", None)):
+            hbox.addWidget(QLabel(text) if widget is None else widget)
+        return cell
 
     # ------------------------------------------------------------------
     # Factor
     # ------------------------------------------------------------------
 
     def _effective_factor(self) -> Optional[float]:
-        """Current factor: the field value if valid (>0), else the file value."""
+        """Current factor: the field value if valid and positive, else ``None``.
+
+        An empty field means *no factor*, not "fall back to the file value".
+        Falling back made the file's value unclearable — the only way to reach it
+        was ↺, which then greyed out because the empty field already matched it,
+        so three widgets disagreed about what was in effect: a blank field, live
+        mirrors, and a disabled restore button. ↺ is now the single way back to
+        the file value, which is what it was for.
+        """
         text = self._factor_edit.text().strip()
         if not text:
-            return self._file_factor
+            return None
         try:
             f = float(text)
         except ValueError:
@@ -266,9 +375,11 @@ class DomainEditorDialog(QDialog):
         return f if f > 0 else None
 
     def _on_factor_changed(self, _text: str = "") -> None:
-        # A changed factor re-derives the data-units column from the host domain.
-        if self._effective_factor() is not None:
-            self._sync_du_from_host()
+        # A changed factor re-derives every data-units cell from the host domain
+        # — the extents as well as the bounds.  Syncing only the bounds left the
+        # size mirrors showing a span computed with the previous factor.
+        self._sync_du_from_host()
+        self._sync_du_extents()
         self._update_data_units_enabled()
         self._update_reset_enabled()
 
@@ -286,10 +397,34 @@ class DomainEditorDialog(QDialog):
         self._reset_btn.setEnabled(differs)
         self._reset_btn.setToolTip(f"restore value from file: {self._file_factor:g}")
 
+    def _placeholder_for_empty(self) -> str:
+        """What an empty factor field means — including how to undo emptying it.
+
+        With a file value to go back to, the placeholder has to say so: an empty
+        field is now genuinely no factor, so without naming ↺ the file's
+        calibration would look irrecoverable.
+        """
+        if self._file_factor is None:
+            return "none found in file"
+        return f"none — ↺ restores {self._file_factor:g}"
+
     def _update_data_units_enabled(self) -> None:
+        """Enable the data-units cells that the factor can actually convert.
+
+        Without a factor there is nothing to convert, so the whole column goes
+        inert; z stays inert either way — it carries the widgets so its row
+        matches the others, not because the factor applies to it.
+        """
         enabled = self._effective_factor() is not None
-        for le in self._du_fields.values():
-            le.setEnabled(enabled)
+        inert_tip = f"z is not scaled by the {self._host_units}/{self._data_units} factor"
+        for ax in self._AXES:
+            live = enabled and ax.factor_scaled
+            for le in (self._du_fields[ax.lo], self._du_fields[ax.hi],
+                       self._du_extent_fields[ax.extent]):
+                le.setEnabled(live)
+                le.setStyleSheet(_LE_STYLE if live else _LE_STYLE_INERT)
+                if not ax.factor_scaled:
+                    le.setToolTip(inert_tip)
 
     # ------------------------------------------------------------------
     # Column sync
@@ -307,13 +442,19 @@ class DomainEditorDialog(QDialog):
         return f"{v:g}"
 
     def _sync_du_from_host(self) -> None:
+        """Mirror the host bounds into data units, clearing them when unusable.
+
+        Bailing out early on a missing factor left the mirrors displaying their
+        last values, so a disabled column went on advertising a conversion that
+        no longer applied — the same reason an unparseable bound clears its
+        mirror rather than keeping the previous number.
+        """
         F = self._effective_factor()
-        if F is None:
-            return
-        for attr, du_le in self._du_fields.items():
+        for attr in self._XY:
             host_v = self._parse(self._host_fields[attr])
-            if host_v is not None:
-                du_le.setText(self._fmt(host_v / F))
+            self._du_fields[attr].setText(
+                "" if F is None or host_v is None else self._fmt(host_v / F)
+            )
 
     def _on_du_edited(self, attr: str) -> None:
         F = self._effective_factor()
@@ -372,43 +513,90 @@ class DomainEditorDialog(QDialog):
         self._validate()
 
     def _sync_extents_from_host(self) -> None:
-        """Re-derive width/height/depth from the bounds."""
+        """Re-derive width/height/depth, both unit columns, from the bounds."""
         if self._syncing:
             return
         self._syncing = True
         try:
-            for _label, key, lo, hi in self._EXTENTS:
-                a = self._parse(self._host_fields[lo])
-                b = self._parse(self._host_fields[hi])
-                self._extent_fields[key].setText(
+            for ax in self._AXES:
+                a = self._parse(self._host_fields[ax.lo])
+                b = self._parse(self._host_fields[ax.hi])
+                self._extent_fields[ax.extent].setText(
                     "" if a is None or b is None else self._fmt(b - a)
                 )
+            self._sync_du_extents()
         finally:
             self._syncing = False
 
-    def _on_extent_edited(self, key: str) -> None:
+    def _sync_du_extents(self, skip: Optional[str] = None) -> None:
+        """Mirror each extent into data units, leaving *skip* alone.
+
+        Derived from the host bounds (span ÷ factor) rather than by subtracting
+        the data-units bounds: a bound edit fires both textEdited and
+        textChanged, and only the host column is guaranteed to have been written
+        by the time this runs, so reading the data-units column could lag a
+        keystroke behind.  *skip* is the field the user is typing in, which must
+        not be rewritten underneath them.
+        """
+        F = self._effective_factor()
+        for ax in self._AXES:
+            if ax.extent == skip:
+                continue
+            a = self._parse(self._host_fields[ax.lo])
+            b = self._parse(self._host_fields[ax.hi])
+            usable = F is not None and ax.factor_scaled and a is not None and b is not None
+            self._du_extent_fields[ax.extent].setText(
+                self._fmt((b - a) / F) if usable else ""
+            )
+
+    def _on_extent_edited(self, key: str, _du_source: Optional[str] = None) -> None:
         """Move that axis' maximum, anchoring the minimum where the user put it.
 
         Exactly one bound moves, which is what makes the minimum and the extent
         independently settable — type the left edge, then type the width, and
         the width does not drag the left edge with it.  The other axes are
         untouched either way.
+
+        *_du_source* names the data-units extent the edit originated from, if
+        any, so the mirror does not overwrite the field being typed in.
         """
         if self._syncing:
             return
-        lo, hi = next((l, h) for _lbl, k, l, h in self._EXTENTS if k == key)
+        ax = next(a for a in self._AXES if a.extent == key)
         size = self._parse(self._extent_fields[key])
-        a = self._parse(self._host_fields[lo])
+        a = self._parse(self._host_fields[ax.lo])
         if size is None or a is None:
             self._validate()
             return
         self._syncing = True
         try:
-            self._host_fields[hi].setText(self._fmt(a + size))
+            self._host_fields[ax.hi].setText(self._fmt(a + size))
         finally:
             self._syncing = False
         self._sync_du_from_host()
+        self._sync_du_extents(skip=_du_source)
         self._validate()
+
+    def _on_du_extent_edited(self, key: str) -> None:
+        """A data-units extent edit is the host rule expressed in data units.
+
+        Converted to host units and handed to ``_on_extent_edited`` rather than
+        reimplemented, so "move the maximum, anchor the minimum" has exactly one
+        implementation and cannot drift between the two columns.
+        """
+        if self._syncing:
+            return
+        F = self._effective_factor()
+        size = self._parse(self._du_extent_fields[key])
+        if F is None or size is None:
+            self._validate()
+            return
+        self._syncing = True
+        try:
+            self._extent_fields[key].setText(self._fmt(size * F))
+        finally:
+            self._syncing = False
+        self._on_extent_edited(key, _du_source=key)
 
     # ------------------------------------------------------------------
     # Validation
@@ -429,9 +617,10 @@ class DomainEditorDialog(QDialog):
             vals[attr] = v
             if v is None:
                 bad.add(attr)
-        for _label, _key, lo, hi in self._EXTENTS:
-            if vals[lo] is not None and vals[hi] is not None and vals[lo] >= vals[hi]:
-                bad.update((lo, hi))
+        for ax in self._AXES:
+            if (vals[ax.lo] is not None and vals[ax.hi] is not None
+                    and vals[ax.lo] >= vals[ax.hi]):
+                bad.update((ax.lo, ax.hi))
         return bad
 
     def _validate(self) -> None:

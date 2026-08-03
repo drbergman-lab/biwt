@@ -10,8 +10,8 @@ meet.
 <figure markdown>
   ![The domain editor, opened on an "outside" mismatch](../assets/screenshots/domain.png)
   <figcaption>Opened automatically because the data extends past the host domain. The scale
-  factor here was read from the file's Visium metadata; the two bounds columns stay in sync
-  through it.</figcaption>
+  factor here was read from the file's Visium metadata; the host-unit values and their
+  parenthesized data-unit mirrors stay in sync through it.</figcaption>
 </figure>
 
 ## Data units vs host units
@@ -30,37 +30,57 @@ nonsensical initial condition. A Visium array spanning 8,000 pixels is not 8,000
 The bridge between the two is one number: **host units per data unit**. The field is labeled
 as a ratio using the host's own unit — `micron/data unit` for PhysiCell.
 
-- For **10x Visium** data, BIWT reads µm-per-pixel out of the file and pre-fills it. A reset
-  button (enabled only when you have changed the value) restores the file's number.
+- For **10x Visium** data, BIWT reads µm-per-pixel out of the file and pre-fills it. The ↺
+  button restores the file's number, and is available whenever the field differs from it.
 - For **everything else** — CSV, Seurat objects, non-Visium — there is no factor in the file.
   The field shows a `none found in file` placeholder and you supply one if you need it.
 
-## The two bounds columns
+**Emptying the field means no factor.** It does not quietly fall back to the file's value — if
+it did, a factor read from a file could never be cleared. The parenthesized mirrors clear and
+grey out, and placement uses your data's raw extent centered in the domain. The placeholder
+tells you how to get the file's number back (`none — ↺ restores 0.5`), and ↺ becomes available
+the moment the field stops matching the file.
 
-The dialog shows your domain bounds twice, side by side: once in data units, once in host
-units. They stay in sync through the factor — edit either column and the other updates
-(×F or ÷F).
+A zero, negative, or unparseable factor is treated the same way: there is no usable conversion,
+so the mirrors clear rather than showing numbers derived from a factor that is no longer in
+effect.
 
-With no factor set, the data-units column is disabled and you work purely in host units. The
-host-units column is always the one that gets stored.
+## Reading the grid
 
-Two buttons fill the columns for you:
+The grid has **one row per axis** and three columns — **min**, **max**, and **size**. So the
+X row carries `X min`, `X max`, and the width; the Y row carries the height; the Z row the
+depth. An axis' size sits beside the two bounds it spans, which is the whole point of the
+layout: width belongs to x, and you should not have to hunt for it.
 
-- **Use Data Domain** — data-units gets your raw data bounds; host-units gets raw × factor
+Every value appears twice. The plain field is in **host units**; the field in parentheses
+beside it is the same value in **data units**. Host units lead because that is what the domain
+is stored in and what your simulation consumes — the parenthesized number is the mirror.
+
+The two stay in sync through the factor: edit either and the other updates (×F or ÷F). With no
+factor set, every parenthesized field greys out and you work purely in host units.
+
+Two buttons fill the grid for you:
+
+- **Use Data Domain** — data units get your raw data bounds; host units get raw × factor
   (or raw, with no factor).
-- **`Use <host> Domain`** — host-units gets the host's bounds verbatim.
+- **`Use <host> Domain`** — host units get the host's bounds verbatim.
 
-The z bounds are host-units only and are never scaled.
+### Why the Z row is greyed out on the right
 
-### Width, height and depth
+Z carries the same cells as x and y, but its parenthesized fields are inert. The factor
+converts a *measurement* in data units, and z is not one — it is a slab depth BIWT supplies
+(±10 µm by default) for data that is really two-dimensional. There is nothing to convert, so
+rather than leave a hole in the grid, the cells are shown switched off.
 
-Below the bounds sit the domain's extents, in host units only. They are two-way: editing a
-bound updates the extent, and typing an extent moves that axis' **maximum**, leaving the
-minimum where you put it. Other axes are untouched.
+### Size is editable
+
+The size fields are not just readouts. Editing a bound updates that axis' size, and typing a
+size moves that axis' **maximum**, leaving the minimum where you put it. Other axes are
+untouched. It works from either unit column.
 
 Anchoring the minimum means exactly one bound moves, so the two are independently settable —
-set `X min` to `-300`, then set `Width` to `1000`, and you get `-300 … 700`. The width does not
-drag the left edge back.
+set `X min` to `-300`, then set the X size to `1000`, and you get `-300 … 700`. The size does
+not drag the left edge back.
 
 ### The OK button is gated
 
