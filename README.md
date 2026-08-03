@@ -125,12 +125,14 @@ mkdocs.yml
 - [x] DomainEditorDialog auto-triggered at positions window open (not import time)
 - [x] Context-sensitive mismatch header; no header for manual "Domain Settings…" open
 - [x] domain_accepted flag prevents re-trigger on back/forward navigation
+- [x] Domain editor OK is gated on a usable domain: all six bounds must parse and `min < max` on every axis (a zero-width axis divides by zero in placement scaling); offending fields are highlighted and Cancel is never gated
+- [x] Domain editor shows the live extents of the domain being edited
 - [x] BiwtInput.domain_accepted + "Skip domain validation" checkbox bypass auto-check
 - [x] Z-fields default to ±10 for 2D data in domain editor
 - [x] Data-unit→host-unit scale factor in the domain editor: auto-detected Visium µm/pixel (`_extract_visium_microns_per_pixel`), editable, with dual data-units/host-units bounds columns synced by the factor and a reset-to-file button
 - [x] Placement scales cells by the factor and centers them in the domain (`compute_spatial_placement`; `session.effective_scale()`) — uniform, aspect-preserving; the domain is an independent host-units container
 - [x] "Domain Settings…" button in positions plot window for manual domain editing
-- [x] Spot deconvolution query and cell expansion
+- [x] Spot deconvolution query and cell expansion; per-spot apportionment lives in `core.positioning.apportion_spot_cells` (shifted-divisor equal proportions), with ties broken at random so the surplus cell no longer lands on the first-listed `obs` column in every spot
 - [x] Cluster column selection
 - [x] Spatial data query (use spatial coords or random placement)
 - [x] Edit cell types (keep / merge / delete) with scatter plot and legend
@@ -139,6 +141,8 @@ mkdocs.yml
 - [x] Coordinate placement (spatial scaling, random placement)
 - [x] 29 cell parameter templates with XML assembly
 - [x] BiwtResult assembly (coordinates, cell_type_map, domain, XML)
+- [x] `BiwtResult` carries no output path — the host owns *where* results go; `to_csv(path)` writes and records nothing
+- [x] 3-D spatial plot ⇧-drag writes the correct extent slots (the 3-D layout is `(x0, y0, z0, width, height, depth)`, not the 2-D `(x0, y0, width, height)`)
 - [x] Studio bridge (BiwtInput/BiwtResult, _biwt_complete callback)
 - [x] Overwrite/Append/Browse/Cancel dialog for CSV output
 - [x] Append handles extra columns in existing CSV
@@ -149,7 +153,10 @@ mkdocs.yml
 - [x] MkDocs Material documentation site published to GitHub Pages by `.github/workflows/docs.yml`
 - [x] Docs: user guide (all wizard steps), recipes (Visium / non-spatial / spot deconvolution), host-integration guide, mkdocstrings API reference
 - [x] `LoadError.docs_url`: environment-related import failures link to the setup docs from the "Import failed" dialog; file-related failures stay plain text. Missing dependencies point at the install page, broken R stacks at troubleshooting
-- [x] 98 passing tests
+- [x] pyproject.toml extras for anndata/seurat/dev dependencies
+- [x] CI pipeline (GitHub Actions, Python 3.9–3.12)
+- [x] CI: R-dependent `.rds` tests run in a dedicated `seurat` job that provisions R, Seurat, and SingleCellExperiment from conda across Python 3.9–3.12; `tests/fixtures/make_fixtures.R` regenerates the fixture each run so it cannot drift against the resolved R version
+- [x] 155 passing tests (one `.rds` test skips locally without the R stack; the `seurat` CI job runs it)
 
 ### In Progress
 
@@ -157,9 +164,6 @@ mkdocs.yml
 
 ### Remaining
 
-- [x] pyproject.toml extras for anndata/seurat/dev dependencies
-- [x] CI pipeline (GitHub Actions, Python 3.9–3.12)
-- [ ] CI: R-dependent tests for `.rds` import (requires provisioning R on CI runners; seurat excluded from `dev` extra for now)
 - [ ] User documentation / help text within wizard steps
 - [ ] Substrate/gene expression pass-through (reserved fields in BiwtResult)
 - [ ] Multi-library Visium support

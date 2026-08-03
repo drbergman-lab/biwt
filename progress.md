@@ -687,3 +687,54 @@ y-span into `width`. Only the spatial plotter could hit this, since it is the on
 wires mouse handling in 3-D (the others are keyboard-only there), which is presumably why it
 went unnoticed. The extent slots are now chosen by dimensionality; `z0` and `depth` are left as
 typed, a drag being an xy-plane gesture.
+
+---
+
+## 2026-08-02 (release prep): v0.4.0 pre-tag audit
+
+v0.4.0 is the version PhysiCell Studio will depend on, so the release was audited
+rather than just tagged. `pyproject.toml` had already carried `version = "0.4.0"`
+since the docs-site PR; PyPI's latest published version was still 0.3.1.
+
+Verified before tagging, in order of how badly a failure would have hurt:
+
+- **The built artifact, not just the source tree.** `python -m build` produced the
+  wheel and sdist, and the wheel was installed into two clean venvs. Core-only
+  install raises the intended docs-aware `ImportError` from `biwt.gui`; the
+  `[gui]` extra imports `create_biwt_widget`, constructs
+  `BiwtInput(preferred_domain=…, host_name="Studio")`, and loads all 29 templates.
+  This is the check that matters most, because `pip install -e` masks
+  package-data mistakes — and `cell_templates.toml` plus the seven icons are
+  declared via `[tool.setuptools.package-data]` with no `MANIFEST.in` to back
+  them up. Both are present in the wheel.
+- **The Studio bridge against the *current* API.** `output_csv_path` was removed
+  from `BiwtResult` in the previous session, so Studio's `bin/ics_tab.py` was
+  re-checked: it never reads the field, and owns the output path itself. No
+  host-side breakage.
+- **CI on the exact commit that would be tagged**, including all four
+  `seurat` / R jobs — not just the pip-only matrix.
+
+**Left out of 0.4.0 deliberately:** PR #8 (parameter variation). It adds a whole
+new wizard step and was last touched before the four PRs that landed after it,
+so it has never run against current `main`. Shipping the reviewed, CI-green tree
+to Studio beats bundling an unexercised step into the release Studio pins to.
+
+**A version floor is a Studio-side gap, not a BIWT one.** Studio installs
+`biwt` unpinned. `v0.3.1`'s `BiwtInput` already accepted `preferred_domain` and
+`host_name`, so an unpinned install satisfies Studio's `HAVE_BIWT_PACKAGE` import
+check with 0.3.1 and silently omits everything in 0.4.0 — the failure mode is a
+user on a stale version with no error to show them. Wants `biwt>=0.4.0` in
+Studio's docs and install dialog once 0.4.0 is published.
+
+**Stale docs corrected.** The README claimed 98 tests (155), and listed
+R-dependent `.rds` CI under *Remaining* even though `ci.yml` has run that conda-R
+job across Python 3.9–3.12 for two sessions. The matching `TODO` in
+`pyproject.toml` asked for the job that already exists; it is now a note
+explaining why `seurat` is absent from the `dev` extra (pip cannot install R)
+rather than a task. The README's *Completed* list had also not been backfilled
+for the OK-gating, extents, apportionment tie-break, no-output-path, and 3-D
+drag-slot work — the PRD had all of it, the README had none of it. Two `[x]`
+items were sitting under a *Remaining* heading; moved.
+
+`End-to-end manual testing with Studio` stays unchecked in both the README and
+PRD F12. It is a genuine manual GUI test and nothing in this pass performed it.

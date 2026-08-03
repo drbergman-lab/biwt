@@ -72,8 +72,9 @@ docs = ["mkdocs>=1.5", "mkdocs-material>=9.5", "mkdocstrings[python]>=0.24", "bl
 
 # pip install biwt[dev]      — development / testing extras
 dev = ["pytest>=7", "pytest-qt", "biwt[anndata,gui]"]
-# TODO: add a CI job (or optional test marker) that installs biwt[seurat] and
-#       runs R-dependent tests once a strategy for provisioning R on CI is decided.
+# seurat is deliberately absent here: pip cannot install R. The R-dependent
+# .rds tests are covered by the separate `seurat` job in ci.yml, which builds
+# the R stack from conda and installs biwt[dev,seurat] on top.
 
 [tool.setuptools.packages.find]
 where = ["src"]
