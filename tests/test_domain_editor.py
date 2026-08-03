@@ -148,6 +148,119 @@ class TestDomainExtents:
         assert not editor._ok_btn.isEnabled()
 
 
+@pytest.fixture
+def scaled_editor(qapp):
+    """Domain editor with a factor, so the data-units cells are live."""
+    parent = QWidget()
+    dlg = DomainEditorDialog(parent, DATA_DOMAIN, HOST_DOMAIN,
+                             host_name="Studio", initial_domain=HOST_DOMAIN,
+                             file_factor=2.0)
+    yield dlg
+    dlg.deleteLater()
+    parent.deleteLater()
+
+
+class TestAxisGridLayout:
+    """The grid is axis-major: an extent shares a row with its own bounds.
+
+    Before this, the six bounds were laid out as flat rows and the three extents
+    were appended after all of them, so ``Width`` sat six rows below the
+    ``X min`` / ``X max`` that produced it.  Nothing but a tuple buried in the
+    extent table knew the two were related.
+    """
+
+    def _row_of(self, dlg, widget):
+        """Grid row holding *widget*, which lives inside a paired cell."""
+        idx = dlg._grid.indexOf(widget.parent())
+        assert idx != -1, f"{widget!r} is not inside a grid cell"
+        return dlg._grid.getItemPosition(idx)[0]
+
+    @pytest.mark.parametrize("extent,lo,hi", [("width", "xmin", "xmax"),
+                                              ("height", "ymin", "ymax"),
+                                              ("depth", "zmin", "zmax")])
+    def test_extent_shares_its_axis_row(self, editor, extent, lo, hi):
+        """This is the guard: width is on the X row, structurally."""
+        row = self._row_of(editor, editor._extent_fields[extent])
+        assert row == self._row_of(editor, editor._host_fields[lo])
+        assert row == self._row_of(editor, editor._host_fields[hi])
+
+    def test_each_axis_gets_its_own_row(self, editor):
+        rows = {ax.extent: self._row_of(editor, editor._extent_fields[ax.extent])
+                for ax in editor._AXES}
+        assert len(set(rows.values())) == 3
+
+    def test_xy_is_derived_from_the_axis_table(self, editor):
+        """_XY must not drift from _AXES the way the old flat lists could."""
+        assert editor._XY == ("xmin", "xmax", "ymin", "ymax")
+
+
+class TestDataUnitExtents:
+    """Each extent carries a data-units mirror alongside the host-units value."""
+
+    def test_du_extents_derived_on_open(self, scaled_editor):
+        # host width 1000, factor 2.0 → 500 data units
+        assert scaled_editor._du_extent_fields["width"].text() == "500"
+        assert scaled_editor._du_extent_fields["height"].text() == "500"
+
+    def test_du_extent_follows_a_bound_edit(self, scaled_editor):
+        scaled_editor._host_fields["xmax"].setText("-100")
+        assert scaled_editor._extent_fields["width"].text() == "400"
+        assert scaled_editor._du_extent_fields["width"].text() == "200"
+
+    def test_editing_a_du_extent_moves_the_maximum(self, scaled_editor):
+        """Same anchor-the-minimum rule, expressed in data units."""
+        scaled_editor._du_extent_fields["width"].setText("100")   # → 200 host
+        scaled_editor._on_du_extent_edited("width")
+        assert scaled_editor._host_fields["xmin"].text() == "-500"   # untouched
+        assert scaled_editor._host_fields["xmax"].text() == "-300"
+        assert scaled_editor._extent_fields["width"].text() == "200"
+
+    def test_du_extent_edit_leaves_the_typed_field_alone(self, scaled_editor):
+        """The mirror must not rewrite the field being typed in."""
+        scaled_editor._du_extent_fields["width"].setText("100")
+        scaled_editor._on_du_extent_edited("width")
+        assert scaled_editor._du_extent_fields["width"].text() == "100"
+
+    def test_du_extent_edit_leaves_other_axes_alone(self, scaled_editor):
+        scaled_editor._du_extent_fields["width"].setText("100")
+        scaled_editor._on_du_extent_edited("width")
+        assert scaled_editor._host_fields["ymax"].text() == "500"
+        assert scaled_editor._du_extent_fields["height"].text() == "500"
+
+    def test_no_factor_leaves_du_extents_empty_and_inert(self, editor):
+        """The default fixture has no factor, so there is nothing to convert."""
+        assert editor._du_extent_fields["width"].text() == ""
+        assert not editor._du_extent_fields["width"].isEnabled()
+
+
+class TestZRowIsPresentButInert:
+    """Z carries the same widgets as x and y, so the row reads uniformly.
+
+    It is not wired to the factor: z is a slab depth, not a measurement in data
+    units.  Building the cells anyway means enabling them later is a matter of
+    flipping ``factor_scaled`` on the axis record.
+    """
+
+    @pytest.mark.parametrize("key", ["zmin", "zmax"])
+    def test_z_has_data_unit_bound_widgets(self, scaled_editor, key):
+        assert key in scaled_editor._du_fields
+
+    def test_z_data_unit_cells_stay_disabled_even_with_a_factor(self, scaled_editor):
+        assert not scaled_editor._du_fields["zmin"].isEnabled()
+        assert not scaled_editor._du_fields["zmax"].isEnabled()
+        assert not scaled_editor._du_extent_fields["depth"].isEnabled()
+
+    def test_z_data_unit_cells_stay_empty(self, scaled_editor):
+        assert scaled_editor._du_extent_fields["depth"].text() == ""
+
+    def test_z_explains_itself(self, scaled_editor):
+        assert "not scaled" in scaled_editor._du_fields["zmin"].toolTip()
+
+    def test_host_z_is_unaffected_by_the_factor(self, scaled_editor):
+        """The depth still derives from the host bounds as before."""
+        assert scaled_editor._extent_fields["depth"].text() == "20"
+
+
 class TestDomainAcceptedSeedsCheckbox:
     """BiwtInput.domain_accepted sets the checkbox's default, not the outcome.
 

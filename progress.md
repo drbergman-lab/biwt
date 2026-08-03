@@ -738,3 +738,78 @@ items were sitting under a *Remaining* heading; moved.
 
 `End-to-end manual testing with Studio` stays unchecked in both the README and
 PRD F12. It is a genuine manual GUI test and nothing in this pass performed it.
+
+---
+
+## 2026-08-02 (later still, cont.): domain editor laid out per axis
+
+Shipping in v0.4.0 — caught before the tag rather than after.
+
+**The complaint was that width, height and depth looked misplaced, and they were.**
+The grid was field-major: six label/value rows for the bounds, then the three
+extents appended after all of them. `Width` therefore sat six rows below the
+`X min` / `X max` that produce it, with the whole of Y and Z in between, and the
+data-units column went empty for the last five rows so the bottom third was a
+ragged L that read as unrelated trailing fields.
+
+The values were right the whole time — this was purely placement.
+
+**Root cause: nothing in the widget knew that width belonged to x.** `_ROWS` and
+`_EXTENTS` were two independent flat lists, and the only place the pairing
+existed was the `("Width", "width", "xmin", "xmax")` tuple, consumed by the
+extent sync and never by the layout, which walked the two lists back-to-back
+with `start=len(self._ROWS) + 1`. That offset is precisely how the extents ended
+up stranded. Replaced by one `_DOMAIN_AXES` table of `_Axis` records that the
+layout, the extent derivation and the bounds validation all iterate — the same
+single-source-of-truth shape as `_step_predicates`. `_XY` is now derived from it
+instead of spelled out, so it cannot drift.
+
+**Layout is now axis-major**: one row per axis against ruled min / max / size
+columns. Rejected keeping one row per field and merely moving each extent under
+its own axis block — it puts width adjacent to X, but the dialog stays nine rows
+tall and the data-units column keeps its five holes. Axis-major collapses it to
+three rows and makes the pairing structural rather than adjacent, which is the
+difference between "the reader can see the relationship" and "the code knows it".
+
+**Both unit systems now live inside each cell**, host units leading with the
+data-units mirror in parentheses, rather than as two separate column groups.
+Host leads because it is the stored domain and what placement and `BiwtResult`
+consume; the parenthetical is the annotation. This also filled the holes: the
+extents gained a data-units mirror, which they never had.
+
+Editing a data-units extent converts to host units and calls the existing
+`_on_extent_edited` rather than reimplementing the rule. Worth the indirection:
+"move the maximum, anchor the minimum" now has exactly one implementation and
+cannot drift between the two columns. The new `_sync_du_extents(skip=...)` takes
+the field being typed in, because the mirror must not rewrite it mid-keystroke —
+the same hazard the `_syncing` guard already existed for. Data-units extents are
+derived from the host span ÷ factor rather than by subtracting the data-units
+bounds: a bound edit fires both `textEdited` and `textChanged`, and only the host
+column is guaranteed written by then, so reading the mirror could lag a keystroke.
+
+**Z keeps the widgets even though the factor does not apply to it.** First pass
+omitted them, which is honest but left the Z row visibly shorter; z may well
+become editable later, so the cells are built and disabled instead, and enabling
+them is a matter of flipping `factor_scaled`. They needed `_LE_STYLE_INERT`: a
+disabled `QLineEdit` carrying `_LE_STYLE` keeps its white background and reads as
+empty-and-editable rather than switched off.
+
+**Fixed field widths, not expanding.** A stretched field drags its closing
+parenthesis away from the number it is wrapping; a stretch column at the end
+soaks up the slack instead. That also brought the dialog back from 1067px to
+694px.
+
+**Rules were added after looking at it.** Six paired fields in a row cannot be
+delimited by whitespace — without vertical and horizontal rules it was not
+obvious where `min` stopped and `max` started. Separators live in their own grid
+tracks, so data columns keep even indices and axis rows keep even rows.
+
+The 25 existing tests needed no changes: they address widgets by dict key, never
+by grid position. One `test_gui_smoke` assertion did change, because the two
+column headers became a single legend. The guard worth having is the new
+`test_extent_shares_its_axis_row` — it asserts the axis-major invariant against
+the real `QGridLayout`, so "width goes with x" is enforced rather than incidental.
+That is the check the 3-D `_rect_helper` slot bug never had.
+
+The docs screenshot was regenerated. It had been stale for two features — it
+still showed the dialog with no extent rows at all.
