@@ -82,11 +82,11 @@ domain size. If you might change the domain later, confluence travels better.
 ### Positions
 
 Random placement inside the domain, with no domain-mismatch dialog — there is no data extent
-to compare. Place everything at once and the preview looks like coloured noise.
+to compare. Place everything at once and the preview looks like colored noise.
 
 That is only the default, though. Non-spatial data does not mean the initial condition has to
 be unstructured: this screen is where you can build the geometry your model expects. Place
-each type in its own pass with a different [plotter](../guide/positions.md) — a disc of tumour,
+each type in its own pass with a different [plotter](../guide/positions.md) — a disc of tumor,
 an annulus of immune cells around it, a rectangle of stroma along one edge — rather than
 accepting one uniform scatter.
 

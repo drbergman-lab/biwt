@@ -106,7 +106,6 @@ BiwtResult(
     coordinates=df,                  # DataFrame: x, y, z, type
     cell_type_map={...},             # original label -> final name | None
     domain_used=domain,              # DomainSpec actually applied
-    output_csv_path=None,            # set by to_csv(); BIWT never writes on its own
     cell_definitions_xml=None,       # PhysiCell XML string, or None
 )
 ```
@@ -124,9 +123,6 @@ user what happened to each input cluster.
 [phenotype templates](../guide/cell-parameters.md), `None` otherwise. Always check before
 using it.
 
-**`output_csv_path`** — `None` unless something called `to_csv()`, which sets it as a side
-effect. BIWT itself never populates this.
-
 ### `to_csv(path)`
 
 A convenience for hosts that just want the file written:
@@ -135,8 +131,9 @@ A convenience for hosts that just want the file written:
 result.to_csv("config/cells.csv")
 ```
 
-Writes only the four PhysiCell columns, no index, and records the path in `output_csv_path`.
-Using it is optional — the DataFrame is yours.
+Writes only the four PhysiCell columns, no index. Using it is optional — the DataFrame is
+yours, and where the output lives is your decision. The result carries no path field: BIWT
+does not choose an output location, so it has no business remembering one.
 
 ### Reserved fields
 

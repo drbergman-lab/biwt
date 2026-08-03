@@ -6,12 +6,12 @@ data row, so there is nothing to decide and this screen is skipped.
 ## The question
 
 How many cells of each type to place. The four modes sit side by side as columns — pick one
-with its radio button and that column becomes editable while the others grey out.
+with its radio button and that column becomes editable while the others gray out.
 
 <figure markdown>
   ![The cell counts screen with confluence mode selected](../assets/screenshots/cell-counts-confluence.png)
   <figcaption>Confluence selected: its column is editable and pre-populated from the current
-  counts, while the other three grey out.</figcaption>
+  counts, while the other three gray out.</figcaption>
 </figure>
 
 ## The four modes
@@ -64,7 +64,7 @@ no definition is written for it at all. Zero keeps the definition; delete remove
 Every type may be zero if you want, which gives you a config full of cell definitions and an
 empty positions file.
 
-At the [positions](positions.md) screen a zero-count type arrives already greyed out — there
+At the [positions](positions.md) screen a zero-count type arrives already grayed out — there
 is nothing to place — so it will not hold up **Continue**.
 
 **Counts interact with the domain.** A confluence figure is meaningless without a domain

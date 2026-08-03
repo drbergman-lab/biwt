@@ -197,3 +197,48 @@ class TestZeroCountPlacement:
         must be live immediately rather than waiting for a plot that cannot
         happen."""
         assert self._gate({"Ghost": False, "Phantom": False}) is True
+
+
+class TestRectDragParameterSlots:
+    """A drag must write into the slots the active plotter actually uses.
+
+    2-D lays the parameters out as (x0, y0, width, height); 3-D inserts z0 and
+    appends depth, giving (x0, y0, z0, width, height, depth). Hard-coding 2 and
+    3 for the extents put the drag's x-span into z0 and its y-span into width
+    whenever the 3-D spatial plotter — the only one with mouse handling in 3-D —
+    was dragged.
+    """
+
+    @staticmethod
+    def _drag(is_2d):
+        writes: dict[int, float] = {}
+        d = SimpleNamespace(
+            plot_is_2d=is_2d,
+            _assign_par=lambda v, i: writes.__setitem__(i, v),
+        )
+        # Drag from (10, 20) to (110, 220): x0=10, y0=20, width=100, height=200.
+        PositionsWindow._rect_helper(d, SimpleNamespace(xdata=110, ydata=220), 10, 20)
+        return writes
+
+    def test_2d_slots(self):
+        assert self._drag(True) == {0: 10, 1: 20, 2: 100, 3: 200}
+
+    def test_3d_slots_skip_z0(self):
+        w = self._drag(False)
+        assert w == {0: 10, 1: 20, 3: 100, 4: 200}
+
+    def test_3d_drag_leaves_z0_and_depth_untouched(self):
+        """A drag is an xy-plane gesture; the z parameters stay as typed."""
+        w = self._drag(False)
+        assert 2 not in w and 5 not in w
+
+    def test_origin_is_the_lower_left_corner_either_way(self):
+        """Dragging up-left must still yield the min corner, not the press point."""
+        for is_2d in (True, False):
+            writes = {}
+            d = SimpleNamespace(
+                plot_is_2d=is_2d,
+                _assign_par=lambda v, i: writes.__setitem__(i, v),
+            )
+            PositionsWindow._rect_helper(d, SimpleNamespace(xdata=10, ydata=20), 110, 220)
+            assert (writes[0], writes[1]) == (10, 20)

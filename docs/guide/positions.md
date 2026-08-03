@@ -11,7 +11,7 @@ controls below it, and a live plot on the right.
 <figure markdown>
   ![The positions screen before placing, cell types selected](../assets/screenshots/positions-suggested.png)
   <figcaption>Before placing. All types are ticked, the plot previews the incoming
-  coordinates in grey, and <strong>Continue</strong> is disabled until something is
+  coordinates in gray, and <strong>Continue</strong> is disabled until something is
   placed.</figcaption>
 </figure>
 
@@ -23,21 +23,19 @@ Placing is a deliberate action, not something that happens on arrival:
    the plot.
 3. **Click Plot (↵)**.
 
-The ticked types are placed, their rows grey out with "already been placed", their **Undo**
-buttons light up, and the plot redraws them coloured by type. **Continue** becomes available.
+The ticked types are placed, their rows gray out with "already been placed", their **Undo**
+buttons light up, and the plot redraws them colored by type. **Continue** becomes available.
 
 <figure markdown>
-  ![The positions screen after placing, cells coloured by type](../assets/screenshots/positions-plotted.png)
-  <figcaption>After placing. Types are greyed as done, per-type Undo is live, and the plot
-  shows the placement coloured by cell type.</figcaption>
+  ![The positions screen after placing, cells colored by type](../assets/screenshots/positions-plotted.png)
+  <figcaption>After placing. Types are grayed as done, per-type Undo is live, and the plot
+  shows the placement colored by cell type.</figcaption>
 </figure>
 
 Because placement is per-selection, you can build an initial condition in passes: place the
-tumour with one plotter, then the immune populations with another.
+tumor with one plotter, then the immune populations with another.
 
 ## The plotters
-
-Six ways to decide *where* the selected cells go:
 
 Six ways to decide *where* the selected cells go. Three of them are named for the shape they
 make, so they are renamed when the domain is 3-D:
@@ -105,7 +103,7 @@ translation** — nothing else:
    [the domain editor](domain.md)).
 2. The resulting bounding box is centered in the domain.
 
-Because the scale is uniform, aspect ratio is always preserved. A circular tumour stays
+Because the scale is uniform, aspect ratio is always preserved. A circular tumor stays
 circular, and distances between any two cells scale by the same amount.
 
 !!! note "The cells may not fill the domain"

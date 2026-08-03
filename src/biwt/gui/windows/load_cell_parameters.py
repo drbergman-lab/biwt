@@ -23,7 +23,7 @@ _BUILTIN_PATH = "<built-in>"
 def _minimal_unique_suffixes(filepaths: list[str]) -> dict[str, str]:
     """Return the shortest path suffix that uniquely identifies each filepath.
 
-    ``'<built-in>'`` is always labelled ``'built-in'``.  File paths are
+    ``'<built-in>'`` is always labeled ``'built-in'``.  File paths are
     shortened to the minimal trailing suffix (basename, then parent/basename,
     etc.) that avoids collisions within this group.
     """

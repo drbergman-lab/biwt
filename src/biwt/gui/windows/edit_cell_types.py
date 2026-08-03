@@ -25,7 +25,7 @@ _DELETE_COLOR = "#FFCCCB"
 _BTN_STYLE = lambda color: f"""
     QPushButton {{ color: black; font-weight: bold; }}
     QPushButton:enabled  {{ background-color: {color}; }}
-    QPushButton:disabled {{ background-color: grey; }}
+    QPushButton:disabled {{ background-color: gray; }}
 """
 _CB_STYLE = lambda color: f"""
     QCheckBox {{
@@ -48,7 +48,7 @@ class EditCellTypesWindow(BiwinformaticsWalkthroughWindow):
         super().__init__(walkthrough)
         s = walkthrough.session
 
-        # --- initialise edit dict (all kept by default) -------------------
+        # --- initialize edit dict (all kept by default) -------------------
         s.cell_type_dict_on_edit = {ct: ct for ct in sorted(s.cell_types_list_original)}
 
         self._merge_id = 0

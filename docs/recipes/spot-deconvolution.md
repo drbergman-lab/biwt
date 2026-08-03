@@ -56,11 +56,10 @@ The same considerations as elsewhere: merge types your model does not distinguis
 ones it does not include.
 
 One case specific to deconvolution: tools often emit a small probability for every reference
-type in every spot, including types that are not really present. Such a type will not place
-stray cells — allocation is deterministic from the per-spot proportions, and a trivially
-probable type simply never wins a cell. But it still occupies a row on every subsequent screen
-and a `<cell_definition>` in the output, so you could consider deleting it here to keep the
-type list honest.
+type in every spot, including types that are not really present. BIWT places cells according
+to their relative probabilities, so such a type gets few or none. But it still occupies a row
+on every subsequent screen and a `<cell_definition>` in the output, so you could consider
+deleting it here to keep the type list honest.
 
 ??? info "How cells are apportioned within a spot"
     Each spot's cells are handed out by equal-proportions (Huntington–Hill) apportionment with
@@ -73,6 +72,11 @@ type list honest.
     reference type in *every* spot, exactly the thin-film problem. Here the first cell must be
     won like any other, so a type appears only once its probability is a large enough fraction
     of the leading type's.
+
+    That is a steep threshold rather than an absolute one. The leading type's priority keeps
+    falling as it accumulates cells, so a large enough *Num cells per spot* will eventually
+    admit even a near-zero probability — but only at per-spot counts far beyond any plausible
+    spot occupancy, which is why it is not something to plan around.
 
     The rule is scale-invariant: multiplying every probability in a spot by a constant leaves
     the allocation unchanged. That is why BIWT can filter the mixture down to the types you

@@ -15,7 +15,6 @@ Host usage (e.g. from Studio's ICs tab):
     biwt_input = BiwtInput(
         preferred_domain=DomainSpec(xmin=-500, xmax=500, ymin=-500, ymax=500),
         host_cell_type_names=celldef_tab.get_cell_type_names(),
-        output_csv_path="./config/cells.csv",   # or None
     )
     widget = create_biwt_widget(biwt_input, on_complete=my_callback)
     widget.show()

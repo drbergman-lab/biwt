@@ -27,7 +27,7 @@ from biwt.gui.widgets import (
     GoBackButton, ContinueButton, LegendWindow, QCheckBox_custom, QLineEdit_custom,
 )
 from biwt.core.domain import classify_domain_mismatch
-from biwt.core.positioning import compute_spatial_placement
+from biwt.core.positioning import apportion_spot_cells, compute_spatial_placement
 from biwt.gui.walkthrough import DomainEditorDialog, _build_mismatch_message, _scale_domain
 
 
@@ -160,7 +160,7 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
         self.plot_cells_button = QPushButton("Plot (\u21b5)", enabled=True)
         self.plot_cells_button.setStyleSheet(
             "QPushButton:enabled {background-color:lightgreen;}"
-            "QPushButton:disabled {background-color:grey;}"
+            "QPushButton:disabled {background-color:gray;}"
         )
         self.plot_cells_button.clicked.connect(self.plot_cell_pos)
 
@@ -335,7 +335,7 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
         vbox = QVBoxLayout()
         vbox.addWidget(QLabel(
             "Select cell type(s) to place.\n"
-            "Greyed out cell types have already been placed."
+            "Grayed out cell types have already been placed."
         ))
 
         hbox_mid = QHBoxLayout()
@@ -357,7 +357,7 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
 
         _undo_style = (
             "QPushButton:enabled  { background-color: yellow; }"
-            "QPushButton:disabled { background-color: grey; }"
+            "QPushButton:disabled { background-color: gray; }"
         )
         vbox_undos = QVBoxLayout()
         self.undo_button: dict[str, QPushButton] = {}
@@ -374,7 +374,7 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
 
         _btn_style = (
             "QPushButton:enabled  { background-color: lightgreen; }"
-            "QPushButton:disabled { background-color: grey; }"
+            "QPushButton:disabled { background-color: gray; }"
         )
         select_all = QPushButton("Select remaining", styleSheet=_btn_style)
         select_all.clicked.connect(self._select_all_cb)
@@ -387,7 +387,7 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
 
         _undo_style2 = (
             "QPushButton:enabled  { background-color: yellow; }"
-            "QPushButton:disabled { background-color: grey; }"
+            "QPushButton:disabled { background-color: gray; }"
         )
         self.undo_all_button = QPushButton("Undo All", enabled=False)
         self.undo_all_button.setStyleSheet(_undo_style2)
@@ -774,7 +774,7 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
                 zL -= 0.5; zR += 0.5
             data_dz = zR - zL
 
-        # Normalised base coords used by the spatial plotter: [0, 1] in each axis.
+        # Normalized base coords used by the spatial plotter: [0, 1] in each axis.
         self.spatial_base_coords = (xy - [xL, yL]) / [data_dx, data_dy]
         if not self.plot_is_2d:
             self.spatial_base_coords = np.hstack((
@@ -1236,10 +1236,16 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
 
     def _rect_helper(self, event, xL, yL) -> None:
         xR, yR = event.xdata, event.ydata
+        # The parameter slots differ by dimensionality: 2-D is
+        # (x0, y0, width, height); 3-D is (x0, y0, z0, width, height, depth).
+        # Hard-coding 2/3 for the extents wrote the drag's x-span into z0 and
+        # its y-span into width whenever the 3-D spatial plotter was dragged.
+        # A drag is an xy-plane gesture, so z0 and depth are left as typed.
+        w_idx, h_idx = (2, 3) if self.plot_is_2d else (3, 4)
         self._assign_par(min(xL, xR), 0)
         self._assign_par(min(yL, yR), 1)
-        self._assign_par(abs(xR - xL), 2)
-        self._assign_par(abs(yR - yL), 3)
+        self._assign_par(abs(xR - xL), w_idx)
+        self._assign_par(abs(yR - yL), h_idx)
 
     def _rect_motion(self, event) -> None:
         if event.inaxes is None or not self.mouse_pressed:
@@ -1575,15 +1581,7 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
             if not probs:
                 continue
 
-            # Equal-proportions apportionment
-            priorities = {k: v / np.sqrt(2) for k, v in probs.items()}
-            spot_counts: dict[str, int] = {k: 0 for k in probs}
-            for _ in range(n_per_spot):
-                nk = max(priorities, key=priorities.get)
-                spot_counts[nk] += 1
-                priorities[nk] = probs[nk] / np.sqrt(
-                    (spot_counts[nk] + 1) * (spot_counts[nk] + 2)
-                )
+            spot_counts = apportion_spot_cells(probs, n_per_spot)
 
             color_seq: list[str] = []
             type_seq:  list[str] = []
