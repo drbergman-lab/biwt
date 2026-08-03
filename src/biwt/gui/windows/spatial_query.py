@@ -31,7 +31,7 @@ class SpatialQueryWindow(BiwinformaticsWalkthroughWindow):
         self.yes_no_group.addButton(self.no_rb, 1)
         self.yes_no_group.idToggled.connect(self._toggled)
         self.yes_rb.setChecked(True)
-        # Initialise session default
+        # Initialize session default
         walkthrough.session.use_spatial_data = True
 
         hbox_yn = QHBoxLayout()

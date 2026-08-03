@@ -826,7 +826,7 @@ class TestSpotDeconvFullPipeline:
         assert s.spatial_data.shape == (6, 3)
 
     def test_collect_via_spot_deconv_path_cell_types_max(self):
-        """cell_types_max has one entry per spot, labelled by max-probability type."""
+        """cell_types_max has one entry per spot, labeled by max-probability type."""
         s = self._setup_session()
         # First two spots are T_cell (prob 0.8 and 0.7), next two Tumor, last two Macrophage
         assert s.cell_types_max[0] == "T_cell"
@@ -922,7 +922,7 @@ class TestZeroCellCounts:
         assert set(df["type"].unique()) == {"Tumor", "T_cell"}
         assert "Ghost" not in set(df["type"])
 
-    def test_other_types_are_unaffected_by_a_zero_neighbour(self):
+    def test_other_types_are_unaffected_by_a_zero_neighbor(self):
         both = build_ic_dataframe({"Tumor": self._coords(3), "Ghost": np.empty((0, 3))})
         alone = build_ic_dataframe({"Tumor": self._coords(3)})
         assert both[["x", "y", "z"]].equals(alone[["x", "y", "z"]])

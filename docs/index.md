@@ -88,7 +88,7 @@ Current limits worth knowing before you start:
 
 ## Reading these docs
 
-Coloured boxes mean specific things:
+Colored boxes mean specific things:
 
 !!! note "Note"
     Context or behavior worth knowing. Nothing goes wrong if you skip it.

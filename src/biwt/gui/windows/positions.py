@@ -160,7 +160,7 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
         self.plot_cells_button = QPushButton("Plot (\u21b5)", enabled=True)
         self.plot_cells_button.setStyleSheet(
             "QPushButton:enabled {background-color:lightgreen;}"
-            "QPushButton:disabled {background-color:grey;}"
+            "QPushButton:disabled {background-color:gray;}"
         )
         self.plot_cells_button.clicked.connect(self.plot_cell_pos)
 
@@ -335,7 +335,7 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
         vbox = QVBoxLayout()
         vbox.addWidget(QLabel(
             "Select cell type(s) to place.\n"
-            "Greyed out cell types have already been placed."
+            "Grayed out cell types have already been placed."
         ))
 
         hbox_mid = QHBoxLayout()
@@ -357,7 +357,7 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
 
         _undo_style = (
             "QPushButton:enabled  { background-color: yellow; }"
-            "QPushButton:disabled { background-color: grey; }"
+            "QPushButton:disabled { background-color: gray; }"
         )
         vbox_undos = QVBoxLayout()
         self.undo_button: dict[str, QPushButton] = {}
@@ -374,7 +374,7 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
 
         _btn_style = (
             "QPushButton:enabled  { background-color: lightgreen; }"
-            "QPushButton:disabled { background-color: grey; }"
+            "QPushButton:disabled { background-color: gray; }"
         )
         select_all = QPushButton("Select remaining", styleSheet=_btn_style)
         select_all.clicked.connect(self._select_all_cb)
@@ -387,7 +387,7 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
 
         _undo_style2 = (
             "QPushButton:enabled  { background-color: yellow; }"
-            "QPushButton:disabled { background-color: grey; }"
+            "QPushButton:disabled { background-color: gray; }"
         )
         self.undo_all_button = QPushButton("Undo All", enabled=False)
         self.undo_all_button.setStyleSheet(_undo_style2)
@@ -774,7 +774,7 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
                 zL -= 0.5; zR += 0.5
             data_dz = zR - zL
 
-        # Normalised base coords used by the spatial plotter: [0, 1] in each axis.
+        # Normalized base coords used by the spatial plotter: [0, 1] in each axis.
         self.spatial_base_coords = (xy - [xL, yL]) / [data_dx, data_dy]
         if not self.plot_is_2d:
             self.spatial_base_coords = np.hstack((

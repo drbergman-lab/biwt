@@ -76,7 +76,7 @@ def scale_spatial_to_domain(
         for i in range(n_dims):
             out[:, i] = normalized[:, i] * domain_widths[i] + domain_origins[i]
 
-    # z stays 0 when input was 2-D (already initialised to 0)
+    # z stays 0 when input was 2-D (already initialized to 0)
     return out
 
 

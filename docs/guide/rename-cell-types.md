@@ -40,7 +40,7 @@ containment you get whichever the host listed first, not the best one.
 
 Placeholder text only shows in an *empty* field, and every field arrives pre-filled with your
 original name — so in practice the suggestion sits hidden behind it. Clear a field and it
-appears, greyed out, as `Suggestion: <host name>`.
+appears, grayed out, as `Suggestion: <host name>`.
 
 It is a hint either way: nothing is filled in for you, so if you want the suggested name you
 have to type it. Note that an empty field is accepted as an empty name — only duplicates are

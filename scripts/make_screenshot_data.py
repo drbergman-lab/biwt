@@ -56,8 +56,8 @@ LIBRARY_ID = "demo_section"
 
 # (name, n_cells, radial mean in px, radial sd in px)
 #
-# Everything is laid out radially around a common center: a dense tumour core,
-# a rim of tumour edge, macrophages infiltrating that rim, a T-cell margin
+# Everything is laid out radially around a common center: a dense tumor core,
+# a rim of tumor edge, macrophages infiltrating that rim, a T-cell margin
 # outside it, and fibroblast stroma spread through the periphery.
 POPULATIONS = [
     ("Tumor_Core",     600,    0.0,  380.0),
