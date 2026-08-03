@@ -56,7 +56,7 @@ LIBRARY_ID = "demo_section"
 
 # (name, n_cells, radial mean in px, radial sd in px)
 #
-# Everything is laid out radially around a common centre: a dense tumour core,
+# Everything is laid out radially around a common center: a dense tumour core,
 # a rim of tumour edge, macrophages infiltrating that rim, a T-cell margin
 # outside it, and fibroblast stroma spread through the periphery.
 POPULATIONS = [
@@ -82,7 +82,7 @@ CLUSTERS_PER_TYPE = {
 
 # Offset so coordinates sit inside a plausible fullres image rather than at the
 # origin — real Visium coordinates never start at 0.
-CENTRE_PX = (2400.0, 2100.0)
+CENTER_PX = (2400.0, 2100.0)
 
 N_GENES = 30
 
@@ -98,8 +98,8 @@ def build(rng: np.random.Generator) -> tuple[pd.DataFrame, np.ndarray]:
         radius = np.abs(rng.normal(r_mean, r_sd, size=n))
         theta = rng.uniform(0.0, 2.0 * np.pi, size=n)
         # Squash slightly on y so the tissue reads as a section, not a disc.
-        x = CENTRE_PX[0] + radius * np.cos(theta)
-        y = CENTRE_PX[1] + radius * np.sin(theta) * 0.82
+        x = CENTER_PX[0] + radius * np.cos(theta)
+        y = CENTER_PX[1] + radius * np.sin(theta) * 0.82
 
         labels.extend([name] * n)
         coords.append(np.column_stack([x, y]))

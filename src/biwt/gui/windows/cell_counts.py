@@ -235,7 +235,14 @@ class CellCountsWindow(BiwinformaticsWalkthroughWindow):
             self._total_manual.setText(text)
         else:
             idx = int(name)
-            p = self._orig_props[self._cell_types[idx]]
+            ct_edited = self._cell_types[idx]
+            # The sibling loop below skips the row being edited, so nothing else
+            # mirrors the typed count into its Manual field.  Without this, the
+            # Manual and Confluence columns disagree with Proportion for exactly
+            # the row the user just touched — on both paths below, not only the
+            # zero-share one.
+            self._w_manual[ct_edited].setText(str(int(text)))
+            p = self._orig_props[ct_edited]
             if not p:
                 # This type has no share of the data, so it implies nothing about
                 # the total.  Scaling the others by a multiplier derived from it
