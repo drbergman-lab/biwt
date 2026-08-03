@@ -30,10 +30,21 @@ unmaintainable.
 ## Suggestions from the host
 
 If the host application passed BIWT its current cell-type names — Studio does this from its
-cell-definitions tab — BIWT suggests the closest match as **placeholder text** in each field.
+cell-definitions tab — BIWT looks for a match and offers it as **placeholder text** in each
+field.
 
-Placeholder text is a hint, not a value. The field is still showing your original name until
-you type. If you want the suggestion, type it.
+The matching is deliberately simple, not fuzzy: a case-insensitive exact match first, then
+the first host name that either contains your label or is contained by it — so `CD8` matches
+a host `CD8_T_cell`. There is no scoring or ranking, so if several host names could match by
+containment you get whichever the host listed first, not the best one.
+
+Placeholder text only shows in an *empty* field, and every field arrives pre-filled with your
+original name — so in practice the suggestion sits hidden behind it. Clear a field and it
+appears, greyed out, as `Suggestion: <host name>`.
+
+It is a hint either way: nothing is filled in for you, so if you want the suggested name you
+have to type it. Note that an empty field is accepted as an empty name — only duplicates are
+blocked — so do not leave one cleared just to keep the hint in view.
 
 ## Naming rules
 

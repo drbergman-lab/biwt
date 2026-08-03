@@ -21,8 +21,16 @@
 /* Full-window captures: keep them from dominating the page on wide screens. */
 .md-typeset img[src*="/screenshots/"] {
   max-height: 34rem;
-  width: auto;
 }
+
+/* The captures are 2x (Retina), so their pixel width is twice the size the UI
+ * actually appeared at. The max-height cap above pulls the full-window shots
+ * back down to roughly 1x on its own, but a small capture never reaches the
+ * cap and would render at its full pixel width — twice the scale of every
+ * other screenshot on the site. Give those an explicit half-size width in the
+ * page, e.g. `{ width="291" }` on a 582px-wide capture. Note this only works
+ * because the rule above no longer sets `width: auto`: a CSS declaration beats
+ * the HTML width attribute, so `width: auto` would silently discard it. */
 
 /* Small dialogs read better at their natural size than stretched to column
  * width, so never scale anything up. */

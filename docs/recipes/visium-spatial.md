@@ -46,9 +46,10 @@ This is the whole point of Visium data. Say yes.
 
 ### Edit and rename
 
-Merge the subclusters your model does not distinguish. Visium annotations are often
-region-level (`Tumor_edge`, `Tumor_core`); decide whether your simulation treats those as one
-cell type with different environments, or two cell types. If it is the former, merge them.
+Merge the subclusters your model does not distinguish. Annotations are sometimes region-level
+rather than cell-type-level — `Tumor_edge` and `Tumor_core`, say. Where that is the case,
+decide whether your simulation treats them as one cell type in different environments, or as
+two cell types. If the former, merge them.
 
 ### The domain editor — the step that matters
 
@@ -70,7 +71,7 @@ typically ±500 µm. This is the mismatch it exists to catch.
 - **Fit the domain to the tissue.** Click **Use Data Domain**, which fills host-units with
   raw × factor. Your domain becomes exactly the tissue extent in microns. Best when the
   tissue *is* the simulation.
-- **Keep your domain and let the tissue sit inside it.** Click **Use \<host\> Domain**. The
+- **Keep your domain and let the tissue sit inside it.** Click **`Use <host> Domain`**. The
   cells occupy a centered region proportional to their real size. Best when the domain has
   meaning of its own — a fixed well, a defined volume.
 
@@ -86,8 +87,8 @@ bounds, it is too large.
 ## Traps
 
 !!! danger "The most common mistake: no scale factor"
-    Placing raw pixel coordinates into a micron domain silently produces a tissue that is
-    1000× too large, so nearly every cell lands out of bounds. If BIWT warns about
+    Placing raw pixel coordinates into a micron domain silently produces a tissue far too
+    large for the domain, so nearly every cell lands out of bounds. If BIWT warns about
     out-of-bounds cells right after you clicked through the domain editor, go back and check
     the factor.
 

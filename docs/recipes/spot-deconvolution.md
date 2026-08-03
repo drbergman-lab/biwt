@@ -56,9 +56,27 @@ The same considerations as elsewhere: merge types your model does not distinguis
 ones it does not include.
 
 One case specific to deconvolution: tools often emit a small probability for every reference
-type in every spot, including types that are not really present. If a type has trivial
-probability everywhere, delete it rather than letting it scatter a thin film of spurious cells
-across the tissue.
+type in every spot, including types that are not really present. Such a type will not place
+stray cells — allocation is deterministic from the per-spot proportions, and a trivially
+probable type simply never wins a cell. But it still occupies a row on every subsequent screen
+and a `<cell_definition>` in the output, so you could consider deleting it here to keep the
+type list honest.
+
+??? info "How cells are apportioned within a spot"
+    Each spot's cells are handed out by equal-proportions (Huntington–Hill) apportionment with
+    a **shifted divisor**. A type currently holding *c* cells competes for the next one with
+    priority `p / √((c+1)(c+2))`, starting at `p / √2`; the highest priority wins each cell in
+    turn.
+
+    The shift is the important part. In textbook Huntington–Hill the first seat is free — its
+    divisor is `√(0·1) = 0`, giving infinite priority — which would put one cell of *every*
+    reference type in *every* spot, exactly the thin-film problem. Here the first cell must be
+    won like any other, so a type appears only once its probability is a large enough fraction
+    of the leading type's.
+
+    The rule is scale-invariant: multiplying every probability in a spot by a constant leaves
+    the allocation unchanged. That is why BIWT can filter the mixture down to the types you
+    kept without renormalizing it.
 
 ### Domain editor
 
@@ -96,12 +114,6 @@ one-cell-per-spot placement would be.
     Deconvolution output is a model fit, not a measurement. The expanded population inherits
     every bias of the reference used to deconvolve it. If the reference lacked a cell type
     present in the tissue, no amount of expansion will conjure it.
-
-!!! tip "Sanity-check against the annotation"
-    If your object also carries a per-spot dominant-type label, run the
-    [Visium recipe](visium-spatial.md) once and compare. The deconvolved population should
-    look like a denser, mixed version of the same tissue map. If it looks structurally
-    different, suspect the probability columns.
 
 ## What you get
 

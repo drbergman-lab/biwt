@@ -54,8 +54,8 @@ running the wizard or the person receiving the output.
 
 ## A note on units
 
-BIWT distinguishes **data units** (whatever is in your file — often Visium pixels) from
+BIWT distinguishes **data units** (whatever is in your file — e.g. Visium pixels) from
 **host units** (what the simulation uses — microns, for PhysiCell). It never guesses a unit
 name from your data. Where a conversion is needed, you supply or confirm a scale factor in
 [the domain editor](domain.md). This matters most for imaging-derived coordinates, where the
-raw numbers can be in the thousands while the domain is ±500.
+raw numbers can be in the thousands while the domain is typically much smaller.
