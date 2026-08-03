@@ -233,6 +233,77 @@ class TestDataUnitExtents:
         assert not editor._du_extent_fields["width"].isEnabled()
 
 
+class TestFactorChangesPropagate:
+    """Every data-units cell tracks the factor, and an empty field means none.
+
+    Three defects sat here. The size mirrors were derived once and never
+    re-derived when the factor changed, so they showed a span computed with the
+    previous factor. The bound mirrors kept their last values when the factor
+    became unusable, advertising a conversion that no longer applied. And an
+    empty field silently fell back to the file's value, which left a blank
+    field, live mirrors and a greyed-out restore button all disagreeing about
+    what was in effect.
+    """
+
+    def test_size_mirrors_follow_a_factor_change(self, scaled_editor):
+        """The bug: bounds re-derived, sizes did not."""
+        assert scaled_editor._du_extent_fields["width"].text() == "500"   # 1000 / 2
+        scaled_editor._factor_edit.setText("4")
+        assert scaled_editor._du_fields["xmax"].text() == "125"           # 500 / 4
+        assert scaled_editor._du_extent_fields["width"].text() == "250"   # 1000 / 4
+
+    def test_clearing_the_factor_means_no_factor(self, scaled_editor):
+        scaled_editor._factor_edit.setText("")
+        assert scaled_editor._effective_factor() is None
+
+    def test_clearing_the_factor_clears_every_mirror(self, scaled_editor):
+        """Rather than leaving values that correspond to no live factor."""
+        scaled_editor._factor_edit.setText("")
+        for attr in ("xmin", "xmax", "ymin", "ymax"):
+            assert scaled_editor._du_fields[attr].text() == ""
+            assert not scaled_editor._du_fields[attr].isEnabled()
+        for key in ("width", "height"):
+            assert scaled_editor._du_extent_fields[key].text() == ""
+
+    def test_an_unparseable_factor_also_clears_the_mirrors(self, scaled_editor):
+        scaled_editor._factor_edit.setText("abc")
+        assert scaled_editor._du_fields["xmax"].text() == ""
+
+    def test_a_non_positive_factor_is_not_usable(self, scaled_editor):
+        scaled_editor._factor_edit.setText("0")
+        assert scaled_editor._effective_factor() is None
+        assert scaled_editor._du_fields["xmax"].text() == ""
+
+    def test_reset_is_the_way_back_and_is_offered(self, scaled_editor):
+        """Emptying the field must not make the file's value unreachable."""
+        scaled_editor._factor_edit.setText("")
+        assert scaled_editor._reset_btn.isEnabled()
+        scaled_editor._on_reset()
+        assert scaled_editor._effective_factor() == 2.0
+        assert scaled_editor._du_extent_fields["width"].text() == "500"
+        assert not scaled_editor._reset_btn.isEnabled()   # back at the file value
+
+    def test_placeholder_names_the_restore_path(self, scaled_editor):
+        assert scaled_editor._factor_edit.placeholderText() == "none — ↺ restores 2"
+
+    def test_placeholder_is_honest_when_the_file_has_no_factor(self, editor):
+        """Nothing to restore, so nothing is promised."""
+        assert editor._factor_edit.placeholderText() == "none found in file"
+        assert not editor._reset_btn.isEnabled()
+
+    def test_host_bounds_survive_losing_the_factor(self, scaled_editor):
+        """Only the mirrors go; the stored domain is host units and stands."""
+        scaled_editor._factor_edit.setText("")
+        assert scaled_editor._host_fields["xmax"].text() == "500"
+        assert scaled_editor._extent_fields["width"].text() == "1000"
+        assert scaled_editor._ok_btn.isEnabled()
+
+    def test_result_reports_no_factor_once_cleared(self, scaled_editor):
+        scaled_editor._factor_edit.setText("")
+        _dom, factor, _apply = scaled_editor.result()
+        assert factor is None
+
+
 class TestZRowIsPresentButInert:
     """Z carries the same widgets as x and y, so the row reads uniformly.
 

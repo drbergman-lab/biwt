@@ -840,3 +840,46 @@ here and a second one competing with it is worse than a note. If it is ever
 needed again, beware that littleCMS stamps wall-clock time into the ICC header,
 so the profile must have its creation timestamp zeroed or every re-run churns
 the file with identical pixels.
+
+### Follow-up: the factor field had three defects behind it
+
+Found by looking at the real dialog on the test dataset, plus a Copilot review
+note on PR #16. The paired layout did not cause all of these — it made them
+visible, which is a point in its favor.
+
+**1. Size mirrors ignored the factor.** `_on_factor_changed` synced the bound
+mirrors and not the extent mirrors, so changing the factor updated `min` and
+`max` on the data-units side while `size` kept a span computed with the previous
+factor. Introduced with the mirrors themselves in this branch. The screenshots
+show it plainly: bounds at ±2000 for a factor of 0.1, size still reading the old
+value.
+
+**2. Mirrors kept stale values when the factor went away.** `_sync_du_from_host`
+returned early on `F is None`, leaving whatever was last written. Disabling a
+field does not unsay its contents — a greyed cell showing `-400` still claims a
+conversion that no longer exists. It now clears, and so does the case of an
+unparseable *bound*, for the same reason.
+
+**3. An empty factor field silently fell back to the file value.** This one was
+pre-existing and deliberate — `_effective_factor`'s docstring said "the field
+value if valid, else the file value" — but it made a file factor unclearable.
+↺ was the only route back to the file value, and ↺ *disabled itself* when the
+field was empty because empty already matched the file. So three widgets
+disagreed at once: a blank field, live mirrors, and a greyed-out restore button.
+There was no way to say "do not scale this data" about a Visium file.
+
+Empty now means none. ↺ is the single way back to the file value and is enabled
+whenever the field differs from it, empty included. The placeholder had been
+lying — it read `none found in file` unconditionally, even when the file
+*did* supply one and that value was in effect — and now states what empty means
+and how to undo it: `none — ↺ restores 0.5`.
+
+Rejected the smaller fix of keeping the fallback and only correcting the
+placeholder to name the value in effect. It removes the lie but keeps the gap:
+a factor that came from a file would still be permanent. `result()` now reports
+`None` once cleared, so `session.scale_factor` is `None` and
+`effective_scale()` returns 1.0 — placement falls back to the raw extent,
+centered, which is what clearing the factor ought to mean.
+
+Eight of the ten new tests were confirmed to fail against the pre-fix widget, so
+they are guards rather than descriptions.

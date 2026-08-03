@@ -191,7 +191,7 @@ class DomainEditorDialog(QDialog):
         self._factor_edit.setValidator(fv)
         self._factor_edit.setStyleSheet(_LE_STYLE)
         self._factor_edit.setMaximumWidth(120)
-        self._factor_edit.setPlaceholderText("none found in file")
+        self._factor_edit.setPlaceholderText(self._placeholder_for_empty())
         F0 = current_factor if current_factor is not None else file_factor
         if F0 is not None:
             self._factor_edit.setText(f"{F0:g}")
@@ -356,10 +356,18 @@ class DomainEditorDialog(QDialog):
     # ------------------------------------------------------------------
 
     def _effective_factor(self) -> Optional[float]:
-        """Current factor: the field value if valid (>0), else the file value."""
+        """Current factor: the field value if valid and positive, else ``None``.
+
+        An empty field means *no factor*, not "fall back to the file value".
+        Falling back made the file's value unclearable — the only way to reach it
+        was ↺, which then greyed out because the empty field already matched it,
+        so three widgets disagreed about what was in effect: a blank field, live
+        mirrors, and a disabled restore button. ↺ is now the single way back to
+        the file value, which is what it was for.
+        """
         text = self._factor_edit.text().strip()
         if not text:
-            return self._file_factor
+            return None
         try:
             f = float(text)
         except ValueError:
@@ -367,9 +375,11 @@ class DomainEditorDialog(QDialog):
         return f if f > 0 else None
 
     def _on_factor_changed(self, _text: str = "") -> None:
-        # A changed factor re-derives the data-units column from the host domain.
-        if self._effective_factor() is not None:
-            self._sync_du_from_host()
+        # A changed factor re-derives every data-units cell from the host domain
+        # — the extents as well as the bounds.  Syncing only the bounds left the
+        # size mirrors showing a span computed with the previous factor.
+        self._sync_du_from_host()
+        self._sync_du_extents()
         self._update_data_units_enabled()
         self._update_reset_enabled()
 
@@ -386,6 +396,17 @@ class DomainEditorDialog(QDialog):
         differs = cur is None or abs(cur - self._file_factor) > 1e-12
         self._reset_btn.setEnabled(differs)
         self._reset_btn.setToolTip(f"restore value from file: {self._file_factor:g}")
+
+    def _placeholder_for_empty(self) -> str:
+        """What an empty factor field means — including how to undo emptying it.
+
+        With a file value to go back to, the placeholder has to say so: an empty
+        field is now genuinely no factor, so without naming ↺ the file's
+        calibration would look irrecoverable.
+        """
+        if self._file_factor is None:
+            return "none found in file"
+        return f"none — ↺ restores {self._file_factor:g}"
 
     def _update_data_units_enabled(self) -> None:
         """Enable the data-units cells that the factor can actually convert.
@@ -421,13 +442,19 @@ class DomainEditorDialog(QDialog):
         return f"{v:g}"
 
     def _sync_du_from_host(self) -> None:
+        """Mirror the host bounds into data units, clearing them when unusable.
+
+        Bailing out early on a missing factor left the mirrors displaying their
+        last values, so a disabled column went on advertising a conversion that
+        no longer applied — the same reason an unparseable bound clears its
+        mirror rather than keeping the previous number.
+        """
         F = self._effective_factor()
-        if F is None:
-            return
         for attr in self._XY:
             host_v = self._parse(self._host_fields[attr])
-            if host_v is not None:
-                self._du_fields[attr].setText(self._fmt(host_v / F))
+            self._du_fields[attr].setText(
+                "" if F is None or host_v is None else self._fmt(host_v / F)
+            )
 
     def _on_du_edited(self, attr: str) -> None:
         F = self._effective_factor()

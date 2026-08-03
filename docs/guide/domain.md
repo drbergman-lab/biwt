@@ -30,10 +30,20 @@ nonsensical initial condition. A Visium array spanning 8,000 pixels is not 8,000
 The bridge between the two is one number: **host units per data unit**. The field is labeled
 as a ratio using the host's own unit — `micron/data unit` for PhysiCell.
 
-- For **10x Visium** data, BIWT reads µm-per-pixel out of the file and pre-fills it. A reset
-  button (enabled only when you have changed the value) restores the file's number.
+- For **10x Visium** data, BIWT reads µm-per-pixel out of the file and pre-fills it. The ↺
+  button restores the file's number, and is available whenever the field differs from it.
 - For **everything else** — CSV, Seurat objects, non-Visium — there is no factor in the file.
   The field shows a `none found in file` placeholder and you supply one if you need it.
+
+**Emptying the field means no factor.** It does not quietly fall back to the file's value — if
+it did, a factor read from a file could never be cleared. The parenthesized mirrors clear and
+grey out, and placement uses your data's raw extent centered in the domain. The placeholder
+tells you how to get the file's number back (`none — ↺ restores 0.5`), and ↺ becomes available
+the moment the field stops matching the file.
+
+A zero, negative, or unparseable factor is treated the same way: there is no usable conversion,
+so the mirrors clear rather than showing numbers derived from a factor that is no longer in
+effect.
 
 ## Reading the grid
 
