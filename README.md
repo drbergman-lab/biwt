@@ -135,7 +135,7 @@ mkdocs.yml
 - [x] Spatial data query (use spatial coords or random placement)
 - [x] Edit cell types (keep / merge / delete) with scatter plot and legend
 - [x] Rename cell types with Studio name suggestions and duplicate blocking
-- [x] Cell counts (data counts, confluence, total count modes)
+- [x] Cell counts (data counts, confluence, total count modes); a count of zero defines the cell type without placing any of it
 - [x] Coordinate placement (spatial scaling, random placement)
 - [x] 29 cell parameter templates with XML assembly
 - [x] BiwtResult assembly (coordinates, cell_type_map, domain, XML)

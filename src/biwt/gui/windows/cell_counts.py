@@ -5,7 +5,7 @@ import numpy as np
 from PyQt5 import QtGui
 from PyQt5.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel, QScrollArea, QWidget,
-    QButtonGroup, QRadioButton, QMessageBox,
+    QButtonGroup, QRadioButton,
 )
 from biwt.gui.windows.base import BiwinformaticsWalkthroughWindow
 from biwt.gui.widgets import QVLine, QLineEdit_custom
@@ -236,7 +236,15 @@ class CellCountsWindow(BiwinformaticsWalkthroughWindow):
         else:
             idx = int(name)
             p = self._orig_props[self._cell_types[idx]]
-            mult = int(text) / p if p else 0
+            if not p:
+                # This type has no share of the data, so it implies nothing about
+                # the total.  Scaling the others by a multiplier derived from it
+                # would zero every one of them; leave them alone instead.  Manual
+                # mode is the way to give a zero-proportion type a count.
+                self._update_total_manual()
+                self._update_confluence_from_counts()
+                return
+            mult = int(text) / p
             self._total_prop.setText(str(round(mult)))
             self._total_manual.setText(str(round(mult)))
         for i, ct in enumerate(self._cell_types):
@@ -332,16 +340,8 @@ class CellCountsWindow(BiwinformaticsWalkthroughWindow):
                 s.cell_counts[ct] = int(self._w_manual[ct].text() or 0)
         # mode == 0: use data counts as-is (already set in session.cell_counts)
 
-        zero_types = [ct for ct in self._cell_types if s.cell_counts.get(ct, 0) == 0]
-        if zero_types:
-            QMessageBox.warning(
-                self,
-                "Zero cell count",
-                "The following cell types have a count of 0 and will place no cells:\n\n"
-                + "\n".join(f"  \u2022 {ct}" for ct in zero_types)
-                + "\n\nPlease set a non-zero count for each type before continuing.",
-            )
-            return
-
+        # A count of zero is allowed: the type still gets a <cell_definition> in
+        # the output config, it just places no cells.  Deleting the type at the
+        # edit step is the way to remove it from the config entirely.
         s.cell_counts_confirmed = True
         self.walkthrough.advance()

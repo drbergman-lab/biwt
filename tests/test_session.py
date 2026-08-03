@@ -888,3 +888,84 @@ class TestSpotDeconvFullPipeline:
         assert list(df.columns) == ["x", "y", "z", "type"]
         assert len(df) == 6
         assert set(df["type"].unique()) == {"T_cell", "Tumor", "Macrophage"}
+
+
+# ---------------------------------------------------------------------------
+# Zero cell counts
+# ---------------------------------------------------------------------------
+
+class TestZeroCellCounts:
+    """A count of zero is allowed and means "define this type, place none of it".
+
+    The type still reaches the output config as a ``<cell_definition>`` — cell
+    definitions are driven by ``cell_types_list_final``, never by counts — but
+    contributes no rows to the coordinates DataFrame. Deleting the type at the
+    edit step is the way to remove it from the config entirely.
+    """
+
+    @staticmethod
+    def _coords(n, seed=0):
+        rng = np.random.default_rng(seed)
+        return np.column_stack([
+            rng.uniform(-500, 500, n),
+            rng.uniform(-500, 500, n),
+            np.zeros(n),
+        ])
+
+    def test_zero_count_type_contributes_no_rows(self):
+        df = build_ic_dataframe({
+            "Tumor": self._coords(3),
+            "Ghost": np.empty((0, 3)),
+            "T_cell": self._coords(2),
+        })
+        assert len(df) == 5
+        assert set(df["type"].unique()) == {"Tumor", "T_cell"}
+        assert "Ghost" not in set(df["type"])
+
+    def test_other_types_are_unaffected_by_a_zero_neighbour(self):
+        both = build_ic_dataframe({"Tumor": self._coords(3), "Ghost": np.empty((0, 3))})
+        alone = build_ic_dataframe({"Tumor": self._coords(3)})
+        assert both[["x", "y", "z"]].equals(alone[["x", "y", "z"]])
+
+    def test_all_zero_counts_give_an_empty_frame(self):
+        df = build_ic_dataframe({"Ghost": np.empty((0, 3)), "Phantom": np.empty((0, 3))})
+        assert len(df) == 0
+        assert list(df.columns) == ["x", "y", "z", "type"]
+
+    def test_empty_frame_keeps_numeric_dtypes(self):
+        """Object-dtype coordinate columns would propagate into a host's concat
+        of these rows onto real ones."""
+        empty = build_ic_dataframe({"Ghost": np.empty((0, 3))})
+        populated = build_ic_dataframe({"Tumor": self._coords(2)})
+        for col in ("x", "y", "z"):
+            assert empty[col].dtype == populated[col].dtype == np.dtype("float64")
+
+    def test_no_types_at_all_matches_the_all_empty_frame(self):
+        assert list(build_ic_dataframe({}).dtypes) == list(
+            build_ic_dataframe({"Ghost": np.empty((0, 3))}).dtypes
+        )
+
+    def test_zeroing_a_type_still_leaves_it_a_known_cell_type(self):
+        """The acceptance criterion: absent from the coordinates, still a type the
+        config must define. Contrast test_delete_removes_from_counts, where the
+        type disappears from cell_counts entirely."""
+        s = _session(NONSPATIAL_CSV)
+        s.current_column = "type"
+        s.collect_cell_type_data()
+        s.use_spatial_data = False
+        s.cell_type_dict_on_edit = {ct: ct for ct in s.cell_types_list_original}
+        s.compute_intermediate_types()
+        s.cell_types_list_final = list(s.intermediate_types)
+        s.cell_type_dict_on_rename = {ct: ct for ct in s.intermediate_types}
+        s.apply_rename()
+
+        s.cell_counts["Macrophage"] = 0          # what the counts screen now allows
+        assert "Macrophage" in s.cell_types_list_final
+
+        for ct, count in s.cell_counts.items():
+            s.coords_by_type[ct] = self._coords(count, seed=1)
+
+        df = build_ic_dataframe(s.coords_by_type)
+        assert "Macrophage" not in set(df["type"])
+        assert set(df["type"].unique()) == {"T_cell", "Tumor"}
+        assert len(df) == sum(s.cell_counts.values())

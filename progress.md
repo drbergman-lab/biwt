@@ -524,3 +524,63 @@ constructs the dialog with `nanometer`/`pixel` to prove neither side is hardcode
 - **Visium multi-library:** Current code takes the first library's scale factors. Multi-library arrays are uncommon but should be handled eventually.
 - **3D spatial data:** Currently padded to z=0. Real 3D data (e.g. MERFISH) would need full 3D domain support.
 - **Substrate/gene expression pass-through:** Reserved fields in BiwtResult but not yet implemented.
+
+---
+
+## 2026-08-02: Zero cell counts allowed
+
+The cell-counts screen blocked any type whose count was zero. Allowing it lets a user pull a
+PhysiCell template into the generated config without seeding any of those cells — a population
+that should appear later by division or differentiation, not at t = 0.
+
+**Why this was mostly a removal.** Cell definitions have never been driven by counts. The
+registry is built from `cell_types_list_final` (`load_cell_parameters.py`), and
+`build_ic_dataframe` simply iterates each type's coordinate array, so an empty one contributes
+no rows. The desired output — definition present, no CSV rows — already fell out of the
+existing design. Only the guard had to go.
+
+**What the guard was masking.** Continue only unlocks once *every* cell type's checkbox is
+disabled, and a checkbox is disabled only by plotting that type. A zero-count type therefore
+stranded the positions step in both dimensionalities, for slightly different reasons:
+
+- **2D** — recoverable but obscure. The user has no reason to select a type with no cells, and
+  if they place only the types that have cells, Continue never unlocks. Ticking the empty type
+  and pressing Plot *would* have released it, since `_plot_single_2d` disables the checkbox
+  unconditionally.
+- **3D** — a hard dead-end. `_plot_single_3d` returns on an empty sampler result *before*
+  reaching `setEnabled(False)`, so even the workaround above fails.
+
+Verified both by driving the real `PositionsWindow` offscreen: with the fix reverted, all four
+scenarios (2D/3D × one-zero/all-zero) leave Continue disabled.
+
+The fix does not add an `N == 0` branch to the plotters. Instead a zero-count type is treated
+as **already placed** when the window is built: its checkbox starts disabled, so it can never
+be selected and never reaches a plotter. That keeps the existing empty-result return meaning
+exactly one thing — the sampler hit its rejection limit and the region is unusable — instead of
+conflating "user asked for zero" with "sampling failed". Undo respects the same rule, via
+`_is_placeable`.
+
+The Continue gate moved into `_refresh_continue_gate` because of the all-zero case: with
+nothing placeable, no plot can ever happen, so the gate has to be evaluated once at window
+construction rather than only after a plot.
+
+**Two adjacent bugs fixed while here.** Proportional mode computed
+`mult = int(text) / p if p else 0` — editing a row whose share of the data is zero drove the
+multiplier to zero and wrote 0 into *every other type*. Zero shares already arose from
+`_count_final_cell_types`, so this was reachable before; it just becomes routine once zero is a
+legitimate starting state. And `_plot_single_2d` appended a legend entry unconditionally while
+`_replot_all_after_undo` skips empty arrays, so a zero-count type appeared in the legend until
+the first redraw silently dropped it.
+
+**Empty-frame dtypes.** `pd.DataFrame([], columns=...)` types every column as `object`. That
+frame flows into the Studio bridge's `pd.concat` append path, where it would degrade real
+coordinate columns, so `build_ic_dataframe` now constructs its empty result with explicit
+`float64` x/y/z.
+
+**No floor on the total.** Every type may be zero, giving a definitions-only config and a
+header-only CSV. That was a deliberate call rather than an oversight: scaffolding a config now
+and placing cells later is a reasonable thing to want.
+
+`CellCountsWindow` had no test coverage at all. The new tests cover `build_ic_dataframe`'s
+zero/empty behavior and the placement gate logic (`_is_placeable`, `_refresh_continue_gate`),
+following the existing unbound-call-with-stub pattern in `test_positions_plot.py`.
