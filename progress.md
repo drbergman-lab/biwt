@@ -813,3 +813,30 @@ That is the check the 3-D `_rect_helper` slot bug never had.
 
 The docs screenshot was regenerated. It had been stale for two features — it
 still showed the dialog with no extent rows at all.
+
+### Screenshot handling, and a trap in it
+
+The docs screenshots are normalized with `sips -Z 1600 <files>`, which caps the
+longest side at 1600. That is why exactly four of them are 1600 px wide and
+carry a compact ~344-byte sRGB `iCCP` — sips re-encodes on resize. The other
+five were already under the cap and were left as raw captures.
+
+**`-Z` scales up as well as down.** It sets the maximum dimension rather than
+capping it, so running it on a capture already below 1600 *inflates* the image:
+the new 1582×1016 domain screenshot went to 1600×1027 and **338 KB → 405 KB**,
+with the text interpolated and softened. Only run it on captures wider than
+1600.
+
+For a capture already under the cap, the win is metadata, not pixels. A raw
+`screencapture` PNG carries a ~3 KB Display-P3 ICC profile plus `cICP`, `eXIf`,
+`pHYs`, an XMP packet and Apple's `iDOT` chunk, and writes IDAT in 16 KB pieces.
+Stripping those and converting P3 → sRGB took the domain screenshot to 216 KB
+with dimensions and alpha untouched. Converting rather than relabelling is the
+point: these are shots of a Qt UI specified in sRGB, so a P3-tagged file that
+browsers render as sRGB is the one case where the pixels are genuinely wrong.
+
+A script for that was written and then dropped — `sips` is the established tool
+here and a second one competing with it is worse than a note. If it is ever
+needed again, beware that littleCMS stamps wall-clock time into the ICC header,
+so the profile must have its creation timestamp zeroed or every re-run churns
+the file with identical pixels.
