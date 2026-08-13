@@ -135,3 +135,18 @@ class TestInvalidCountIsRefused:
         win.walkthrough.advance = lambda: None
         win.process_window()
         assert win.walkthrough.session.cell_counts["Tumor"] == 42
+
+
+class TestEmptyConfluenceField:
+    def test_an_empty_confluence_field_reads_as_zero(self, qapp):
+        """A blank field parses as None, and float(None) is a TypeError — raised
+        from Continue, which aborts the host process."""
+        win = _counts_window()
+        win.walkthrough.advance = lambda: None
+        win._mode_group.button(2).setChecked(True)
+        win._mode_changed(2)
+        for field in win._w_confluence.values():
+            field.setText("")
+
+        win.process_window()                      # must not raise
+        assert set(win.walkthrough.session.cell_counts.values()) == {0}

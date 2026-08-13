@@ -530,3 +530,19 @@ class TestClearedFactorStaysCleared:
                                  file_factor=2.0, current_factor=None)
         assert dlg._factor_edit.text() == ""
         assert dlg.result()[1] is None
+
+
+class TestHostDomainPrecision:
+    def test_a_host_domain_of_many_decimals_survives_the_round_trip(self, qapp):
+        """The fields rounded to two decimals, so `_source_of` — which compares what
+        they hold against the host's domain — called an untouched domain `user`, and
+        the perturbed bounds were what got placed into."""
+        parent = QWidget()
+        host = DomainSpec(xmin=-499.567, xmax=500.123, ymin=-250.891, ymax=250.045)
+        dlg = DomainEditorDialog(parent, DATA_DOMAIN, host, host_name="Studio")
+        dlg._fill_preferred()
+
+        domain, _factor, _apply = dlg.result()
+        assert (domain.xmin, domain.xmax) == (host.xmin, host.xmax)
+        assert (domain.ymin, domain.ymax) == (host.ymin, host.ymax)
+        assert domain.source == DomainSource.HOST

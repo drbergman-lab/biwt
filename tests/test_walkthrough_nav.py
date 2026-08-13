@@ -818,3 +818,32 @@ class TestImportFailureIsContained:
         w.close()
         qapp.processEvents()
         assert not step.isVisible()
+
+
+class TestGoingBackTwice:
+    def test_the_step_in_between_keeps_what_it_committed(
+        self, make_widget, drive_import, qapp
+    ):
+        """Invalidation belongs where the change was made. Carried upstream by a
+        second Go back, it fired from an earlier step and wiped the committed
+        answers of the ones in between."""
+        w, _ = make_widget()
+        drive_import(w, "nonspatial.csv")
+        qapp.processEvents()
+        for _ in range(6):
+            qapp.processEvents()
+            if _name(w) == "RenameCellTypesWindow":
+                break
+            _continue(w)
+        assert _name(w) == "RenameCellTypesWindow"
+        renamed = dict(w.session.cell_type_dict_on_edit)
+        assert renamed                                   # the edit step committed
+
+        w.window._line_edits["Tumor"].setText("Neoplastic")
+        _continue(w)                                     # commit the rename
+        qapp.processEvents()
+        w.go_back_to_prev_window()                       # -> RenameCellTypes
+        w.go_back_to_prev_window()                       # -> EditCellTypes
+        qapp.processEvents()
+
+        assert w.session.cell_type_dict_on_edit == renamed

@@ -309,7 +309,7 @@ class CellCountsWindow(BiwinformaticsWalkthroughWindow):
         for ct in self._cell_types:
             try:
                 conf_pct = float(self._w_confluence[ct].get_full_value())
-            except (ValueError, AttributeError):
+            except (TypeError, ValueError, AttributeError):   # blank field -> None
                 conf_pct = 0.0
             n = round((conf_pct / 100) / (self._area_per_cell[ct] or 1))
             counts[ct] = n

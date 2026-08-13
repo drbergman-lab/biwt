@@ -253,7 +253,10 @@ class DomainEditorDialog(QDialog):
         dv = QDoubleValidator()
 
         def edit(width: int) -> QLineEdit_custom:
-            le = QLineEdit_custom(ndigits=2)
+            # No ndigits: _source_of compares what the fields hold against the
+            # host's domain, so rounding here makes a host domain of more than two
+            # decimals come back as 'user', with the bounds actually perturbed.
+            le = QLineEdit_custom()
             le.setValidator(dv)
             le.setStyleSheet(_LE_STYLE)
             # Fixed rather than expanding: a stretched field drags its closing
@@ -1664,7 +1667,15 @@ class BioinformaticsWalkthrough(QWidget):
         if self.window is not None:
             self.window.hide()
             if self.stale_futures:
+                # Invalidate here, against the step being returned to, rather than
+                # leaving the flag set for the next advance(): carried upstream it
+                # would fire again from an earlier step and wipe the committed
+                # answers of the ones in between.
                 self.window_future.clear()
+                label = getattr(self.window_history[-1], "_step_label", None)
+                if label:
+                    self._invalidate_downstream_of(label)
+                self.stale_futures = False
             else:
                 # Current window is still valid — preserve as next future
                 self.window_future.insert(0, self.window)
