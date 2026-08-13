@@ -214,3 +214,32 @@ class TestLabelIsDisplayOnly:
         win._set_keep(sneaky)
         assert _mapping(win) == {sneaky: sneaky, "Macrophage": "Macrophage"}
         assert win._merge_group == {}
+
+
+class TestEveryTypeDeleted:
+    def test_continue_is_refused_with_nothing_left(self, qapp, monkeypatch):
+        """Counts, placement and the plot all reduce over the cell types, so an
+        empty set raises somewhere downstream whatever is patched."""
+        from PyQt5.QtWidgets import QMessageBox
+
+        warned = []
+        monkeypatch.setattr(QMessageBox, "warning",
+                            staticmethod(lambda *a, **k: warned.append(a[2])))
+        win = _edit_window()
+        _check(win, *win._checkbox)
+        win._delete_cb()
+        advanced = []
+        win.walkthrough.advance = lambda: advanced.append(True)
+
+        win.process_window()
+        assert advanced == []
+        assert "at least one cell type" in warned[0].lower()
+
+    def test_one_survivor_is_enough(self, qapp):
+        win = _edit_window()
+        _check(win, "Macrophage", "T_cell")
+        win._delete_cb()
+        advanced = []
+        win.walkthrough.advance = lambda: advanced.append(True)
+        win.process_window()
+        assert advanced == [True]

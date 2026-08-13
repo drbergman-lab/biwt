@@ -86,3 +86,18 @@ def test_a_long_cell_type_name_does_not_widen_the_counts_table(qapp):
     label = next(lbl for lbl in rebuilt.findChildren(QLabel) if lbl.text() == long_name)
     assert label.wordWrap()
     assert label.maximumWidth() == ROW_LABEL_MAX_WIDTH
+
+
+class TestEveryTypeDeleted:
+    def test_the_total_is_zero_not_one(self, qapp):
+        """`or 1` guards the proportion divisions; it must not reach the display."""
+        from PyQt5.QtWidgets import QLineEdit
+
+        win = _counts_window()
+        s = win.walkthrough.session
+        s.cell_types_list_final = []
+        s.cell_counts = {}
+        s.cell_volume = {}
+        rebuilt = CellCountsWindow(win.walkthrough)
+        totals = [f.text() for f in rebuilt.findChildren(QLineEdit)]
+        assert totals[0] == "0"

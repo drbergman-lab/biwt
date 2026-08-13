@@ -1058,7 +1058,12 @@ class WalkthroughSession:
             ]
             if self.use_spatial_data:
                 self.cell_types_final = [p[0] for p in pairs]
-                self.spatial_data_final = np.vstack([p[1] for p in pairs])
+                # Every type deleted leaves nothing to stack, and np.vstack([])
+                # raises — from a Qt slot, which aborts the host process.
+                self.spatial_data_final = (
+                    np.vstack([p[1] for p in pairs]) if pairs
+                    else np.empty((0, self.spatial_data.shape[1]))
+                )
             else:
                 self.cell_types_final = [mapping[ct] for ct in self.cell_types_original if ct in mapping]
 

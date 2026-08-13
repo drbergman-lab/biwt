@@ -28,7 +28,9 @@ class CellCountsWindow(BiwinformaticsWalkthroughWindow):
         d = walkthrough.session.effective_domain
 
         self._cell_types = s.cell_types_list_final
-        n_cells_total = sum(s.cell_counts.values()) or 1
+        n_cells = sum(s.cell_counts.values())
+        # `or 1` only guards the divisions below; the Total shown is the real one.
+        n_cells_total = n_cells or 1
 
         # Per-type original proportions  (fraction of total)
         self._orig_props = {
@@ -123,7 +125,7 @@ class CellCountsWindow(BiwinformaticsWalkthroughWindow):
         # Total row
         cols[0].addWidget(QLabel("Total"))
         wc_total = QLineEdit_custom(enabled=False)
-        wc_total.setText(str(n_cells_total))
+        wc_total.setText(str(n_cells))
         wc_total.setFixedWidth(self._COL_W["count"])
         cols[1].addWidget(wc_total)
 

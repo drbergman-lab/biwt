@@ -1490,3 +1490,23 @@ class TestSingleValueFields:
         bi = BiwtInput(cell_template_paths=paths)
         assert bi.cell_template_paths == paths
         assert bi.cell_template_paths is not paths      # copied, not aliased
+
+
+class TestEveryTypeDeletedSpatially:
+    def test_apply_rename_survives_an_empty_selection(self):
+        """Deleting every cell type left nothing to stack, and np.vstack([])
+        raises — from a Qt slot, which takes the host process with it."""
+        s = _session(SPATIAL_CSV)
+        s.current_column = "type"
+        s.collect_cell_type_data()
+        s.spatial_query_answer = True
+        s.setup_spatial_data()
+        s.cell_type_dict_on_edit = {ct: None for ct in s.cell_types_list_original}
+        s.compute_intermediate_types()
+        s.cell_types_list_final = []
+        s.cell_type_dict_on_rename = {}
+        s.apply_rename()
+
+        assert s.cell_types_final == []
+        assert s.spatial_data_final.shape[0] == 0
+        assert s.cell_counts == {}

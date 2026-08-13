@@ -5,7 +5,7 @@ import os
 import numpy as np
 from PyQt5 import QtCore, QtGui
 from PyQt5.QtWidgets import (
-    QVBoxLayout, QHBoxLayout, QLabel, QCheckBox, QPushButton,
+    QVBoxLayout, QHBoxLayout, QLabel, QCheckBox, QPushButton, QMessageBox,
     QScrollArea, QWidget, QButtonGroup, QComboBox,
     QLineEdit, QSplitter,
 )
@@ -362,7 +362,14 @@ class EditCellTypesWindow(BiwinformaticsWalkthroughWindow):
     # ------------------------------------------------------------------
 
     def process_window(self) -> None:
-        self._close_legend()
         s = self.walkthrough.session
+        if not any(v is not None for v in s.cell_type_dict_on_edit.values()):
+            # Nothing downstream is defined on an empty set — the counts, the
+            # placement and the plot each reduce over it — so refuse here rather
+            # than in each of them.
+            QMessageBox.warning(self, "No cell types left",
+                                "Keep at least one cell type to continue.")
+            return
+        self._close_legend()
         s.compute_intermediate_types()
         self.walkthrough.advance()
