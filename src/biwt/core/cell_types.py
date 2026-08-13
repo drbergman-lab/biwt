@@ -6,15 +6,19 @@ stores them as ``CellTypeAction`` objects inside a ``CellTypeConfig``.
 ``CellTypeConfig.resolve()`` collapses those decisions into a flat
 original_label → final_name mapping that ``positioning.py`` can consume.
 
-``suggest_name_mappings`` provides lightweight heuristic hints to the GUI
-so it can pre-populate rename fields when host cell-type names are available.
+Whether two strings name the same cell type is the host's decision, so it can
+supply a predicate via ``BiwtInput.name_matches``.  ``default_name_matches`` is
+the fallback BIWT ships, and ``best_match`` is the one selection routine that
+both ``suggest_name_mappings`` (rename hints) and the cell-parameters step use.
 Future: replace / augment with a cell-type registry / ontology lookup.
 """
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
-from typing import Optional
+from difflib import SequenceMatcher
+from typing import Callable, Optional
 
 
 # ---------------------------------------------------------------------------
@@ -105,42 +109,103 @@ class CellTypeConfig:
 # Name-suggestion heuristics
 # ---------------------------------------------------------------------------
 
+def alpha_key(name: str):
+    """Sort key for names shown to a user: ``AaBbCc``, not ``ABCabc``.
+
+    Plain ``sorted`` orders by code point, which files every capitalized name
+    ahead of every lowercase one — so ``iCAF`` and ``myCAF`` land after ``Stellate``
+    instead of next to their alphabetical neighbours.  The exact name is the
+    tie-break, so two names differing only in case still have a stable order.
+    """
+    return (name.casefold(), name)
+
+
+DEFAULT_NAME_MATCH_CUTOFF = 0.85
+
+_DIGIT_RUN = re.compile(r"\d+")
+
+
+def default_name_matches(a: str, b: str, cutoff: float = DEFAULT_NAME_MATCH_CUTOFF) -> bool:
+    """Whether *a* and *b* plausibly name the same cell type.
+
+    Two rules, in order:
+
+    1. **Digits must agree.**  A number in a cell-type name tells types apart;
+       it is not a spelling variation.  ``M1 Macrophage`` and ``M2 Macrophage``
+       are different types, as are ``CD4``/``CD8 T Cell`` and ``Layer 2``/
+       ``Layer 6`` — yet similarity alone rates them 0.92, 0.90 and 0.86, above
+       any useful cutoff.  So the digit runs are compared first, and any
+       difference is disqualifying.
+    2. **Then similarity**, ``difflib.SequenceMatcher`` ratio on the casefolded
+       strings, which must reach *cutoff*.  This is what lets ``Fibroblast``/
+       ``Fibroblasts`` (0.95) and ``Tumor``/``tumour`` (0.91) through.
+
+    Known limitation: pairs distinguished by a *non-numeric* qualifier are not
+    caught — ``PD-1hi CD137lo CD8 T Cell`` and ``PD-1lo CD137lo CD8 T Cell``
+    hold the same digits (1, 137, 8) and score 0.92, so they match.  Any host
+    curating names of that shape should supply its own predicate.
+
+    Hosts that want different behavior pass their own predicate as
+    ``BiwtInput.name_matches``, which replaces this function *and* the cutoff.
+    """
+    a_folded, b_folded = a.casefold(), b.casefold()
+    if _DIGIT_RUN.findall(a_folded) != _DIGIT_RUN.findall(b_folded):
+        return False
+    return SequenceMatcher(None, a_folded, b_folded).ratio() >= cutoff
+
+
+def best_match(
+    name: str,
+    candidates,
+    matches: Optional[Callable[[str, str], bool]] = None,
+    exact_only: bool = False,
+) -> Optional[str]:
+    """Return the candidate that names the same cell type as *name*, or None.
+
+    A case-insensitive exact match always wins.  Otherwise the first candidate
+    accepted by *matches* in sorted order wins — a predicate offers no way to
+    rank, and sorting keeps the result independent of how the candidates were
+    collected (file order, dict order).
+
+    *exact_only* stops after the exact pass.  A caller with candidates from
+    several sources uses it to try every source at the exact tier before letting
+    any source answer with a mere similarity: match quality outranks provenance.
+
+    *matches* defaults to :func:`default_name_matches`.
+    """
+    matches = matches or default_name_matches
+    ordered = sorted(candidates, key=alpha_key)
+
+    folded = name.casefold()
+    for candidate in ordered:
+        if candidate.casefold() == folded:
+            return candidate
+    if exact_only:
+        return None
+
+    for candidate in ordered:
+        if matches(name, candidate):
+            return candidate
+    return None
+
+
 def suggest_name_mappings(
     data_labels: list[str],
     host_names: list[str],
+    matches: Optional[Callable[[str, str], bool]] = None,
 ) -> dict[str, Optional[str]]:
     """Suggest a host cell-type name for each data label.
 
-    Strategy (in priority order):
-      1. Exact match (case-insensitive).
-      2. Host name is a substring of the data label (or vice-versa).
-
-    There is no ranking: for (2) the first host name that matches by
-    containment wins, in the order the host supplied them.
+    Delegates to :func:`best_match`, so the notion of "same cell type" is the
+    one the host chose — see ``BiwtInput.name_matches``.
 
     Returns a dict ``{data_label: host_name | None}``.
     ``None`` means no suggestion was found.
 
-    This is deliberately simple — good enough for pre-populating the GUI.
-    A future version will query a cell-type ontology / registry.
+    These are only hints for pre-populating the GUI; the user can overwrite any
+    of them.  A future version will query a cell-type ontology / registry.
     """
-    host_lower = {n.lower(): n for n in host_names}
-    suggestions: dict[str, Optional[str]] = {}
-
-    for label in data_labels:
-        label_lower = label.lower()
-        match: Optional[str] = None
-
-        # 1. Exact
-        if label_lower in host_lower:
-            match = host_lower[label_lower]
-        else:
-            # 2. Substring
-            for sl, sn in host_lower.items():
-                if sl in label_lower or label_lower in sl:
-                    match = sn
-                    break
-
-        suggestions[label] = match
-
-    return suggestions
+    return {
+        label: best_match(label, host_names, matches=matches)
+        for label in data_labels
+    }

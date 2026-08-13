@@ -92,8 +92,9 @@ accepting one uniform scatter.
 
 ### Cell parameters
 
-Assign a phenotype template per type. Parameters are what turn a set of positions into a
-runnable model.
+Assign a parameter template per type, if your host supplied a template library or you load a
+TOML file here. Parameters are what turn a set of positions into a runnable model — but the
+step is skippable, and positions alone are a valid result.
 
 ## What you get
 

@@ -34,9 +34,9 @@ class SpotDeconvolutionQueryWindow(BiwinformaticsWalkthroughWindow):
         self.yes_no_group.addButton(self.no_rb, 1)
         self.yes_no_group.idToggled.connect(self._toggled)
         self.yes_rb.setChecked(True)
-        # Default: Yes → use spot deconvolution + spatial
+        # Default: Yes.  Set explicitly rather than relying on the toggle the
+        # line above emits, so the default does not depend on statement order.
         walkthrough.session.perform_spot_deconvolution = True
-        walkthrough.session.use_spatial_data = True  # will become None if user picks No
 
         hbox_yn = QHBoxLayout()
         hbox_yn.addWidget(self.yes_rb)
@@ -46,21 +46,20 @@ class SpotDeconvolutionQueryWindow(BiwinformaticsWalkthroughWindow):
         vbox.addWidget(header)
         vbox.addWidget(msg)
         vbox.addLayout(hbox_yn)
-        vbox.addLayout(self.create_nav_bar())
+        # First step of the walkthrough — nothing to go back to.
+        vbox.addLayout(self.create_nav_bar(include_back=False))
         self.setLayout(vbox)
 
-    def _toggled(self, btn_id: int) -> None:
+    def _toggled(self, btn_id: int, checked: bool) -> None:
+        # idToggled fires for the button being unchecked too; ignore that one.
+        if not checked:
+            return
         self.walkthrough.stale_futures = True
         self.walkthrough.session.perform_spot_deconvolution = (btn_id == 0)
-        # Yes → spatial is definitely used; No → let SpatialQueryWindow decide
-        self.walkthrough.session.use_spatial_data = True if btn_id == 0 else None
 
     def process_window(self) -> None:
-        s = self.walkthrough.session
-        s.spot_deconv_asked = True
-        if s.perform_spot_deconvolution:
-            s.setup_spot_deconvolution_data()
-            s.setup_spatial_data()
-            # Skip ClusterColumn — cell type list comes from probability columns
-            s.current_column = "__spot_deconv__"
+        # The probability-derived cell types, the coordinates, and the fact that
+        # deconvolution implies spatial are all derived from this one answer by
+        # WalkthroughSession.reseed_derived_state().
+        self.walkthrough.session.spot_deconv_asked = True
         self.walkthrough.advance()

@@ -10,11 +10,11 @@ GUI (requires biwt[gui]):
 
 from importlib.metadata import PackageNotFoundError, version as _version
 
-from biwt.types import DomainSpec, BiwtInput, BiwtResult
+from biwt.types import HOST_SOURCE, DomainSpec, BiwtInput, BiwtInputSource, BiwtResult
 
 try:
     __version__ = _version("biwt")
 except PackageNotFoundError:
     __version__ = "0.0.0+unknown"
 
-__all__ = ["DomainSpec", "BiwtInput", "BiwtResult"]
+__all__ = ["DomainSpec", "BiwtInput", "BiwtInputSource", "BiwtResult", "HOST_SOURCE"]

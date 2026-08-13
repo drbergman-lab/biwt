@@ -3,7 +3,7 @@ Domain inference logic.
 
 Priority order for resolving the final DomainSpec:
   1. preferred    — host-supplied DomainSpec (always wins if provided)
-  2. data_range   — min/max of the raw coordinate arrays (obsm or obs columns),
+  2. the data     — min/max of the raw coordinate arrays (obsm or obs columns),
                     used exactly as found.  The units are reported generically as
                     ``"data unit"`` — BIWT infers no unit name from the data (a
                     pixels→host-units scale factor is applied later, visibly, in
@@ -19,7 +19,7 @@ from __future__ import annotations
 from typing import Optional
 import numpy as np
 
-from biwt.types import DomainSpec
+from biwt.types import DomainSource, DomainSpec
 
 
 # ---------------------------------------------------------------------------
@@ -68,12 +68,12 @@ def infer_domain(
         if key and key in obsm:
             coords = np.asarray(obsm[key], dtype=float)
             if coords.ndim == 2 and coords.shape[1] >= 2:
-                return _domain_from_coords(coords, source="data_range")
+                return _domain_from_coords(coords, source=DomainSource.DATA)
 
     # --- try obs columns --------------------------------------------------
     if x_col and y_col:
         xy = build_obs_coords(obs, x_col, y_col, z_col, is_image_coords)
-        return _domain_from_coords(xy, source="data_range")
+        return _domain_from_coords(xy, source=DomainSource.DATA)
 
     return DomainSpec.default()
 
@@ -82,7 +82,7 @@ def infer_domain(
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _domain_from_coords(coords: np.ndarray, source: str = "data_range",
+def _domain_from_coords(coords: np.ndarray, source: str = DomainSource.DATA,
                         units: str = "data unit") -> DomainSpec:
     """Build a DomainSpec from the bounding box of a coordinate array."""
     xmin, xmax = float(coords[:, 0].min()), float(coords[:, 0].max())

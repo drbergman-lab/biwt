@@ -24,6 +24,7 @@ Run with:
 """
 from __future__ import annotations
 
+import dataclasses
 import os
 import sys
 from pathlib import Path
@@ -35,17 +36,18 @@ from types import SimpleNamespace
 
 from biwt.core import data_loader
 from biwt.core.data_loader import (
+    FormatSupport,
+    supported_formats,
     DOCS_BASE_URL,
     INSTALL_DOCS_URL,
     TROUBLESHOOTING_DOCS_URL,
-    BiwtData,
     LoadError,
     _extract_visium_microns_per_pixel,
 )
 from biwt.core.domain import classify_domain_mismatch, infer_domain
 from biwt.core.positioning import build_ic_dataframe
 from biwt.gui.walkthrough import WalkthroughSession, _step_predicates, _scale_domain
-from biwt.types import BiwtInput, DomainSpec
+from biwt.types import BiwtInput, DomainSource, DomainSpec
 
 # ---------------------------------------------------------------------------
 # Fixture paths
@@ -125,7 +127,7 @@ class TestDataLoader:
     def test_pixel_csv_no_file_factor(self):
         # A bare imagerow/imagecol CSV carries no scale factor.
         data = data_loader.load(PIXEL_CSV)
-        assert data.microns_per_data_unit is None
+        assert data.host_units_per_data_unit is None
 
 
 # ---------------------------------------------------------------------------
@@ -270,12 +272,24 @@ class TestEffectiveDomain:
         s = _session(SPATIAL_CSV)
         assert s.effective_domain is s.preferred_domain
 
-    def test_user_domain_overrides_inferred(self):
+    def test_user_domain_overrides_the_host_domain(self):
         s = _session(SPATIAL_CSV)
-        s.inferred_domain = DomainSpec(xmin=-100, xmax=100, ymin=-100, ymax=100)
-        user = DomainSpec(xmin=-999, xmax=999, ymin=-999, ymax=999, source="user_edited")
+        user = DomainSpec(xmin=-999, xmax=999, ymin=-999, ymax=999, source=DomainSource.USER)
         s.user_domain = user
         assert s.effective_domain is user
+
+    def test_there_is_no_third_domain_between_host_and_user(self):
+        """The split-brain guard, asserted on the session rather than the widget.
+
+        ``effective_domain`` used to consult a latched ``inferred_domain`` copy of
+        the host's box while ``preferred_domain`` read the host's live one, so a
+        host that refreshed its input made the two disagree — and one dialog reads
+        both. Removing the field is what makes them the same object; this pins it,
+        since a dataclass will happily accept the attribute again.
+        """
+        s = _session(SPATIAL_CSV)
+        assert not hasattr(s, "inferred_domain")
+        assert s.effective_domain is s.preferred_domain
 
     def test_scale_defaults(self):
         # No factor by default → placement scale is identity (1.0), apply on.
@@ -461,7 +475,7 @@ class TestApplyRenameNonSpatial:
         s = _session(NONSPATIAL_CSV)
         s.current_column = "type"
         s.collect_cell_type_data()
-        s.use_spatial_data = False
+        s.spatial_query_answer = False
         s.cell_type_dict_on_edit = cell_type_dict_on_edit or {
             ct: ct for ct in s.cell_types_list_original
         }
@@ -527,7 +541,7 @@ class TestApplyRenameSpatial:
         s = _session(SPATIAL_CSV)
         s.current_column = "type"
         s.collect_cell_type_data()
-        s.use_spatial_data = True
+        s.spatial_query_answer = True
         s.setup_spatial_data()
         s.cell_type_dict_on_edit = {ct: ct for ct in s.cell_types_list_original}
         s.compute_intermediate_types()
@@ -589,7 +603,7 @@ class TestFullPipelineNonSpatial:
         s = _session(NONSPATIAL_CSV)
         s.current_column = "type"
         s.collect_cell_type_data()
-        s.use_spatial_data = False
+        s.spatial_query_answer = False
         s.cell_type_dict_on_edit = {ct: ct for ct in s.cell_types_list_original}
         s.compute_intermediate_types()
         s.cell_types_list_final = list(s.intermediate_types)
@@ -616,7 +630,7 @@ class TestFullPipelineNonSpatial:
         s = _session(NONSPATIAL_CSV)
         s.current_column = "type"
         s.collect_cell_type_data()
-        s.use_spatial_data = False
+        s.spatial_query_answer = False
         s.cell_type_dict_on_edit = {
             "Macrophage": None,
             "T_cell": "T_cell",
@@ -646,7 +660,7 @@ class TestFullPipelineSpatial:
         s = _session(SPATIAL_CSV)
         s.current_column = "type"
         s.collect_cell_type_data()
-        s.use_spatial_data = True
+        s.spatial_query_answer = True
         s.setup_spatial_data()
         s.cell_type_dict_on_edit = {ct: ct for ct in s.cell_types_list_original}
         s.compute_intermediate_types()
@@ -675,7 +689,10 @@ def _next_step(s: WalkthroughSession) -> "str | None":
 
     Delegates directly to ``_step_predicates`` from ``walkthrough.py`` so
     this helper stays in sync with the real step-selection logic automatically.
+    Reseeds first, exactly as ``_build_next_window`` does, since predicates
+    read state that ``reseed_derived_state`` owns.
     """
+    s.reseed_derived_state()
     for predicate, label in _step_predicates(s):
         if predicate():
             return label
@@ -707,22 +724,22 @@ class TestStepSequencing:
         assert _next_step(s) == "ClusterColumn"
 
     def test_after_column_set_with_spatial_data_goes_to_spatial_query(self):
-        # current_column set, use_spatial_data still None, data has spatial
+        # current_column set, question unanswered, data has spatial
         s = _session(SPATIAL_CSV)
         s.current_column = "type"
         s.collect_cell_type_data()
-        # use_spatial_data is None and data.has_spatial → SpatialQuery
-        assert s.use_spatial_data is None
+        # spatial_query_answer is None and data.has_spatial → SpatialQuery
+        assert s.spatial_query_answer is None
         assert s.data.has_spatial
         assert _next_step(s) == "SpatialQuery"
 
     def test_after_use_spatial_false_cell_counts_not_confirmed_goes_to_cell_counts(self):
-        # use_spatial_data=False, cell_type_dict_on_edit set, cell_types_list_final set,
+        # spatial declined, cell_type_dict_on_edit set, cell_types_list_final set,
         # cell_counts_confirmed=False → CellCounts
         s = _session(NONSPATIAL_CSV)
         s.current_column = "type"
         s.collect_cell_type_data()
-        s.use_spatial_data = False
+        s.spatial_query_answer = False
         s.cell_type_dict_on_edit = {ct: ct for ct in s.cell_types_list_original}
         s.compute_intermediate_types()
         s.cell_types_list_final = list(s.intermediate_types)
@@ -733,12 +750,12 @@ class TestStepSequencing:
         assert _next_step(s) == "CellCounts"
 
     def test_after_use_spatial_true_skips_cell_counts_goes_to_positions(self):
-        # use_spatial_data=True → CellCounts predicate (not use_spatial_data) is False
+        # spatial accepted → CellCounts predicate (not use_spatial_data) is False
         # positions_set=False → Positions
         s = _session(SPATIAL_CSV)
         s.current_column = "type"
         s.collect_cell_type_data()
-        s.use_spatial_data = True
+        s.spatial_query_answer = True
         s.setup_spatial_data()
         s.cell_type_dict_on_edit = {ct: ct for ct in s.cell_types_list_original}
         s.compute_intermediate_types()
@@ -754,7 +771,7 @@ class TestStepSequencing:
         s = _session(NONSPATIAL_CSV)
         s.current_column = "type"
         s.collect_cell_type_data()
-        s.use_spatial_data = False
+        s.spatial_query_answer = False
         s.cell_type_dict_on_edit = {ct: ct for ct in s.cell_types_list_original}
         s.compute_intermediate_types()
         s.cell_types_list_final = list(s.intermediate_types)
@@ -770,7 +787,7 @@ class TestStepSequencing:
         s = _session(NONSPATIAL_CSV)
         s.current_column = "type"
         s.collect_cell_type_data()
-        s.use_spatial_data = False
+        s.spatial_query_answer = False
         s.cell_type_dict_on_edit = {ct: ct for ct in s.cell_types_list_original}
         s.compute_intermediate_types()
         s.cell_types_list_final = list(s.intermediate_types)
@@ -793,22 +810,15 @@ class TestSpotDeconvFullPipeline:
         """Replicate all steps up to (but not including) PositionsWindow."""
         s = _session(SPOT_DECONV_CSV)
 
-        # Step 1: setup spot deconvolution data and spatial data
+        # The deconvolution query window writes only this flag; everything it
+        # implies — the probability-derived cell types, the per-spot dicts and
+        # the coordinates — is derived by reseed_derived_state().
         s.perform_spot_deconvolution = True
-        s.setup_spot_deconvolution_data()
-        s.setup_spatial_data()
+        s.reseed_derived_state()
 
-        # Step 2: collect_cell_type_data via the spot-deconv path.
-        # The cluster-column window sets current_column to the sentinel
-        # "__spot_deconv__" and then collect_cell_type_data() is called.
-        # In the spot-deconv path, cell_types_original comes from cell_types_max
-        # (the max-prob type per spot), so we mirror that here.
-        s.current_column = "__spot_deconv__"
-        # Spot-deconv populates cell_types_list_original via setup_spot_deconvolution_data;
-        # cell_types_original must be populated for apply_rename to iterate over.
-        # Mirror what the GUI does: use cell_types_max as the per-cell label list.
-        s.cell_types_original = list(s.cell_types_max)
-
+        # No cluster column is chosen on this path, and cell_types_original
+        # stays None: every downstream reader branches on
+        # perform_spot_deconvolution and uses cell_types_max instead.
         return s
 
     def test_setup_produces_three_cell_types(self):
@@ -871,7 +881,7 @@ class TestSpotDeconvFullPipeline:
         # Mirror what PositionsWindow does: one coordinate per retained spot, assigned
         # to the dominant (max-prob) type derived from cell_types_max.
         for i, (sp, prob_dict) in enumerate(
-            zip(s.spatial_data_final, s.cell_prob_feature_dicts)
+            zip(s.spatial_data_final, s.cell_prob_feature_dicts_final)
         ):
             # dominant type for this spot = argmax of the (already renamed) prob dict
             dominant = max(prob_dict, key=lambda k: prob_dict[k])
@@ -952,7 +962,7 @@ class TestZeroCellCounts:
         s = _session(NONSPATIAL_CSV)
         s.current_column = "type"
         s.collect_cell_type_data()
-        s.use_spatial_data = False
+        s.spatial_query_answer = False
         s.cell_type_dict_on_edit = {ct: ct for ct in s.cell_types_list_original}
         s.compute_intermediate_types()
         s.cell_types_list_final = list(s.intermediate_types)
@@ -1048,3 +1058,409 @@ class TestApportionSpotCells:
         np.random.seed(7)
         ba = sum(apportion_spot_cells({"B": 0.5, "A": 0.5}, 1)["A"] for _ in range(400))
         assert 140 < ab < 260 and 140 < ba < 260
+
+
+# ---------------------------------------------------------------------------
+# Derived state — reseed_derived_state()
+#
+# _STEP_FIELDS covers what the user chose; everything derived from those choices
+# is reseed's job. The invariant that matters: reseed repairs state a downstream
+# invalidation wiped, and never overwrites a decision the user made.
+# ---------------------------------------------------------------------------
+
+class TestReseedDerivedState:
+    def test_noop_without_data(self):
+        s = WalkthroughSession(biwt_input=BiwtInput(preferred_domain=DOMAIN))
+        s.reseed_derived_state()          # must not raise
+        assert s.spatial_query_answer is None
+
+    def test_non_spatial_data_needs_no_spatial_answer(self):
+        # Nothing is derived here: the property reads False off the data itself,
+        # so the unanswered question stays unanswered and harmless.
+        s = _session(NONSPATIAL_CSV)
+        s.reseed_derived_state()
+        assert s.spatial_query_answer is None
+        assert s.use_spatial_data is False
+
+    def test_deconvolution_implies_spatial(self):
+        s = _session(SPOT_DECONV_CSV)
+        s.perform_spot_deconvolution = True
+        s.reseed_derived_state()
+        # The question is never asked, yet spatial is in use.
+        assert s.spatial_query_answer is None
+        assert s.use_spatial_data is True
+
+    def test_deconvolution_rebuilds_all_three_probability_fields(self):
+        s = _session(SPOT_DECONV_CSV)
+        s.perform_spot_deconvolution = True
+        s.reseed_derived_state()
+        assert s.cell_types_list_original == ["Macrophage", "T_cell", "Tumor"]
+        assert len(s.cell_types_max) == 6
+        assert len(s.cell_prob_feature_dicts) == 6
+
+    def test_deconvolution_rebuilds_after_a_partial_wipe(self):
+        s = _session(SPOT_DECONV_CSV)
+        s.perform_spot_deconvolution = True
+        s.reseed_derived_state()
+        # One field cleared is enough: a single function produces all three.
+        s.cell_types_list_original = None
+        s.reseed_derived_state()
+        assert s.cell_types_list_original == ["Macrophage", "T_cell", "Tumor"]
+        assert s.cell_prob_feature_dicts is not None
+
+    def test_declining_deconvolution_clears_its_artifacts(self):
+        s = _session(SPOT_DECONV_CSV)
+        s.perform_spot_deconvolution = True
+        s.reseed_derived_state()
+        s.perform_spot_deconvolution = False
+        s.reseed_derived_state()
+        assert s.cell_types_max is None
+        assert s.cell_prob_feature_dicts is None
+
+    def test_spatial_coordinates_are_derived(self):
+        s = _session(SPATIAL_CSV)
+        assert s.spatial_data is None
+        s.reseed_derived_state()
+        assert s.spatial_data is not None
+        assert s.spatial_data.shape[1] == 3
+
+    def test_is_idempotent(self):
+        s = _session(SPOT_DECONV_CSV)
+        s.perform_spot_deconvolution = True
+        s.reseed_derived_state()
+        first = (
+            list(s.cell_types_list_original),
+            list(s.cell_types_max),
+            [dict(d) for d in s.cell_prob_feature_dicts],
+            s.spatial_data.copy(),
+        )
+        s.reseed_derived_state()
+        assert s.cell_types_list_original == first[0]
+        assert s.cell_types_max == first[1]
+        assert [dict(d) for d in s.cell_prob_feature_dicts] == first[2]
+        assert np.array_equal(s.spatial_data, first[3])
+
+    def test_preserves_the_users_spatial_choice(self):
+        # The one field reseed must keep its hands off: spatial data present,
+        # no deconvolution, so the answer is the user's to give.
+        s = _session(SPATIAL_CSV)
+        s.spatial_query_answer = False
+        s.reseed_derived_state()
+        assert s.spatial_query_answer is False
+        s.spatial_query_answer = True
+        s.reseed_derived_state()
+        assert s.spatial_query_answer is True
+
+    def test_does_not_overwrite_the_chosen_column_or_its_cell_types(self):
+        s = _session(SPATIAL_CSV)
+        s.current_column = "type"
+        s.collect_cell_type_data()
+        before = list(s.cell_types_list_original)
+        s.reseed_derived_state()
+        assert s.current_column == "type"
+        assert s.cell_types_list_original == before
+
+    def test_deconvolution_is_unreachable_without_coordinates(self):
+        # Guarded by the step predicate rather than repaired afterwards: the
+        # window that sets the flag is only built for data that has coordinates.
+        s = _session(NONSPATIAL_CSV)
+        assert _next_step(s) != "SpotDeconvQuery"
+
+
+class TestCollectCellTypeDataEdgeCases:
+    """A missing column, and labels that are not strings.
+
+    Named apart from ``TestCollectCellTypeData`` above rather than merged: same
+    subject, but these are the failure modes. Sharing the name silently shadowed
+    that class and dropped its two tests from the run — caught by pyflakes, not by
+    the suite, which is the point of the static check.
+    """
+
+    def test_without_a_column_raises_a_named_error(self):
+        s = _session(SPATIAL_CSV)
+        with pytest.raises(ValueError, match="current_column"):
+            s.collect_cell_type_data()
+
+    def test_numeric_column_labels_are_stringified_per_cell(self):
+        """A numeric cluster column must survive apply_rename.
+
+        cell_types_list_original was always stringified but cell_types_original
+        was not, so with integer Leiden/Louvain ids the rename mapping (keyed by
+        the string labels) matched nothing and every cell was dropped.
+        """
+        s = _session(SPOT_DECONV_CSV)
+        s.current_column = "Tumor_probability"        # a float column
+        s.collect_cell_type_data()
+        assert all(isinstance(ct, str) for ct in s.cell_types_original)
+        assert set(s.cell_types_original) <= set(s.cell_types_list_original)
+
+    def test_numeric_labels_survive_apply_rename(self):
+        s = _session(SPOT_DECONV_CSV)
+        s.current_column = "Tumor_probability"
+        s.collect_cell_type_data()
+        s.spatial_query_answer = False
+        s.cell_type_dict_on_edit = {ct: ct for ct in s.cell_types_list_original}
+        s.compute_intermediate_types()
+        s.cell_types_list_final = list(s.intermediate_types)
+        s.cell_type_dict_on_rename = {ct: ct for ct in s.cell_types_list_original}
+        s.apply_rename()
+        assert len(s.cell_types_final) == s.data.n_cells
+        assert sum(s.cell_counts.values()) == s.data.n_cells
+
+
+# ---------------------------------------------------------------------------
+# API boundary — what the host is promised
+# ---------------------------------------------------------------------------
+
+class TestApiBoundary:
+    def test_cell_templates_defaults_to_an_empty_mapping(self):
+        from biwt.types import BiwtResult
+        result = BiwtResult(
+            coordinates=build_ic_dataframe({}),
+            cell_type_map={},
+            domain_used=DOMAIN,
+        )
+        assert result.cell_templates == {}
+
+    def test_cell_definitions_xml_is_gone(self):
+        # BIWT no longer assembles framework XML; the host owns that.
+        from biwt.types import BiwtResult
+        assert "cell_definitions_xml" not in {
+            f.name for f in dataclasses.fields(BiwtResult)
+        }
+
+    def test_biwt_input_names_the_template_paths_field(self):
+        names = {f.name for f in dataclasses.fields(BiwtInput)}
+        assert "cell_template_paths" in names
+        assert "extra_cell_template_paths" not in names
+
+    def test_snapshot_is_independent_of_the_host_original(self):
+        """A run holds a copy, so a host editing its own objects cannot reach it.
+
+        Every mutable field has to be copied, not just the dataclass: a host that
+        edits its ``DomainSpec`` in place would otherwise rewrite the domain a
+        finished run already reported as ``domain_used``.
+        """
+        from biwt.types import DomainSpec
+
+        original = BiwtInput(
+            preferred_domain=DomainSpec(xmin=-1, xmax=1, ymin=-1, ymax=1),
+            host_cell_type_names=["tumor"],
+            cell_template_paths=["/a.toml"],
+        )
+        frozen = original.snapshot()
+
+        original.preferred_domain.xmax = 999
+        original.host_cell_type_names.append("macrophage")
+        original.cell_template_paths.append("/b.toml")
+
+        assert frozen.preferred_domain.xmax == 1
+        assert frozen.host_cell_type_names == ["tumor"]
+        assert frozen.cell_template_paths == ["/a.toml"]
+
+    def test_snapshot_passes_the_matcher_through(self):
+        # Behavior cannot be copied; the contract asks the host for purity instead.
+        def matcher(a, b):
+            return True
+
+        assert BiwtInput(name_matches=matcher).snapshot().name_matches is matcher
+
+    def test_biwt_input_exposes_the_name_matching_hook(self):
+        names = {f.name for f in dataclasses.fields(BiwtInput)}
+        assert {"name_matches", "name_match_cutoff"} <= names
+        assert BiwtInput().name_matches is None
+        assert BiwtInput().name_match_cutoff == 0.85
+
+    def test_session_matcher_defaults_to_biwts_own(self):
+        s = WalkthroughSession(biwt_input=BiwtInput())
+        assert s.name_matcher("Tumor", "tumour")
+        assert not s.name_matcher("M1 Macrophage", "M2 Macrophage")
+
+    def test_session_matcher_honors_the_host_predicate(self):
+        s = WalkthroughSession(biwt_input=BiwtInput(name_matches=lambda a, b: True))
+        assert s.name_matcher("M1 Macrophage", "M2 Macrophage")
+
+    def test_session_matcher_honors_the_cutoff(self):
+        s = WalkthroughSession(biwt_input=BiwtInput(name_match_cutoff=0.99))
+        assert not s.name_matcher("Tumor", "tumour")
+
+
+# ---------------------------------------------------------------------------
+# apply_rename is re-run on every Continue from the rename step
+# ---------------------------------------------------------------------------
+
+class TestApplyRenameIsIdempotent:
+    """Re-running apply_rename must not consume its own output.
+
+    The rename window calls it on every Continue, including a Back with nothing
+    changed.  It used to rewrite ``cell_prob_feature_dicts`` in place: pass two
+    then found no original names left (dropping every cell) and re-zipped the
+    already-filtered dicts against the full coordinate array, silently pairing
+    probability profiles with the wrong spots.
+    """
+
+    def _deconv_session(self, mapping_extra=None):
+        s = _session(SPOT_DECONV_CSV)
+        s.perform_spot_deconvolution = True
+        s.reseed_derived_state()
+        s.cell_type_dict_on_edit = {ct: ct for ct in s.cell_types_list_original}
+        if mapping_extra:
+            s.cell_type_dict_on_edit.update(mapping_extra)
+        s.compute_intermediate_types()
+        s.cell_types_list_final = [
+            mapping_extra.get(ct, ct) if mapping_extra else ct
+            for ct in s.intermediate_types
+        ]
+        s.cell_type_dict_on_rename = {
+            ct: (mapping_extra or {}).get(ct, ct)
+            for ct in s.cell_types_list_original
+        }
+        return s
+
+    def test_second_pass_matches_the_first(self):
+        s = self._deconv_session({"T_cell": "Tcell"})
+        s.apply_rename()
+        first_types = list(s.cell_types_final)
+        first_dicts = [dict(d) for d in s.cell_prob_feature_dicts_final]
+        first_coords = s.spatial_data_final.copy()
+
+        s.apply_rename()
+        assert s.cell_types_final == first_types
+        assert [dict(d) for d in s.cell_prob_feature_dicts_final] == first_dicts
+        assert np.array_equal(s.spatial_data_final, first_coords)
+
+    def test_source_dicts_are_never_mutated(self):
+        s = self._deconv_session({"T_cell": "Tcell"})
+        before = [dict(d) for d in s.cell_prob_feature_dicts]
+        s.apply_rename()
+        assert [dict(d) for d in s.cell_prob_feature_dicts] == before
+
+    def test_probabilities_stay_aligned_with_coordinates(self):
+        # Deleting a type drops any spot whose probability mass was all in it,
+        # which is what used to desynchronize the two arrays on a second pass.
+        s = self._deconv_session()
+        s.cell_type_dict_on_edit["Macrophage"] = None
+        s.compute_intermediate_types()
+        s.cell_types_list_final = list(s.intermediate_types)
+        s.cell_type_dict_on_rename = {
+            ct: ct for ct in s.cell_types_list_original if ct != "Macrophage"
+        }
+        s.apply_rename()
+        s.apply_rename()
+        assert len(s.cell_prob_feature_dicts_final) == s.spatial_data_final.shape[0]
+        assert all(d for d in s.cell_prob_feature_dicts_final)
+
+
+# ---------------------------------------------------------------------------
+# cell_type_map — the audit trail the host is promised
+# ---------------------------------------------------------------------------
+
+class TestResolvedCellTypeMap:
+    """`BiwtResult.cell_type_map` used to come back empty on every run.
+
+    It was read off a `CellTypeConfig` that nothing ever populated, while the
+    real decisions sat in `cell_type_dict_on_rename`.
+    """
+
+    def _session_with_edits(self):
+        s = _session(NONSPATIAL_CSV)          # Macrophage, T_cell, Tumor
+        s.current_column = "type"
+        s.collect_cell_type_data()
+        s.spatial_query_answer = False
+        # Merge Macrophage into Tumor, delete T_cell.
+        s.cell_type_dict_on_edit = {
+            "Tumor": "Tumor", "Macrophage": "Tumor", "T_cell": None,
+        }
+        s.compute_intermediate_types()
+        s.cell_types_list_final = ["tumor"]
+        s.cell_type_dict_on_rename = {"Tumor": "tumor", "Macrophage": "tumor"}
+        return s
+
+    def test_merged_originals_both_map_to_the_final_name(self):
+        s = self._session_with_edits()
+        got = s.resolved_cell_type_map()
+        assert got["Tumor"] == "tumor"
+        assert got["Macrophage"] == "tumor"
+
+    def test_a_deleted_type_maps_to_none(self):
+        s = self._session_with_edits()
+        assert s.resolved_cell_type_map()["T_cell"] is None
+
+    def test_every_original_label_appears(self):
+        s = self._session_with_edits()
+        assert set(s.resolved_cell_type_map()) == set(s.cell_types_list_original)
+
+    def test_an_identity_run_maps_each_type_to_itself(self):
+        s = _session(NONSPATIAL_CSV)
+        s.current_column = "type"
+        s.collect_cell_type_data()
+        s.cell_type_dict_on_edit = {ct: ct for ct in s.cell_types_list_original}
+        s.compute_intermediate_types()
+        s.cell_types_list_final = list(s.intermediate_types)
+        s.cell_type_dict_on_rename = {ct: ct for ct in s.cell_types_list_original}
+        assert s.resolved_cell_type_map() == {ct: ct for ct in s.cell_types_list_original}
+
+    def test_before_the_rename_step_nothing_is_resolved_yet(self):
+        s = _session(NONSPATIAL_CSV)
+        s.current_column = "type"
+        s.collect_cell_type_data()
+        assert set(s.resolved_cell_type_map().values()) == {None}
+
+
+class TestCellTypeOrdering:
+    """Cell-type lists are displayed, so they sort case-insensitively."""
+
+    def test_lowercase_initial_names_are_not_filed_last(self):
+        s = _session(NONSPATIAL_CSV)
+        s.data.obs["type"] = ["myCAF", "Stellate", "iCAF", "B cell", "iCAF", "myCAF"]
+        s.current_column = "type"
+        s.collect_cell_type_data()
+        assert s.cell_types_list_original == ["B cell", "iCAF", "myCAF", "Stellate"]
+
+    def test_intermediate_types_follow_the_same_order(self):
+        s = _session(NONSPATIAL_CSV)
+        s.cell_type_dict_on_edit = {"Stellate": "Stellate", "iCAF": "iCAF", "myCAF": "myCAF"}
+        s.compute_intermediate_types()
+        assert s.intermediate_types == ["iCAF", "myCAF", "Stellate"]
+
+
+# ---------------------------------------------------------------------------
+# Format availability — so a host can say what it can read before the user picks
+# ---------------------------------------------------------------------------
+
+class TestSupportedFormats:
+    def test_every_extension_load_accepts_is_listed(self):
+        listed = {ext for fmt in supported_formats() for ext in fmt.extensions}
+        assert listed == {".h5ad", ".rds", ".rda", ".rdata", ".csv"}
+
+    def test_csv_needs_nothing_optional(self):
+        csv = next(f for f in supported_formats() if ".csv" in f.extensions)
+        assert csv.requires == ()
+        assert csv.available
+        assert csv.hint == ""
+
+    def test_a_missing_requirement_is_reported_with_its_extra(self):
+        fmt = FormatSupport(
+            extensions=(".zzz",), description="nonsense",
+            requires=("definitely_not_installed",), extra="biwt[nonsense]",
+        )
+        assert not fmt.available
+        assert fmt.missing == ("definitely_not_installed",)
+        assert "definitely_not_installed" in fmt.hint
+        assert "pip install biwt[nonsense]" in fmt.hint
+
+    def test_availability_does_not_import_the_dependency(self, monkeypatch):
+        # find_spec, not import: asking must stay cheap and side-effect free.
+        import sys
+        before = set(sys.modules)
+        [f.available for f in supported_formats()]
+        assert not (set(sys.modules) - before) & {"anndata", "rpy2", "anndata2ri"}
+
+    def test_a_dependency_whose_parent_is_absent_counts_as_missing(self):
+        fmt = FormatSupport(extensions=(".zzz",), description="x",
+                            requires=("no_such_pkg.submodule",))
+        assert not fmt.available          # find_spec raises here; must not escape
+
+    def test_label_lists_the_extensions(self):
+        r = next(f for f in supported_formats() if ".rds" in f.extensions)
+        assert r.label == ".rds .rda .rdata"

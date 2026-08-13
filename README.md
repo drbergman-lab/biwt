@@ -79,19 +79,22 @@ src/biwt/
     data_loader.py      — Unified loader (.h5ad, .rds, .csv) → BiwtData
     domain.py           — Domain inference + coordinate column detection
     positioning.py      — Coordinate scaling + build_ic_dataframe
-    cell_types.py       — Name-matching heuristics
-    parameters/
-      cell_templates.py — 29 PhysiCell cell-type XML templates
-      xml_defaults.py   — Default PhysiCell XML scaffold
+    cell_types.py       — Name matching + keep/merge/delete bookkeeping
+    templates.py        — Reading host/user cell-parameter template files
   gui/
     walkthrough.py      — Session state machine + Qt widget + step logic
     widgets.py          — Shared Qt widgets
     windows/            — One file per walkthrough step
 tests/
-  test_session.py       — 78 tests covering session logic end-to-end
+  test_session.py       — Session logic end-to-end (Qt-free)
+  test_walkthrough_nav.py — Real controller: advance / go back / re-import
+  test_name_matching.py — "same cell type?" rules
+  test_cell_templates.py — Template files and per-type pre-selection
+  test_load_cell_parameters.py — The cell-parameters window
   test_gui_smoke.py     — Headless Qt import-path and error-dialog tests
   test_positions_plot.py — Spatial placement / plot scaling tests
-  fixtures/             — CSV test fixtures
+  test_static_checks.py — pyflakes name resolution over every module
+  fixtures/             — CSV and TOML test fixtures
 scripts/
   make_screenshot_data.py — Synthetic Visium-like .h5ad for doc screenshots
 docs/                   — MkDocs Material site (published to GitHub Pages)
@@ -137,14 +140,17 @@ mkdocs.yml
 - [x] Cluster column selection
 - [x] Spatial data query (use spatial coords or random placement)
 - [x] Edit cell types (keep / merge / delete) with scatter plot and legend
-- [x] Rename cell types with Studio name suggestions and duplicate blocking
+- [x] Rename cell types with host name suggestions and duplicate blocking
 - [x] Cell counts (data counts, confluence, total count modes); a count of zero defines the cell type without placing any of it
 - [x] Coordinate placement (spatial scaling, random placement)
-- [x] 29 cell parameter templates with XML assembly
-- [x] BiwtResult assembly (coordinates, cell_type_map, domain, XML)
+- [x] Cell-parameter templates supplied by the host or loaded by the user; the step is always shown and always skippable
+- [x] BiwtResult assembly (coordinates, cell_type_map, domain, cell_templates)
+- [x] BIWT generates no framework XML and ships no framework-specific data — the host owns both
 - [x] `BiwtResult` carries no output path — the host owns *where* results go; `to_csv(path)` writes and records nothing
 - [x] 3-D spatial plot ⇧-drag writes the correct extent slots (the 3-D layout is `(x0, y0, z0, width, height, depth)`, not the 2-D `(x0, y0, width, height)`)
 - [x] Studio bridge (BiwtInput/BiwtResult, _biwt_complete callback)
+- [x] Host context resolved per run: `create_biwt_widget` accepts a `BiwtInput` or a callable returning one, snapshotted for the run
+- [x] Host cell types are cell-parameter candidates; a match returns `types.HOST_SOURCE` instead of a file path
 - [x] Overwrite/Append/Browse/Cancel dialog for CSV output
 - [x] Append handles extra columns in existing CSV
 - [x] Session reset on reimport
@@ -157,7 +163,7 @@ mkdocs.yml
 - [x] pyproject.toml extras for anndata/seurat/dev dependencies
 - [x] CI pipeline (GitHub Actions, Python 3.9–3.12)
 - [x] CI: R-dependent `.rds` tests run in a dedicated `seurat` job that provisions R, Seurat, and SingleCellExperiment from conda across Python 3.9–3.12; `tests/fixtures/make_fixtures.R` regenerates the fixture each run so it cannot drift against the resolved R version
-- [x] 155 passing tests (one `.rds` test skips locally without the R stack; the `seurat` CI job runs it)
+- [x] Full suite green (one `.rds` test skips locally without the R stack; the `seurat` CI job runs it)
 
 ### In Progress
 

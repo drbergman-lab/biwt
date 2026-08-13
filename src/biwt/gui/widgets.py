@@ -6,6 +6,7 @@ These are small, self-contained Qt widgets with no business logic.
 
 from __future__ import annotations
 import os
+from pathlib import Path
 from typing import Optional, Callable
 
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
@@ -13,10 +14,11 @@ from matplotlib.figure import Figure
 
 from PyQt5.QtWidgets import (
     QPushButton, QFrame, QSizePolicy, QCheckBox, QComboBox,
-    QCompleter, QDialog, QVBoxLayout, QLineEdit, QShortcut,
+    QCompleter, QDialog, QStyle, QStyleOptionComboBox, QStylePainter,
+    QVBoxLayout, QLabel, QLineEdit, QShortcut,
 )
 from PyQt5.QtCore import QSortFilterProxyModel
-from PyQt5.QtGui import QValidator, QKeySequence
+from PyQt5.QtGui import QColor, QIcon, QPalette, QValidator, QKeySequence
 from PyQt5.QtCore import Qt
 
 
@@ -90,10 +92,6 @@ class QVLine(QFrame):
         super().__init__(parent)
         self.setFrameShape(QFrame.VLine)
         self.setFrameShadow(QFrame.Sunken)
-
-
-# Use the real QRadioButton so isChecked() etc. work correctly.
-from PyQt5.QtWidgets import QRadioButton as QRadioButton_custom  # noqa: F401
 
 
 class QCheckBox_custom(QCheckBox):
@@ -276,3 +274,198 @@ class SectionHeader(QPushButton):
             "QPushButton {background-color: orange; color: black; font-weight: bold;}"
         )
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+
+# Widest a generated row label may get before it wraps.  Roughly 30 characters
+# at the default font — enough for any single cell-type name on one line.
+ROW_LABEL_MAX_WIDTH = 240
+
+
+def set_elided_text(widget, text: str, suffix: str = "",
+                    max_width: int = ROW_LABEL_MAX_WIDTH) -> None:
+    """Put *text* on *widget*, clipped to *max_width* px, full text in the tooltip.
+
+    The companion to :func:`row_label`, for widgets whose text cannot wrap — a
+    ``QCheckBox`` above all.  Cell-type names arrive from the data and survive
+    merging and renaming, so any of them can be arbitrarily long; unchecked, one
+    such name sets the width of the panel it sits in.
+
+    *suffix* is appended after clipping, so a trailing annotation (``⇒ Merge Gp.
+    #2``) is never eaten by the ellipsis — and stays readable by code that keys
+    off it.
+    """
+    fm = widget.fontMetrics()
+    shown = fm.elidedText(text, Qt.ElideRight, max_width)
+    widget.setText(shown + suffix)
+    widget.setToolTip((text + suffix) if shown != text else "")
+
+
+def dropped_local_paths(event, suffixes) -> list:
+    """Local file paths carried by a drag event whose suffix is in *suffixes*.
+
+    Note what a drop can and cannot do: it hands over a **path on this machine**.
+    In a streamed remote session — a Galaxy interactive tool, say — the app runs
+    in a container and the user's own files never reach it, so no drop event
+    arrives at all.  Drag-and-drop is therefore always an accelerator, never the
+    only way to get a file in.
+    """
+    if not event.mimeData().hasUrls():
+        return []
+    paths = []
+    for url in event.mimeData().urls():
+        if url.isLocalFile() and Path(url.toLocalFile()).suffix.lower() in suffixes:
+            paths.append(url.toLocalFile())
+    return paths
+
+
+ICON_DIR = Path(__file__).parent / "icons"
+
+
+def action_icon(name: str) -> QIcon:
+    """A packaged action icon by stem, e.g. ``action_icon("auto_match")``.
+
+    Drawn rather than typed: a text glyph is rendered by whatever font the host's
+    fallback chain supplies, so the three action marks came out at visibly
+    different sizes and weights — and differently again inside an embedding
+    application.  An SVG looks the same everywhere and stays crisp on a HiDPI
+    screen, which a PNG would not without a second asset.
+    """
+    return QIcon(str(ICON_DIR / f"action_{name}.svg"))
+
+
+ROW_ARROW = "\u21d2"
+
+
+def row_arrow() -> QLabel:
+    """The ``⇒`` between a row's label and its field.
+
+    Its own widget, in its own column, so it stays beside the field it points at
+    and vertically centered on it.  Appended to the label instead, it would drift
+    to the end of the last line whenever the label wrapped.
+    """
+    arrow = QLabel(ROW_ARROW)
+    arrow.setAlignment(Qt.AlignCenter)
+    return arrow
+
+
+def row_label(text: str, max_width: int = ROW_LABEL_MAX_WIDTH) -> QLabel:
+    """A right-aligned row label that wraps rather than widening its column.
+
+    Some row labels are *generated* rather than typed: a merged cell type is
+    labeled with every original name that fed it, so its natural width is
+    unbounded.  Left to size itself, one such row dictates the width of the whole
+    window and squeezes the fields on every other row.
+
+    Capping the width and wrapping keeps every name readable — the row simply
+    grows taller — where clipping would have hidden most of them behind a
+    tooltip.  The tooltip is still set when the text does not fit on one line, for
+    the case wrapping cannot help: a single unbreakable name wider than the cap.
+
+    The row's ``⇒`` is *not* part of this label; see :func:`row_arrow`.
+    """
+    label = QLabel(text)
+    label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+    if label.fontMetrics().horizontalAdvance(text) <= max_width:
+        return label            # fits on one line; nothing to wrap
+
+    # Wrapping only for the labels that need it.  A wrapped QLabel will happily
+    # shrink to its longest *word*, which would break a short label across lines
+    # for no reason and let the column collapse — so pin the width to the cap.
+    label.setWordWrap(True)
+    label.setFixedWidth(max_width)
+    label.setToolTip(text)
+    return label
+
+
+class RelabelledComboBox(QComboBox):
+    """A combo box that can draw something other than its current item's text.
+
+    Qt paints a closed combo box from ``currentText()``, so an item that reads
+    correctly inside the popup — under a group header, say — can lose its context
+    the moment the list closes.  There is no per-widget display override, and the
+    model may be shared between several combo boxes, so neither the item text nor
+    the model can carry the difference.  Intercepting the paint can.
+
+    Assign a callable to ``display_for_index``: given the current index it returns
+    ``None`` to fall back to the item's own text, a string to draw instead, or a
+    ``(primary, secondary)`` pair — *primary* left-aligned, *secondary* right-
+    aligned and muted, which lines the secondaries up down a column of boxes.
+
+    Nothing else changes: the popup, the signals and ``currentText()`` all behave
+    exactly as before, so selection logic is unaffected.
+    """
+
+    #: Gap kept between the two halves, and the floor below which the primary is
+    #: considered too squeezed to be worth qualifying.
+    _GAP_EMS = 2
+    _PRIMARY_FLOOR_CHARS = 6
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.display_for_index = None
+
+    # ------------------------------------------------------------------
+    # What to draw
+    # ------------------------------------------------------------------
+
+    def displayed_parts(self) -> tuple:
+        """``(primary, secondary)`` for the current index; secondary may be ""."""
+        shown = None
+        if self.display_for_index is not None:
+            shown = self.display_for_index(self.currentIndex())
+        if shown is None:
+            return self.currentText(), ""
+        if isinstance(shown, str):
+            return shown, ""
+        primary, secondary = shown
+        return primary, secondary or ""
+
+    def displayed_text(self) -> str:
+        """The two halves as one string, for tests and logs."""
+        primary, secondary = self.displayed_parts()
+        return f"{primary} ({secondary})" if secondary else primary
+
+    def text_layout(self, width: int) -> tuple:
+        """What actually fits in *width*: ``(primary, secondary)``, either elided.
+
+        The rule when both do not fit: **the secondary goes**. The primary names
+        the thing chosen, so it is what the box must always say; a half-elided
+        file path qualifies nothing. Only once the primary has room to stay
+        legible is the qualifier worth its space.
+        """
+        primary, secondary = self.displayed_parts()
+        fm = self.fontMetrics()
+        if secondary:
+            gap = self._GAP_EMS * fm.horizontalAdvance(" ")
+            for_primary = width - fm.horizontalAdvance(secondary) - gap
+            if for_primary >= self._PRIMARY_FLOOR_CHARS * fm.averageCharWidth():
+                return fm.elidedText(primary, Qt.ElideRight, for_primary), secondary
+        return fm.elidedText(primary, Qt.ElideRight, width), ""
+
+    # ------------------------------------------------------------------
+    # Painting
+    # ------------------------------------------------------------------
+
+    def paintEvent(self, event) -> None:      # noqa: N802
+        painter = QStylePainter(self)
+        option = QStyleOptionComboBox()
+        self.initStyleOption(option)
+
+        # Frame and arrow from the style; the label is ours, so it is drawn
+        # without CE_ComboBoxLabel rather than through it.
+        option.currentText = ""
+        painter.drawComplexControl(QStyle.CC_ComboBox, option)
+
+        field = self.style().subControlRect(
+            QStyle.CC_ComboBox, option, QStyle.SC_ComboBoxEditField, self
+        ).adjusted(2, 0, -2, 0)
+        primary, secondary = self.text_layout(field.width())
+
+        enabled = self.isEnabled()
+        painter.setPen(self.palette().color(
+            QPalette.Active if enabled else QPalette.Disabled, QPalette.Text
+        ) if enabled else QColor("#9a9a9a"))
+        painter.drawText(field, Qt.AlignLeft | Qt.AlignVCenter, primary)
+        if secondary:
+            painter.setPen(QColor("#8a8a8a") if enabled else QColor("#c4c4c4"))
+            painter.drawText(field, Qt.AlignRight | Qt.AlignVCenter, secondary)

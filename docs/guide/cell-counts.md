@@ -53,13 +53,14 @@ metastasis, a sensitivity sweep over one population's size.
 ## Rules
 
 **Zero is allowed, and it is not the same as deleting.** A count of zero means *define this
-cell type, but place none of it*: the type still gets a `<cell_definition>` in the generated
-config, it just contributes no rows to the output. That is how you pull a phenotype template
-into your model without seeding any of those cells — useful when the population is meant to
-appear later, through division or differentiation, rather than at t = 0.
+cell type, but place none of it*: the type still reaches the host — in `cell_type_map`, and
+with whatever [parameter template](cell-parameters.md) you assigned it — it just contributes no
+rows to the coordinates. That is how you pull a phenotype into your model without seeding any
+of those cells, useful when the population is meant to appear later, through division or
+differentiation, rather than at t = 0.
 
 [Deleting the type](edit-cell-types.md) is the other choice: it removes the type outright, so
-no definition is written for it at all. Zero keeps the definition; delete removes it.
+the host never hears about it. Zero keeps the type; delete removes it.
 
 Every type may be zero if you want, which gives you a config full of cell definitions and an
 empty positions file.

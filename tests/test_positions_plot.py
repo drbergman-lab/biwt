@@ -13,8 +13,12 @@ matplotlib.use("Agg")
 from matplotlib.figure import Figure
 import pytest
 
+from pathlib import Path
+
 from biwt.core.positioning import compute_spatial_placement
 from biwt.gui.windows.positions import PositionsWindow
+
+FIXTURES = Path(__file__).parent / "fixtures"
 
 
 class _Dummy:
@@ -242,3 +246,89 @@ class TestRectDragParameterSlots:
             )
             PositionsWindow._rect_helper(d, SimpleNamespace(xdata=10, ydata=20), 110, 220)
             assert (writes[0], writes[1]) == (10, 20)
+
+
+# ---------------------------------------------------------------------------
+# Spot deconvolution: placement after the cell types have been edited
+# ---------------------------------------------------------------------------
+
+class TestSpotDeconvolutionPlacement:
+    """The post-rename probability dicts have to be the ones indexed.
+
+    ``apply_rename`` used to rewrite ``cell_prob_feature_dicts`` in place, which was
+    not idempotent and paired profiles with the wrong coordinates on a second pass.
+    The fix writes ``cell_prob_feature_dicts_final`` alongside ``spatial_data_final``
+    — and ``_plot_spot_deconvolution`` is its only reader, so nothing exercised it:
+    the old expression could be restored with the whole suite still green.
+
+    Without the fix the dicts are keyed by the *original* labels while the selection
+    holds the *final* ones, so every renamed type's probability mass silently
+    disappears and none of its cells are placed.
+    """
+
+    @staticmethod
+    def _walk_to_positions(qapp, monkeypatch):
+        from PyQt5.QtWidgets import QDialog, QFileDialog
+
+        from biwt.gui.walkthrough import DomainEditorDialog, create_biwt_widget
+        from biwt.types import BiwtInput, DomainSpec
+
+        monkeypatch.setattr(DomainEditorDialog, "exec_",
+                            lambda self: QDialog.Rejected)
+        widget = create_biwt_widget(
+            BiwtInput(preferred_domain=DomainSpec(xmin=0, xmax=300,
+                                                 ymin=0, ymax=300)),
+            on_complete=lambda result: None,
+        )
+        monkeypatch.setattr(
+            QFileDialog, "getOpenFileName",
+            staticmethod(lambda *a, **k: (str(FIXTURES / "spot_deconv.csv"), "")),
+        )
+        widget._import_cb()
+
+        def name():
+            return type(widget.window).__name__
+
+        assert name() == "SpotDeconvolutionQueryWindow"
+        widget.window.yes_rb.setChecked(True)
+        widget.window.process_window()                      # -> EditCellTypes
+
+        assert name() == "EditCellTypesWindow"
+        widget.window._checkbox["Macrophage"].setChecked(True)
+        widget.window._delete_cb()
+        widget.window.process_window()                      # -> RenameCellTypes
+
+        assert name() == "RenameCellTypesWindow"
+        widget.window._line_edits["Tumor"].setText("Neoplastic")
+        widget.window.process_window()
+
+        for _ in range(4):
+            qapp.processEvents()
+            if name() == "PositionsWindow":
+                return widget
+            widget.window.process_window()
+        raise AssertionError(f"never reached Positions (stuck on {name()})")
+
+    def test_a_renamed_type_is_still_placed(self, qapp, monkeypatch):
+        widget = self._walk_to_positions(qapp, monkeypatch)
+        win, s = widget.window, widget.session
+        assert sorted(s.cell_types_list_final) == ["Neoplastic", "T_cell"]
+
+        for cb in win.checkbox_dict.values():
+            cb.setChecked(True)
+        win.cell_pos_button_group.button(win.spatial_plotter_id).setChecked(True)
+        win.plot_cell_pos()
+
+        assert len(s.coords_by_type.get("Neoplastic", [])) > 0
+        # Every spot placed something: nothing was dropped for want of a key.
+        assert sum(len(v) for v in s.coords_by_type.values()) == s.spatial_data_final.shape[0]
+
+    def test_the_dicts_are_keyed_by_the_final_names(self, qapp, monkeypatch):
+        widget = self._walk_to_positions(qapp, monkeypatch)
+        s = widget.session
+        keys = {k for d in s.cell_prob_feature_dicts_final for k in d}
+        assert keys == {"Neoplastic", "T_cell"}
+        # The source dicts were not mutated to get there.
+        assert {k for d in s.cell_prob_feature_dicts for k in d} == {
+            "Macrophage", "T_cell", "Tumor",
+        }

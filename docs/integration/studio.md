@@ -27,32 +27,30 @@ installation instructions.
 
 ## Building the input
 
-Studio reads the domain straight off its own config tab, with a fallback if the fields are
-empty or unparseable:
+Studio's BIWT tab is built once at startup and never rebuilt, so it passes a **provider** rather
+than a value. BIWT calls it at each import:
 
 ```python
 def _create_biwt_package_tab(self):
-    ct = self.config_tab
-    try:
-        domain = DomainSpec(
-            xmin=float(ct.xmin.text()), xmax=float(ct.xmax.text()),
-            ymin=float(ct.ymin.text()), ymax=float(ct.ymax.text()),
-        )
-    except (ValueError, AttributeError):
-        domain = DomainSpec(xmin=-500, xmax=500, ymin=-500, ymax=500)
+    return create_biwt_widget(self._biwt_input, on_complete=self._biwt_complete)
 
-    biwt_input = BiwtInput(preferred_domain=domain, host_name="Studio")
-    return create_biwt_widget(biwt_input, on_complete=self._biwt_complete)
+def _biwt_input(self):
+    domain = self._domain_from_config_tab()          # None if unparseable
+    return BiwtInput(
+        preferred_domain=domain or DomainSpec.default(),
+        host_cell_type_names=list(self.xml_creator.celldef_tab.param_d.keys()),
+        cell_template_paths=[TEMPLATES],
+        host_name="Studio",
+    )
 ```
 
-Two things to copy from this:
+Worth copying:
 
-**Guard the domain construction.** Pulling floats out of UI text fields fails in ordinary use
-— empty fields, a partially typed value. A `DomainSpec` you cannot build is not a reason to
-fail to open the tab.
-
-**Set `host_name`.** Studio passes `"Studio"`, so the domain editor reads "Use Studio Domain"
-rather than "Use Host Domain".
+- **Guard the domain.** Floats from UI text fields fail in ordinary use: empty, half-typed,
+  `xmin == xmax`.
+- **Fall back to `DomainSpec.default()`.** A hand-written ±500 box arrives labelled `source=HOST`,
+  which tells the user it came from Studio.
+- **Set `host_name`.** The domain editor then reads "Use Studio Domain".
 
 ## Handling the result
 
@@ -65,18 +63,15 @@ rather than "Use Host Domain".
   existing file are left empty for the appended rows.
 - Save / Cancel.
 
-Then, separately, if `result.cell_definitions_xml` is present, Studio offers to save it as a
-new config file.
+Then, separately, if `result.cell_templates` is non-empty, Studio assembles a PhysiCell config
+from those templates and offers to save it. Studio also ships the PhysiCell template library
+itself and passes it in through `cell_template_paths` — BIWT holds no framework-specific
+parameters of its own. That arrangement is not Studio-specific; [templates and name
+matching](templates-and-matching.md) describes it for any host.
 
 The lesson generalizes: **BIWT hands you data, and the "where does this go" conversation is
 yours to have.** Studio always confirms the path even when the file does not exist, because
 silently writing into a user's project directory is not a good default.
-
-## What Studio does not do
-
-Studio does not pass `host_cell_type_names`, so BIWT cannot suggest matches against Studio's
-existing cell definitions at the [rename step](../guide/rename-cell-types.md). Wiring that up
-is a straightforward improvement for any host with a cell-type list to hand.
 
 ## What the package path must match
 

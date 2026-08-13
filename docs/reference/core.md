@@ -52,8 +52,10 @@ Coordinate scaling and assembly of the final cells DataFrame.
 
 ## `biwt.core.cell_types`
 
-Keep / merge / delete bookkeeping and the name-matching heuristics behind the rename
-suggestions.
+Keep / merge / delete bookkeeping, and the name matching behind the rename suggestions and the
+template pre-selection. A host owns the "same cell type?" decision via
+[`BiwtInput.name_matches`][biwt.types.BiwtInput]; `default_name_matches` is what BIWT falls
+back to.
 
 ::: biwt.core.cell_types
     options:
@@ -62,16 +64,19 @@ suggestions.
       members:
         - CellTypeConfig
         - CellTypeAction
+        - default_name_matches
+        - best_match
         - suggest_name_mappings
 
-## `biwt.core.parameters`
+## `biwt.core.templates`
 
-The built-in PhysiCell phenotype templates and the default XML scaffold.
+Reading cell-parameter template files, and choosing a starting template per cell type. BIWT
+ships no templates of its own and never parses their content.
 
-::: biwt.core.parameters.cell_templates
+::: biwt.core.templates
     options:
       show_root_heading: false
       show_root_toc_entry: false
       members:
-        - get_template
         - load_templates_from_file
+        - default_template_choices

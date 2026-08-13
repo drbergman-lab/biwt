@@ -13,7 +13,7 @@ pytest.importorskip("PyQt5")
 from PyQt5.QtWidgets import QDialogButtonBox, QWidget
 
 from biwt.gui.walkthrough import DomainEditorDialog, create_biwt_widget
-from biwt.types import BiwtInput, DomainSpec
+from biwt.types import BiwtInput, DomainSource, DomainSpec
 
 DOMAIN = DomainSpec(xmin=-500, xmax=500, ymin=-500, ymax=500)
 
@@ -89,7 +89,9 @@ class TestDomainBoundsValidation:
         dom, _factor, _apply = editor.result()
         assert (dom.xmin, dom.xmax) == (-500.0, 500.0)
         assert (dom.zmin, dom.zmax) == (-10.0, 10.0)
-        assert dom.source == "user_edited"
+        # These bounds *are* the host's, so that is what the source says — see
+        # TestReportedSource.
+        assert dom.source == DomainSource.HOST
 
 
 class TestDomainExtents:
@@ -367,3 +369,104 @@ class TestBiwtInputDefaults:
     def test_default_is_not_shared_between_instances(self):
         a, b = BiwtInput(), BiwtInput()
         assert a.preferred_domain is not b.preferred_domain
+
+
+class TestInitialPreset:
+    """Which domain the dialog opens on.
+
+    The caller chooses: the data extent when the data's coordinates are in use, the
+    host's otherwise — a computed extent from scaled non-spatial layout is not a
+    meaningful default to hand someone. Untested, both this branch and its caller
+    could be deleted with the suite still green, and a non-spatial run would have
+    silently offered ±500 in place of the host's domain.
+    """
+
+    @staticmethod
+    def _dialog(preset):
+        parent = QWidget()
+        dlg = DomainEditorDialog(parent, DATA_DOMAIN, HOST_DOMAIN,
+                                 host_name="Studio", initial_preset=preset)
+        dlg._parent_ref = parent
+        return dlg
+
+    @pytest.mark.parametrize("preset,expected_x,expected_source", [
+        (DomainSource.DATA, (0.0, 2000.0), DomainSource.DATA),
+        (DomainSource.HOST, (-500.0, 500.0), DomainSource.HOST),
+    ])
+    def test_the_preset_decides_what_enter_accepts(
+        self, qapp, preset, expected_x, expected_source
+    ):
+        dlg = self._dialog(preset)
+        domain, _factor, _apply = dlg.result()
+        assert (domain.xmin, domain.xmax) == expected_x
+        assert domain.source == expected_source
+
+    def test_the_default_preset_is_the_data_extent(self, qapp):
+        parent = QWidget()
+        dlg = DomainEditorDialog(parent, DATA_DOMAIN, HOST_DOMAIN, host_name="Studio")
+        dlg._parent_ref = parent
+        assert dlg.result()[0].source == DomainSource.DATA
+
+
+class TestReportedSource:
+    """`DomainSpec.source` has to say where the accepted bounds came from.
+
+    A host is told to check `source != DomainSource.HOST` to see whether its own
+    domain survived the walkthrough. The dialog used to stamp USER on every accepted
+    domain, which made that check always true — including for a user who pressed
+    Enter on the pre-filled values without touching a field, and then saw their host
+    domain quietly replaced by the data extent.
+    """
+
+    @staticmethod
+    def _dialog(**kwargs):
+        parent = QWidget()
+        dlg = DomainEditorDialog(parent, DATA_DOMAIN, HOST_DOMAIN,
+                                 host_name="Studio", **kwargs)
+        dlg._parent_ref = parent          # keep it alive for the test
+        return dlg
+
+    def test_accepting_the_prefilled_values_reports_data(self, qapp):
+        # First open pre-fills from the data, so Enter adopts the data extent.
+        dlg = self._dialog()
+        dom, _f, _a = dlg.result()
+        assert (dom.xmin, dom.xmax) == (0.0, 2000.0)
+        assert dom.source == DomainSource.DATA
+
+    def test_use_host_domain_then_accept_reports_host(self, qapp):
+        dlg = self._dialog()
+        dlg._fill_preferred()
+        dom, _f, _a = dlg.result()
+        assert dom.source == DomainSource.HOST
+
+    def test_editing_a_bound_reports_user(self, qapp):
+        dlg = self._dialog()
+        dlg._fill_preferred()
+        dlg._host_fields["xmax"].setText("750")
+        dom, _f, _a = dlg.result()
+        assert dom.source == DomainSource.USER
+
+    def test_a_revisit_that_changes_nothing_still_reports_honestly(self, qapp):
+        # Reopened on a domain the user had edited earlier: still USER.
+        edited = DomainSpec(xmin=-100, xmax=900, ymin=-100, ymax=900,
+                            zmin=-10, zmax=10, source=DomainSource.USER)
+        dlg = self._dialog(initial_domain=edited)
+        assert dlg.result()[0].source == DomainSource.USER
+
+    def test_host_wins_when_the_two_domains_coincide(self, qapp):
+        """If the data extent happens to equal the host domain, the host's domain
+        did survive — saying DATA would send a host chasing a change that
+        never happened."""
+        parent = QWidget()
+        dlg = DomainEditorDialog(parent, HOST_DOMAIN, HOST_DOMAIN, host_name="Studio")
+        dlg._parent_ref = parent
+        assert dlg.result()[0].source == DomainSource.HOST
+
+    def test_the_scale_factor_does_not_confuse_the_comparison(self, qapp):
+        """With a factor applied, the data extent in host units is raw x factor —
+        which is what the fields hold and what the check has to compare against."""
+        dlg = self._dialog(current_factor=0.5)
+        dom, factor, _a = dlg.result()
+        assert factor == 0.5
+        assert (dom.xmin, dom.xmax) == (0.0, 1000.0)
+        assert dom.source == DomainSource.DATA

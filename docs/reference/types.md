@@ -13,4 +13,6 @@ reserved — see [the API contract](../integration/api-contract.md).
       members:
         - DomainSpec
         - BiwtInput
+        - BiwtInputSource
         - BiwtResult
+        - HOST_SOURCE

@@ -8,7 +8,7 @@ from PyQt5.QtWidgets import (
     QButtonGroup, QRadioButton,
 )
 from biwt.gui.windows.base import BiwinformaticsWalkthroughWindow
-from biwt.gui.widgets import QVLine, QLineEdit_custom
+from biwt.gui.widgets import QVLine, QLineEdit_custom, row_label
 
 
 class CellCountsWindow(BiwinformaticsWalkthroughWindow):
@@ -86,7 +86,7 @@ class CellCountsWindow(BiwinformaticsWalkthroughWindow):
         self._w_manual:     dict[str, QLineEdit_custom] = {}
 
         for idx, ct in enumerate(self._cell_types):
-            cols[0].addWidget(QLabel(ct))
+            cols[0].addWidget(row_label(ct))
 
             wc = QLineEdit_custom(enabled=False)
             wc.setText(str(s.cell_counts[ct]))

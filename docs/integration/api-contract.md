@@ -13,7 +13,7 @@ DomainSpec(
     xmin=-500.0, xmax=500.0,
     ymin=-500.0, ymax=500.0,
     zmin=-10.0,  zmax=10.0,
-    source="preferred",
+    source="host",
     units="micron",
 )
 ```
@@ -37,16 +37,24 @@ potential mismatches.
 
 Records how the spec was determined, so you can tell whether your domain survived:
 
-| Value | Meaning |
-|---|---|
-| `"preferred"` | Passed in by the host |
-| `"anndata_metadata"` | Read from AnnData/Seurat spatial metadata |
-| `"data_range"` | Computed from the coordinate min/max |
-| `"default"` | Fallback (±500 µm × ±10 µm) |
+Three answers matter to you — your domain, the data's, or the user's — so those are the values.
+`biwt.types.DomainSource` names them, so you need not hand-type strings:
 
-Check `result.domain_used.source` in your handler. If it is not `"preferred"`, the user
-changed the domain during the walkthrough and your application's configured domain no longer
-matches the initial conditions you just received.
+| `DomainSource` | Value | Meaning |
+|---|---|---|
+| `HOST` | `"host"` | The domain you passed in |
+| `DATA` | `"data"` | The data's own extent, however it was found |
+| `USER` | `"user"` | Bounds the user typed in the [domain editor](../guide/domain.md) |
+| `DEFAULT` | `"default"` | Nobody supplied one; BIWT's fallback box (±500 µm × ±10 µm) |
+
+Check `result.domain_used.source` in your handler. If it is not `HOST`, the domain changed during
+the walkthrough and your application's configured domain no longer matches the initial conditions
+you just received.
+
+The domain editor derives this from the bounds rather than asserting it: `HOST` if they match the
+domain you passed, `DATA` if they are the data's own extent, `USER` only if they are neither. The
+dialog pre-fills the data extent whenever the data's coordinates are in use, so accepting it
+unchanged reports `DATA`.
 
 ### Convenience members
 
@@ -61,11 +69,35 @@ BiwtInput(
     host_cell_type_names=[],              # optional
     domain_accepted=False,                # optional
     host_name="Host",                     # optional
-    extra_cell_template_paths=[],         # optional
+    cell_template_paths=[],               # optional
+    name_matches=None,                    # optional
+    name_match_cutoff=0.85,               # optional
 )
 ```
 
 Every field has a default, so `BiwtInput()` is valid.
+
+### When BIWT reads it
+
+BIWT resolves its input at each import and holds a copy for that run, so a host change mid-run is
+not seen until the next one.
+
+If your host outlives one run — an embedded tab rather than a popup — pass a zero-argument callable
+returning a `BiwtInput` ([`BiwtInputSource`][biwt.types.BiwtInputSource]) instead of an instance,
+and you need no refresh hook:
+
+```python
+def host_input():
+    return BiwtInput(preferred_domain=my_app.current_domain(),
+                     host_cell_type_names=my_app.cell_type_names(),
+                     host_name="My App")
+
+widget = create_biwt_widget(host_input, on_complete=save)
+```
+
+Keep it cheap and free of side effects; it runs inside the import path. If it raises, BIWT logs and
+keeps the last good input rather than failing the import. `domain_accepted` is the exception to all
+of this — read once at construction, since the checkbox it seeds is authoritative from then on.
 
 **`preferred_domain`** is the domain BIWT places into unless the user overrides it in the
 [domain editor](../guide/domain.md). It defaults to `DomainSpec.default()` — the ±500 µm ×
@@ -73,9 +105,10 @@ Every field has a default, so `BiwtInput()` is valid.
 when it could not infer a domain from the data. Pass your own if your application has a
 meaningful one; that is the normal case and worth doing.
 
-**`host_cell_type_names`** — a list of the cell types your application already defines. Used
-only for rename suggestions; BIWT does not require them and does not constrain the user to
-them.
+**`host_cell_type_names`** — the cell types your application already defines; optional, and never
+binding on the user. Used for [rename suggestions](../guide/rename-cell-types.md) and as candidates
+at the [cell-parameters step](../guide/cell-parameters.md), where assigning one comes back marked
+`HOST_SOURCE` (see `cell_templates` below). A name defined both ways resolves to the host.
 
 **`domain_accepted`** — set `True` to pre-tick **Skip domain validation** on the import screen,
 suppressing the automatic domain-mismatch dialog. This sets the checkbox's default; the user
@@ -84,8 +117,9 @@ can untick it and get the dialog back.
 **`host_name`** — appears in the domain editor as `Use <host_name> Domain`. Set it; the
 default `"Host"` reads like a placeholder because it is one.
 
-**`extra_cell_template_paths`** — paths to TOML files, each mapping a template name to a
-PhysiCell phenotype XML block:
+**`cell_template_paths`** — paths to TOML files, each mapping a template name to its content.
+The content is opaque to BIWT: read as text, never parsed, handed back verbatim. For a
+PhysiCell host it is a phenotype block:
 
 ```toml
 "My Cell Type" = """
@@ -95,9 +129,32 @@ PhysiCell phenotype XML block:
 """
 ```
 
-These merge with the 29 built-ins in the parameter dropdowns. This is the supported extension
-point for framework- or lab-specific parameter databases — and the interim bridge until the
-PhysiCell-specific templates move into a separate `biwt-physicell` package.
+**BIWT ships no templates**, so these files are the parameter library — pass them if you want
+the [cell parameters step](../guide/cell-parameters.md) to offer anything. The user can also
+load further files there at runtime, which is why the result reports each template's source
+path. A non-string value in the file (a stray `[section]` header, a number) is rejected with a
+message naming the key. [Templates and name matching](templates-and-matching.md) covers the
+file rules and a worked assembly example.
+
+**`name_matches`** — a `Callable[[str, str], bool]` deciding whether two strings name the same
+cell type. Used for rename suggestions and template pre-selection. Supplying it replaces
+BIWT's default **and** `name_match_cutoff`.
+
+BIWT calls it once per (cell type, candidate) pair every time it resolves matches — at the
+cell-parameters step that is one call per cell type per template — and it re-resolves whenever a
+template file is loaded or an auto-match button is pressed. Two requirements follow:
+
+- **Deterministic.** The same pair must always get the same answer — the call count is not part
+  of the contract, so anything varying between calls can make two identical rows disagree.
+- **No side effects.** It runs inside widget construction and Qt signal handlers, so mutating
+  the session, showing UI, or doing I/O from it fires at moments you did not choose.
+
+**`name_match_cutoff`** — similarity threshold for BIWT's default matcher only; ignored when
+`name_matches` is given. That default first requires the two names to hold the same digit runs
+(so `M1 Macrophage` never matches `M2 Macrophage`, nor `CD4 T Cell` a `CD8` one), then requires
+`difflib.SequenceMatcher(...).ratio()` on the casefolded strings to reach the cutoff.
+[Templates and name matching](templates-and-matching.md) spells it out, with the cases the
+digit rule exists to reject and the one gap it does not cover.
 
 ## `BiwtResult` — BIWT to host
 
@@ -106,7 +163,7 @@ BiwtResult(
     coordinates=df,                  # DataFrame: x, y, z, type
     cell_type_map={...},             # original label -> final name | None
     domain_used=domain,              # DomainSpec actually applied
-    cell_definitions_xml=None,       # PhysiCell XML string, or None
+    cell_templates={},               # cell type -> (path, name, content)
 )
 ```
 
@@ -119,9 +176,32 @@ user what happened to each input cluster.
 
 **`domain_used`** — see `source` above.
 
-**`cell_definitions_xml`** — a complete PhysiCell settings XML string when the user assigned
-[phenotype templates](../guide/cell-parameters.md), `None` otherwise. Always check before
-using it.
+**`cell_templates`** — the [templates](../guide/cell-parameters.md) the user assigned, mapping
+each final cell-type name to `(path, name, content)`: the absolute path of the `.toml` file it
+came from, its key in that file, and that key's value verbatim, surrounding whitespace
+included.
+
+One value of `path` is not a path: [`HOST_SOURCE`][biwt.types.HOST_SOURCE] (`"<host>"`) means the
+user picked one of the names you passed in `host_cell_type_names`, i.e. *a cell type you already
+define*. `content` is then `""`, so check the marker before using it — what to do about the match
+is yours to decide.
+
+```python
+from biwt.types import HOST_SOURCE
+
+for cell_type, (path, name, content) in result.cell_templates.items():
+    if path == HOST_SOURCE:
+        reuse_existing_definition(cell_type, name)   # `name` is one of yours
+    else:
+        build_definition_from(cell_type, content)
+```
+
+Assembling anything out of that is yours to do — BIWT generates no XML; see
+[templates and name matching](templates-and-matching.md) for a worked example. Types the user left
+unassigned are **absent**, so `{}` is normal (the step has a Skip button and a per-type
+`(none)` option): check membership per type rather than assuming full coverage. Two types may
+carry the same `name` from different files, so `path` and `name` together identify a template
+while `name` alone does not.
 
 ### `to_csv(path)`
 
@@ -148,24 +228,19 @@ import sys
 from PyQt5.QtWidgets import QApplication, QMainWindow
 
 from biwt.gui.walkthrough import create_biwt_widget
-from biwt.types import BiwtInput, DomainSpec
+from biwt.types import BiwtInput, DomainSource, DomainSpec
 
 
 def on_complete(result):
-    if result is None:
-        print("user cancelled")
-        return
-
     print(f"{len(result.coordinates)} cells, "
           f"{result.coordinates['type'].nunique()} types")
 
-    if result.domain_used.source != "preferred":
+    if result.domain_used.source != DomainSource.HOST:
         print(f"note: domain changed to {result.domain_used.source}")
 
     result.to_csv("cells.csv")
-    if result.cell_definitions_xml:
-        with open("PhysiCell_settings.xml", "w") as f:
-            f.write(result.cell_definitions_xml)
+    for cell_type, (path, name, content) in result.cell_templates.items():
+        print(f"{cell_type}: template {name!r} from {path}")
 
 
 app = QApplication(sys.argv)

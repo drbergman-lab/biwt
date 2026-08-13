@@ -38,4 +38,5 @@ and writes it. Internal, but the clearest single place to understand what the wi
       show_root_heading: true
       show_root_toc_entry: false
       members:
-        - closeEvent
+        - advance
+        - go_back_to_prev_window

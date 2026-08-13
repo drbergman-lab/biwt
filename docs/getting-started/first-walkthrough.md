@@ -56,8 +56,13 @@ Nothing writes to disk unless your `on_complete` says so.
 
 ## 3. Walk through it
 
-Click **Import file…** and pick `demo.csv`. What happens next depends on your data, because
-BIWT skips steps that do not apply. With this file you will see:
+Click **Import file…** and pick `demo.csv`, or drop the file onto the dashed area. The
+**Supported** chips below it show which formats this environment can actually read — a ✗ means the
+optional dependency for that format is not installed, and hovering says which one and how to get
+it.
+
+What happens next depends on your data, because BIWT skips steps that do not apply. With this file
+you will see:
 
 | Step | What you do | Why this file triggers it |
 |---|---|---|
@@ -66,7 +71,7 @@ BIWT skips steps that do not apply. With this file you will see:
 | [Edit cell types](../guide/edit-cell-types.md) | Keep all three | Always shown |
 | [Rename cell types](../guide/rename-cell-types.md) | Accept the defaults | Always shown |
 | [Positions](../guide/positions.md) | Look at the preview, click through | Always shown |
-| [Cell parameters](../guide/cell-parameters.md) | Pick any template, or none | Always shown |
+| [Cell parameters](../guide/cell-parameters.md) | Click Skip, or Continue — with no template file supplied every type shows `(none)` | Always shown |
 
 Two steps do **not** appear: [spot deconvolution](../guide/spot-deconvolution.md) (this file
 has no probability columns) and [cell counts](../guide/cell-counts.md) (you chose to use the

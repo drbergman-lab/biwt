@@ -9,11 +9,12 @@ from PyQt5.QtWidgets import (
     QScrollArea, QWidget, QButtonGroup, QComboBox,
     QLineEdit, QSplitter,
 )
-from PyQt5.QtCore import Qt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 
+from biwt.core.cell_types import alpha_key
+from biwt.gui.widgets import set_elided_text
 from biwt.gui.windows.base import BiwinformaticsWalkthroughWindow
 from biwt.gui.widgets import QHLine, GoBackButton, LegendWindow
 
@@ -49,11 +50,16 @@ class EditCellTypesWindow(BiwinformaticsWalkthroughWindow):
         s = walkthrough.session
 
         # --- initialize edit dict (all kept by default) -------------------
-        s.cell_type_dict_on_edit = {ct: ct for ct in sorted(s.cell_types_list_original)}
+        s.cell_type_dict_on_edit = {ct: ct for ct in sorted(s.cell_types_list_original, key=alpha_key)}
 
         self._merge_id = 0
         self._checkbox: dict[str, QCheckBox] = {}
         self._keep_btn: dict[str, QPushButton] = {}
+        # cell type → id of the merge group it belongs to.  Absent means kept or
+        # deleted.  This cannot be read back out of ``cell_type_dict_on_edit``:
+        # a group's first member maps to itself, exactly as a kept type does, so
+        # the two are indistinguishable there.
+        self._merge_group: dict[str, int] = {}
 
         label = QLabel(
             f"The following cell types were found.<br>"
@@ -71,9 +77,10 @@ class EditCellTypesWindow(BiwinformaticsWalkthroughWindow):
         inner_vbox = QVBoxLayout()
         self._checkbox_group = QButtonGroup(exclusive=False)
         self._checkbox_group.buttonToggled.connect(self._on_toggle)
-        for ct in sorted(s.cell_types_list_original):
+        for ct in sorted(s.cell_types_list_original, key=alpha_key):
             hbox = QHBoxLayout()
-            cb = QCheckBox(ct)
+            cb = QCheckBox()
+            set_elided_text(cb, ct)
             cb.setStyleSheet(_CB_STYLE(_KEEP_COLOR))
             cb.setFixedHeight(30)
             self._checkbox_group.addButton(cb)
@@ -279,44 +286,56 @@ class EditCellTypesWindow(BiwinformaticsWalkthroughWindow):
         ct = self.sender().objectName()
         self._set_keep(ct)
 
-    def _dissolve_solo_merge_partner(self, ct: str, old_target: str) -> None:
-        """If *ct* leaving a merge group leaves exactly one partner, restore it to 'keep'."""
+    def _reform_merge_group(self, ct: str, group: int) -> None:
+        """Repair merge group *group* after *ct* left it, by Keep or by Delete.
+
+        Two repairs are needed, and only the first used to happen.
+
+        A group of one is not a merge, so a lone survivor goes back to being kept
+        rather than sitting in a group by itself.
+
+        A group of two or more needs a new target if *ct* was the one they pointed
+        at.  ``_merge_cb`` makes the first checked member the target, so a departing
+        leader leaves everyone else still naming it: they would be folded into a type
+        the user just took out of the group — or, after Delete, into a type that is
+        not in the output at all.  The new target is the first remaining member,
+        which is the same rule ``_merge_cb`` applies.
+        """
         s = self.walkthrough.session
-        remaining = [
-            k for k, v in s.cell_type_dict_on_edit.items()
-            if k != ct and v == old_target and v is not None
-        ]
+        remaining = [k for k, g in self._merge_group.items() if k != ct and g == group]
         if len(remaining) == 1:
             self._set_keep(remaining[0], check_merge_group=False)
+        elif remaining and s.cell_type_dict_on_edit.get(remaining[0]) == ct:
+            for member in remaining:
+                s.cell_type_dict_on_edit[member] = remaining[0]
 
     def _set_keep(self, ct: str, check_merge_group: bool = True) -> None:
         s = self.walkthrough.session
-        old_target = s.cell_type_dict_on_edit[ct]   # may be a merge-group target
-        old_text   = self._checkbox[ct].text()       # capture before setText
+        old_group = self._merge_group.pop(ct, None)
         s.cell_type_dict_on_edit[ct] = ct
         self._checkbox[ct].setEnabled(True)
         self._checkbox[ct].setStyleSheet(_CB_STYLE(_KEEP_COLOR))
         self._checkbox[ct].setChecked(False)
-        self._checkbox[ct].setText(ct)
+        set_elided_text(self._checkbox[ct], ct)
         self._keep_btn[ct].setEnabled(False)
 
-        if check_merge_group and "\u21d2 Merge Gp." in old_text:
-            self._dissolve_solo_merge_partner(ct, old_target)
+        if check_merge_group and old_group is not None:
+            self._reform_merge_group(ct, old_group)
 
     def _delete_cb(self) -> None:
         self.walkthrough.stale_futures = True
         s = self.walkthrough.session
         for ct, cb in self._checkbox.items():
             if cb.isChecked():
-                old_target = s.cell_type_dict_on_edit[ct]
+                old_group = self._merge_group.pop(ct, None)
                 s.cell_type_dict_on_edit[ct] = None
                 cb.setChecked(False)
                 cb.setEnabled(False)
                 cb.setStyleSheet(_CB_STYLE(_DELETE_COLOR))
                 self._keep_btn[ct].setEnabled(True)
 
-                if old_target is not None:
-                    self._dissolve_solo_merge_partner(ct, old_target)
+                if old_group is not None:
+                    self._reform_merge_group(ct, old_group)
 
     def _merge_cb(self) -> None:
         self.walkthrough.stale_futures = True
@@ -328,11 +347,15 @@ class EditCellTypesWindow(BiwinformaticsWalkthroughWindow):
                 if first_name is None:
                     first_name = ct
                 s.cell_type_dict_on_edit[ct] = first_name
+                self._merge_group[ct] = self._merge_id
                 cb.setChecked(False)
                 cb.setEnabled(False)
                 cb.setStyleSheet(_CB_STYLE(_MERGE_COLOR))
-                cb.setText(f"{ct} \u21d2 Merge Gp. #{self._merge_id}")
+                set_elided_text(cb, ct, suffix=f" \u21d2 Merge Gp. #{self._merge_id}")
                 self._keep_btn[ct].setEnabled(True)
+                # Disabled until Keep pulls it back out, so a type cannot be
+                # merged into a second group while it is in this one.  That is
+                # what keeps the group bookkeeping a tree and not a graph.
 
     # ------------------------------------------------------------------
     # process_window

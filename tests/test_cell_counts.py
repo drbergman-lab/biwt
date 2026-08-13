@@ -30,7 +30,7 @@ def _counts_window(zero_type=None):
     s.data = data_loader.load(str(FIXTURES / "nonspatial.csv"))
     s.current_column = "type"
     s.collect_cell_type_data()
-    s.use_spatial_data = False
+    s.spatial_query_answer = False
     s.cell_type_dict_on_edit = {ct: ct for ct in s.cell_types_list_original}
     s.compute_intermediate_types()
     s.cell_types_list_final = list(s.intermediate_types)
@@ -81,3 +81,22 @@ class TestProportionMode:
         assert win._w_prop["Tumor"].text() == "2"
         assert win._w_manual["T_cell"].text() == "3"
         assert win._w_manual["Tumor"].text() == "2"
+
+
+def test_a_long_cell_type_name_does_not_widen_the_counts_table(qapp):
+    """The name column wraps instead of pushing the numeric columns off-screen."""
+    from PyQt5.QtWidgets import QLabel
+
+    from biwt.gui.widgets import ROW_LABEL_MAX_WIDTH
+
+    long_name = "Epithelial-cancer" * 6
+    win = _counts_window()
+    s = win.walkthrough.session
+    s.cell_types_list_final = [long_name]
+    s.cell_counts = {long_name: 6}
+    s.cell_volume = {long_name: 2494.0}
+    rebuilt = CellCountsWindow(win.walkthrough)
+
+    label = next(lbl for lbl in rebuilt.findChildren(QLabel) if lbl.text() == long_name)
+    assert label.wordWrap()
+    assert label.maximumWidth() == ROW_LABEL_MAX_WIDTH

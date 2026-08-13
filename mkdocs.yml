@@ -101,6 +101,7 @@ nav:
   - Embedding BIWT:
       - integration/index.md
       - The API contract: integration/api-contract.md
+      - Templates and name matching: integration/templates-and-matching.md
       - PhysiCell Studio: integration/studio.md
   - API reference:
       - reference/index.md

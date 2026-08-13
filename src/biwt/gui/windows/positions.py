@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import copy
 import os
 
 import numpy as np
@@ -16,19 +15,20 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from PyQt5 import QtCore, QtGui
 from PyQt5.QtWidgets import (
     QApplication, QDialog, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QCheckBox, QPushButton, QScrollArea, QButtonGroup, QGridLayout,
-    QLineEdit, QSplitter, QSpinBox, QMessageBox, QShortcut,
+    QPushButton, QScrollArea, QButtonGroup, QGridLayout,
+    QSplitter, QSpinBox, QMessageBox, QShortcut,
 )
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QIcon, QKeySequence
 
 from biwt.gui.windows.base import BiwinformaticsWalkthroughWindow
 from biwt.gui.widgets import (
-    GoBackButton, ContinueButton, LegendWindow, QCheckBox_custom, QLineEdit_custom,
+    GoBackButton, ContinueButton, LegendWindow, QCheckBox_custom, QLineEdit_custom, set_elided_text,
 )
 from biwt.core.domain import classify_domain_mismatch
 from biwt.core.positioning import apportion_spot_cells, compute_spatial_placement
 from biwt.gui.walkthrough import DomainEditorDialog, _build_mismatch_message, _scale_domain
+from biwt.types import DomainSource
 
 
 # ---------------------------------------------------------------------------
@@ -232,12 +232,15 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
         s = self.walkthrough.session
         if s.domain_accepted:
             return
-        # Domain doesn't affect non-spatial placement (random positions fill the domain).
+        # Domain doesn't affect non-spatial placement (random positions fill the
+        # domain), so there is nothing to ask.  Deliberately without latching
+        # `domain_accepted`: this window is rebuilt when the user goes back and
+        # switches the spatial answer to Yes, and a flag set on the non-spatial pass
+        # would suppress the one prompt that lets them adopt the data extent.
         if not s.use_spatial_data:
-            s.domain_accepted = True
             return
         data_d = s.data_domain   # raw coordinate range (data units)
-        if data_d is None or data_d.source == "default":
+        if data_d is None or data_d.source == DomainSource.DEFAULT:
             s.domain_accepted = True
             return
         # Compare the data extent in host units (raw × factor) vs the domain.
@@ -246,14 +249,15 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
         if mismatch is None:
             s.domain_accepted = True
             return
-        host_name = s.biwt_input.host_name
+        host_name = s.biwt_input.host_label
         msg = _build_mismatch_message(mismatch, data_host, s.effective_domain, host_name)
         dlg = DomainEditorDialog(
             self, data_d, s.preferred_domain,
             context_message=msg,
-            initial_domain=s.user_domain,   # None on first open ⇒ dialog shows raw×factor
+            initial_domain=s.user_domain,   # None on first open ⇒ the preset decides
+            initial_preset=DomainSource.DATA,   # only reached when spatial is in use
             host_name=host_name,
-            file_factor=(s.data.microns_per_data_unit if s.data else None),
+            file_factor=(s.data.host_units_per_data_unit if s.data else None),
             current_factor=s.scale_factor,
             apply_scale=s.apply_scale,
         )
@@ -278,7 +282,6 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
         self.plot_zmin = d.zmin
         self.plot_zmax = d.zmax
         self.plot_dz   = d.zmax - d.zmin
-        self.plot_zdel = 20.0  # default PhysiCell voxel thickness
         self.plot_is_2d = d.is_2d
 
     def _close_legend(self) -> None:
@@ -346,7 +349,8 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
 
         self.checkbox_dict: dict[str, QCheckBox_custom] = {}
         for ct in s.cell_types_list_final:
-            cb = QCheckBox_custom(ct)
+            cb = QCheckBox_custom("")
+            set_elided_text(cb, ct)
             placeable = self._is_placeable(ct)
             # Pre-select all when the spatial plotter is the default.
             cb.setChecked(s.use_spatial_data and placeable)
@@ -1471,7 +1475,6 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
     # ------------------------------------------------------------------
 
     def plot_cell_pos(self) -> None:
-        s = self.walkthrough.session
         self.preview_constrained_to_axes = False
         n_per_spot = self.num_box.value() if hasattr(self, "num_box") else 1
 
@@ -1574,8 +1577,10 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
         ))
 
         for idx, pos in enumerate(coords_all):
+            # spatial_base_coords comes from spatial_data_final, so index the
+            # post-rename dicts that were built alongside it.
             probs = {
-                k: v for k, v in s.cell_prob_feature_dicts[idx].items()
+                k: v for k, v in s.cell_prob_feature_dicts_final[idx].items()
                 if k in selected
             }
             if not probs:
@@ -2115,8 +2120,10 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
             self, data_d, s.preferred_domain,
             context_message="",
             initial_domain=s.user_domain,   # revisit current domain if set
-            host_name=s.biwt_input.host_name,
-            file_factor=(s.data.microns_per_data_unit if s.data else None),
+            initial_preset=(DomainSource.DATA if s.use_spatial_data
+                            else DomainSource.HOST),
+            host_name=s.biwt_input.host_label,
+            file_factor=(s.data.host_units_per_data_unit if s.data else None),
             current_factor=s.scale_factor,
             apply_scale=s.apply_scale,
         )

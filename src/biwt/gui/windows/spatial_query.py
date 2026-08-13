@@ -32,7 +32,7 @@ class SpatialQueryWindow(BiwinformaticsWalkthroughWindow):
         self.yes_no_group.idToggled.connect(self._toggled)
         self.yes_rb.setChecked(True)
         # Initialize session default
-        walkthrough.session.use_spatial_data = True
+        walkthrough.session.spatial_query_answer = True
 
         hbox_yn = QHBoxLayout()
         hbox_yn.addWidget(self.yes_rb)
@@ -45,9 +45,12 @@ class SpatialQueryWindow(BiwinformaticsWalkthroughWindow):
         vbox.addLayout(self.create_nav_bar())
         self.setLayout(vbox)
 
-    def _toggled(self, btn_id: int) -> None:
+    def _toggled(self, btn_id: int, checked: bool) -> None:
+        # idToggled fires for the button being unchecked too; ignore that one.
+        if not checked:
+            return
         self.walkthrough.stale_futures = True
-        self.walkthrough.session.use_spatial_data = (btn_id == 0)
+        self.walkthrough.session.spatial_query_answer = (btn_id == 0)
 
     def process_window(self) -> None:
         self.walkthrough.advance()

@@ -173,3 +173,147 @@ def test_error_message_is_html_escaped(widget, monkeypatch):
     text = boxes[0].text()
     assert "&lt;class&gt;" in text
     assert "<class>" not in text
+
+
+def test_finish_returns_cell_templates_and_no_xml(widget):
+    """_finish hands the template triples straight through and builds no XML.
+
+    Also the only coverage of the function-local imports _finish used to carry:
+    a stale one would otherwise surface only at the very end of a real run.
+    """
+    got = []
+    widget.on_complete = got.append
+    widget.session.cell_templates = {
+        "Tumor": ("/tmp/t.toml", "Tumor", "OPAQUE-TUMOR"),
+    }
+    widget._finish()
+
+    result = got[0]
+    assert result.cell_templates == {
+        "Tumor": ("/tmp/t.toml", "Tumor", "OPAQUE-TUMOR"),
+    }
+    assert not hasattr(result, "cell_definitions_xml")
+
+
+def test_finish_returns_the_cell_type_map(widget):
+    """The host is promised an audit trail: every original label to its final
+    name, None where the type was deleted.  It used to be empty on every run."""
+    got = []
+    widget.on_complete = got.append
+    s = widget.session
+    s.cell_types_list_original = ["Epithelial-cancer", "Epithelial-unspecified", "B cell"]
+    s.cell_type_dict_on_rename = {
+        "Epithelial-cancer": "tumor", "Epithelial-unspecified": "tumor",
+    }
+    widget._finish()
+
+    assert got[0].cell_type_map == {
+        "Epithelial-cancer": "tumor",
+        "Epithelial-unspecified": "tumor",
+        "B cell": None,
+    }
+
+
+def test_the_version_is_visible_on_the_home_screen(widget):
+    """A host embeds BIWT as a tab, where no window title is ever shown, so the
+    version has to be on the screen itself."""
+    from PyQt5.QtWidgets import QLabel
+
+    import biwt
+
+    shown = " ".join(lbl.text() for lbl in widget.findChildren(QLabel))
+    assert biwt.__version__ in shown
+    assert biwt.__version__ in widget.windowTitle()
+
+
+# ---------------------------------------------------------------------------
+# The landing window
+# ---------------------------------------------------------------------------
+
+
+def test_a_chip_is_shown_for_every_format(widget):
+    from biwt.core.data_loader import supported_formats
+
+    shown = " ".join(_labels(widget))
+    for fmt in supported_formats():
+        assert fmt.label in shown
+
+
+def test_an_unavailable_format_says_how_to_install_it(widget, monkeypatch):
+    """The point of the chips: BIWT used to reveal a missing dependency only
+    after the user picked a file and read an error dialog."""
+    from PyQt5.QtWidgets import QLabel
+
+    from biwt.core.data_loader import INSTALL_DOCS_URL, supported_formats
+
+    unavailable = [f for f in supported_formats() if not f.available]
+    if not unavailable:
+        pytest.skip("every optional data dependency is installed here")
+
+    fmt = unavailable[0]
+    chip = next(lbl for lbl in widget.findChildren(QLabel) if fmt.label in lbl.text())
+    assert "✗" in chip.text()
+    assert fmt.extra in chip.toolTip()
+    assert INSTALL_DOCS_URL in chip.toolTip()
+
+
+def test_the_domain_shortcut_names_the_step_it_affects(widget):
+    # It suppresses the dialog at the *positions* step; the old label said
+    # "on import", which is not when it applies.
+    assert "import" not in widget._domain_accepted_cb.text().lower()
+    assert "positions step" in widget._domain_accepted_cb.toolTip()
+
+
+def test_both_shortcuts_explain_what_they_skip(widget):
+    captions = " ".join(_labels(widget)).lower()
+    assert "skips the cluster-column step" in captions
+    assert "positions step" in captions
+
+
+def _drop(widget, *paths):
+    from PyQt5.QtCore import QMimeData, QPointF, Qt, QUrl
+    from PyQt5.QtGui import QDropEvent
+
+    mime = QMimeData()
+    mime.setUrls([QUrl.fromLocalFile(str(p)) for p in paths])
+    event = QDropEvent(QPointF(10, 10), Qt.CopyAction, mime,
+                       Qt.LeftButton, Qt.NoModifier)
+    widget.dropEvent(event)
+    return event
+
+
+def test_dropping_a_file_imports_it(widget):
+    _drop(widget, FIXTURES / "nonspatial.csv")
+    assert widget.session.data is not None
+    assert widget.session.data.n_cells == 6
+    assert widget.window is not None          # the walkthrough started
+
+
+def test_dropping_an_unreadable_extension_does_nothing(widget, tmp_path):
+    junk = tmp_path / "notes.txt"
+    junk.write_text("nope")
+    _drop(widget, junk)
+    assert widget.session.data is None
+
+
+def test_dropping_several_files_does_nothing(widget):
+    _drop(widget, FIXTURES / "nonspatial.csv", FIXTURES / "spatial.csv")
+    assert widget.session.data is None
+
+
+def test_the_drop_zone_highlights_only_for_a_droppable_file(widget, tmp_path):
+    from PyQt5.QtCore import QMimeData, QPointF, Qt, QUrl
+    from PyQt5.QtGui import QDragEnterEvent
+
+    def _drag(path):
+        mime = QMimeData()
+        mime.setUrls([QUrl.fromLocalFile(str(path))])
+        event = QDragEnterEvent(QPointF(10, 10).toPoint(), Qt.CopyAction, mime,
+                                Qt.LeftButton, Qt.NoModifier)
+        widget.dragEnterEvent(event)
+        return event.isAccepted()
+
+    junk = tmp_path / "notes.txt"
+    junk.write_text("nope")
+    assert _drag(FIXTURES / "nonspatial.csv")
+    assert not _drag(junk)

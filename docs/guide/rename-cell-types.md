@@ -13,8 +13,10 @@ pre-filled with its first original name. Change any of them, or accept them all.
   right.</figcaption>
 </figure>
 
-The names you set here are what appear in the `type` column of the output and in the
-generated PhysiCell cell-definitions XML. They are the names your simulation config will use.
+The names you set here appear in the `type` column of the output, in
+[`cell_type_map`](result.md), and as the keys of
+[`cell_templates`](cell-parameters.md). Whether they become cell definitions in a
+simulation config is the host's decision — BIWT generates none.
 
 ## Why bother
 
@@ -33,10 +35,16 @@ If the host application passed BIWT its current cell-type names — Studio does 
 cell-definitions tab — BIWT looks for a match and offers it as **placeholder text** in each
 field.
 
-The matching is deliberately simple, not fuzzy: a case-insensitive exact match first, then
-the first host name that either contains your label or is contained by it — so `CD8` matches
-a host `CD8_T_cell`. There is no scoring or ranking, so if several host names could match by
-containment you get whichever the host listed first, not the best one.
+A case-insensitive exact match wins outright. Failing that, BIWT compares the names for
+similarity and takes the first host name it accepts, in alphabetical order — so `Fibroblasts`
+matches a host `Fibroblast`, but nothing is ranked and you get the first acceptable name, not
+the best one.
+
+Digits are treated as significant rather than as spelling noise, so `M1 Macrophage` is never
+suggested for `M2 Macrophage`, nor a `CD4` type for a `CD8` one, even though those names are
+otherwise near-identical. Pairs distinguished by a non-numeric qualifier — `PD-1hi` versus
+`PD-1lo` — are not caught; a host with names of that shape can supply its own comparison via
+`BiwtInput.name_matches`, which replaces BIWT's rule entirely.
 
 Placeholder text only shows in an *empty* field, and every field arrives pre-filled with your
 original name — so in practice the suggestion sits hidden behind it. Clear a field and it

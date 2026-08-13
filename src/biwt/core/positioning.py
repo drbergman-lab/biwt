@@ -3,7 +3,7 @@ Spatial coordinate transformation and IC DataFrame construction.
 
 The core operation is ``scale_spatial_to_domain``: it takes raw spatial
 coordinates (arbitrary units, arbitrary origin) and maps them into the
-PhysiCell simulation domain described by a ``DomainSpec``.
+simulation domain described by a ``DomainSpec``.
 
 ``build_ic_dataframe`` then collapses per-cell-type coordinate dicts into
 the flat ``BiwtResult.coordinates`` DataFrame.
@@ -27,7 +27,7 @@ def scale_spatial_to_domain(
     domain: DomainSpec,
     preserve_aspect: bool = True,
 ) -> np.ndarray:
-    """Map raw spatial coordinates into the PhysiCell domain.
+    """Map raw spatial coordinates into the host's domain.
 
     Parameters
     ----------
@@ -35,7 +35,7 @@ def scale_spatial_to_domain(
         ``(N, 2)`` or ``(N, 3)`` float array of spatial positions in any
         arbitrary unit system (pixels, arbitrary spatial units, etc.).
     domain:
-        Target PhysiCell domain in microns.
+        Target domain, in whatever units ``domain.units`` names.
     preserve_aspect:
         If ``True``, scale both axes by the same factor (the smaller of the
         two domain extents divided by the data extent) so the tissue shape
