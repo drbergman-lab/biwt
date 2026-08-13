@@ -827,6 +827,14 @@ the new 1582×1016 domain screenshot went to 1600×1027 and **338 KB → 405 KB*
 with the text interpolated and softened. Only run it on captures wider than
 1600.
 
+**A marginal overshoot is not worth the cap either.** The same re-encode that
+inflates an under-cap image also inflates one barely over it, and there is no
+pixel saving to pay for it: `cell-counts-confluence` at 1604×808 went **296 KB
+→ 349 KB** for a four-pixel trim, text interpolated. It is committed at its
+native 1604 and will read as over the cap to anything that checks — that is
+deliberate. The cap earns its keep on a real overshoot, where the two positions
+captures came down 38% and 41% from 2528.
+
 For a capture already under the cap, the win is metadata, not pixels. A raw
 `screencapture` PNG carries a ~3 KB Display-P3 ICC profile plus `cICP`, `eXIf`,
 `pHYs`, an XMP packet and Apple's `iDOT` chunk, and writes IDAT in 16 KB pieces.
