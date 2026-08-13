@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -146,6 +147,42 @@ def add_probability_columns(obs: pd.DataFrame, rng: np.random.Generator) -> None
         obs[f"{t}_probability"] = np.round(weights[:, i], 4)
 
 
+# Two template libraries for the cell-parameters screenshot.  Deliberately two:
+# with one file loaded the source is never in question and BIWT drops the
+# qualifier entirely, so the right-aligned source column — the thing the picture
+# is meant to show — only appears from the second file onward.  The names match
+# the final cell types this dataset produces after the two documented merges, so
+# every row lands on a name match rather than a fallback.
+#
+# Content is opaque to BIWT and reaches the host verbatim, so what is in the
+# values only has to look plausible to a reader.
+TEMPLATE_LIBRARIES = {
+    "screenshot_templates_core.toml": {
+        "default": "<!-- host default: cycle, death, mechanics -->",
+        "Tumor": "<!-- proliferative, oxygen-dependent -->",
+        "Macrophage": "<!-- motile, phagocytic -->",
+    },
+    # A deliberately longer file name, so the aligned source column has something
+    # to align against.
+    "screenshot_templates_immune_panel.toml": {
+        "CD8_T_cell": "<!-- cytotoxic, chemotaxis toward tumor -->",
+        "Fibroblast": "<!-- matrix-depositing, low motility -->",
+    },
+}
+
+
+def write_template_libraries(directory) -> list:
+    """Write the .toml libraries beside the data file; return their paths."""
+    written = []
+    for name, templates in TEMPLATE_LIBRARIES.items():
+        path = Path(directory) / name
+        path.write_text("".join(
+            f'"{k}" = """{v}"""\n' for k, v in templates.items()
+        ))
+        written.append(path)
+    return written
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         description="Generate synthetic Visium-like data for BIWT doc screenshots.",
@@ -196,6 +233,8 @@ def main(argv=None) -> int:
 
     adata.write_h5ad(args.out)
 
+    libraries = write_template_libraries(Path(args.out).resolve().parent)
+
     um_per_px = VISIUM_SPOT_DIAMETER_UM / SPOT_DIAMETER_FULLRES
     span_px = xy.max(axis=0) - xy.min(axis=0)
     span_um = span_px * um_per_px
@@ -209,6 +248,12 @@ def main(argv=None) -> int:
     if args.deconv:
         print("  probability columns added -> spot-deconvolution step will appear")
     print()
+    print("\nTemplate libraries for the cell-parameters screen:")
+    for path in libraries:
+        print(f"  {path}")
+    print("  Load BOTH via 'Add templates from file...' — one file alone shows")
+    print("  no source column, which is the part worth picturing.")
+
     print("Screenshot passes (same file, twice):")
     print("  1. answer YES at the spatial query -> import, cluster column,")
     print("     edit cell types, rename, positions, domain editor, cell parameters")
