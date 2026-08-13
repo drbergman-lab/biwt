@@ -474,6 +474,78 @@ class TestManualDomainEditor:
         assert domain.source == DomainSource.HOST
 
 
+class TestFinishing:
+    """Leaving the last step must not leave the user with nothing.
+
+    ``advance`` used to hide the current window before discovering there was no
+    next one, so ``on_complete`` fired against a blank widget — and the step was
+    pushed onto the history while still being the current window, so Go back
+    would have returned to the window the user was already on.
+    """
+
+    @staticmethod
+    def _at_last_step(make_widget, drive_import, qapp, monkeypatch):
+        from PyQt5.QtWidgets import QDialog
+
+        from biwt.gui.walkthrough import DomainEditorDialog
+
+        monkeypatch.setattr(DomainEditorDialog, "exec_",
+                            lambda self: QDialog.Rejected)
+        w, completed = make_widget()
+        drive_import(w, "nonspatial.csv")
+        for _ in range(8):
+            qapp.processEvents()
+            if _name(w) == "LoadCellParametersWindow":
+                break
+            _continue(w)
+        assert _name(w) == "LoadCellParametersWindow"
+        w.window.show()
+        qapp.processEvents()
+        return w, completed
+
+    @pytest.mark.parametrize("leave", ["skip", "continue"])
+    def test_the_last_step_stays_on_screen(
+        self, make_widget, drive_import, qapp, monkeypatch, leave
+    ):
+        w, completed = self._at_last_step(make_widget, drive_import, qapp, monkeypatch)
+        last = w.window
+        (last._skip_cb if leave == "skip" else last.process_window)()
+        qapp.processEvents()
+
+        assert len(completed) == 1
+        assert w.window is last
+        assert last.isVisible()
+
+    def test_go_back_reaches_the_previous_step_not_this_one(
+        self, make_widget, drive_import, qapp, monkeypatch
+    ):
+        w, completed = self._at_last_step(make_widget, drive_import, qapp, monkeypatch)
+        last = w.window
+        last._skip_cb()
+        qapp.processEvents()
+
+        w.go_back_to_prev_window()
+        qapp.processEvents()
+        assert w.window is not last
+        assert _name(w) == "PositionsWindow"
+
+    def test_forward_again_returns_without_re_emitting(
+        self, make_widget, drive_import, qapp, monkeypatch
+    ):
+        """The cached window is reused, so nothing recomputes and nothing re-fires."""
+        w, completed = self._at_last_step(make_widget, drive_import, qapp, monkeypatch)
+        last = w.window
+        last._skip_cb()
+        qapp.processEvents()
+        w.go_back_to_prev_window()
+        qapp.processEvents()
+        _continue(w)
+        qapp.processEvents()
+
+        assert w.window is last
+        assert len(completed) == 1
+
+
 class TestPositionsLegend:
     """The legend is its own top-level window, so it needs telling to follow.
 

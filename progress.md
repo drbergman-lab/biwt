@@ -2022,3 +2022,20 @@ covers the exits nobody has written yet.
 
 `showEvent` brings it back, because back-then-forward without changes deliberately reuses the window
 and its plot; the legend is that plot's key, so it belongs to the same preserved state.
+
+### The last step had nowhere to go
+
+Reported after Skip: "biwt exits and there's nothing left. I can't go back." Not Skip's doing —
+plain Continue from the cell-parameters step did the same, and Skip only made it easy to reach.
+
+`advance()` hid the current window *first*, then looked for a next one. On the last step there is
+none, so `_finish()` fired against a widget with nothing visible in it. The window was also pushed
+onto the history while still being `self.window`, so Go back would have popped the step the user was
+already standing on.
+
+Now nothing is put away until there is a replacement to put in its place. The last step stays on
+screen after the result is emitted, and Go back reaches the step before it.
+
+BIWT still does not decide what happens after completion — the docs are explicit that the widget
+does not close or reset itself, because the host owns that. What changed is only that "the host
+decides" no longer means "the user is looking at a blank panel while it does".

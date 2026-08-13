@@ -1567,11 +1567,12 @@ class BioinformaticsWalkthrough(QWidget):
         step), reset all downstream session fields and build a fresh window.
         If ``stale_futures`` is False and cached future windows exist, reuse
         the next one so that back→forward without changes preserves state.
-        """
-        if self.window is not None:
-            self.window_history.append(self.window)
-            self.window.hide()
 
+        The current window is not put away until there is one to replace it.
+        Hiding first left the last step with nowhere to go: the widget went blank
+        on ``on_complete``, and the step was on the history *and* still current, so
+        Go back would have returned to the window the user was already on.
+        """
         if self.stale_futures or not self.window_future:
             if self.stale_futures:
                 label = getattr(self.window, "_step_label", None)
@@ -1580,11 +1581,17 @@ class BioinformaticsWalkthrough(QWidget):
                 self.window_future.clear()
             next_win = self._build_next_window()
             if next_win is None:
+                # Finished. The last step stays on screen: BIWT does not decide
+                # what happens next — the host does, in on_complete.
                 self._finish()
                 return
         else:
             # Reuse cached future — user went back without changing anything
             next_win = self.window_future.pop(0)
+
+        if self.window is not None:
+            self.window_history.append(self.window)
+            self.window.hide()
 
         self.stale_futures = False
         self.current_window_idx += 1
