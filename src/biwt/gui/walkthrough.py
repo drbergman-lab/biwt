@@ -1637,7 +1637,11 @@ class BioinformaticsWalkthrough(QWidget):
                 # Current window is still valid — preserve as next future
                 self.window_future.insert(0, self.window)
 
-        self.stale_futures = False   # future list (if any) is now clean
+        # stale_futures is deliberately not cleared here.  In the branch above it
+        # is already False; in the stale branch it is what makes the next
+        # advance() invalidate downstream state before rebuilding.  Clearing it
+        # discarded the future windows *and* the knowledge that they were stale,
+        # so the next step was built on state its predecessor never produced.
         self.current_window_idx -= 1
         self.window = self.window_history.pop()
         self.window.show()
