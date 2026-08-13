@@ -2057,3 +2057,39 @@ where cells land and what `domain_used` reports — had never run. Four more cov
 a second Go back, the import lockout's two release paths, library-path deduplication, and Positions
 declining to latch `domain_accepted` on a non-spatial pass. Each was confirmed by breaking the code
 it guards and watching exactly that test fail.
+
+### The triage, and what the loader now decides
+
+Five calls came back on the coverage audit, and they were all about the same question: when the
+file's numbers are wrong or ambiguous, does BIWT guess, refuse, or carry on?
+
+An obsm entry now has to be 2 or 3 columns wide to count as coordinates. The name was doing all
+the work before, so `spatial_connectivities` — an N×N adjacency matrix — matched on "spatial" and
+its first three columns became x/y/z. Worse, it outranked the real `imagerow`/`imagecol` columns
+sitting in obs. The check went into `_find_spatial_key`, which `infer_domain`,
+`setup_spatial_data` and the location description all share, so one guard covers every reader.
+
+The y-flip needed no change at all. It belongs to `imagerow`/`imagecol` and fires wherever those
+are read; an obsm array has no column names, so it is taken as given. The audit had read the
+disagreement between a file's two routes as a bug, but a file offering both is simply not
+expected to agree with itself. Both directions are pinned now.
+
+z is scaled when the file supplies z. A synthesized ±10 slab is not a measurement in data units,
+so the factor has nothing to convert — but a real z column is, and leaving it alone shipped two
+of three axes converted. `data_has_z` mirrors `infer_domain`'s resolution order exactly, because
+a flag that describes different coordinates than the domain would be worse than no flag.
+
+A probability outside `[0, inf)` is worth zero rather than deleting its cell type. One NaN used
+to fail `(obs[col] >= 0).all()` for the whole column and the type vanished with no error. The
+clamp had to go where the weights are built, not only where the columns are chosen: a raw NaN
+wins `argmax`, so a single bad spot nominated its own type as that spot's maximum.
+
+An `.rda` workspace is searched by class instead of taking `base::ls()`'s first name, which is
+sorted — so a workspace holding `annotations` and `seurat_obj` imported `annotations`. Several
+datasets or none is refused rather than guessed at. Which one the user meant is genuinely
+unknowable, it would have to be asked somewhere, and a one-object file keeps the run
+reproducible from the file alone.
+
+Four findings were left alone on the same reasoning in reverse: the signal to the user is already
+clear, so a warning would only be noise. And one was not a bug — the domain editor defaulting to
+the data extent is the intent.
