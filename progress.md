@@ -827,6 +827,14 @@ the new 1582×1016 domain screenshot went to 1600×1027 and **338 KB → 405 KB*
 with the text interpolated and softened. Only run it on captures wider than
 1600.
 
+**A marginal overshoot is not worth the cap either.** The same re-encode that
+inflates an under-cap image also inflates one barely over it, and there is no
+pixel saving to pay for it: `cell-counts-confluence` at 1604×808 went **296 KB
+→ 349 KB** for a four-pixel trim, text interpolated. It is committed at its
+native 1604 and will read as over the cap to anything that checks — that is
+deliberate. The cap earns its keep on a real overshoot, where the two positions
+captures came down 38% and 41% from 2528.
+
 For a capture already under the cap, the win is metadata, not pixels. A raw
 `screencapture` PNG carries a ~3 KB Display-P3 ICC profile plus `cICP`, `eXIf`,
 `pHYs`, an XMP packet and Apple's `iDOT` chunk, and writes IDAT in 16 KB pieces.
@@ -883,3 +891,1213 @@ centered, which is what clearing the factor ought to mean.
 
 Eight of the ten new tests were confirmed to fail against the pre-fix widget, so
 they are guards rather than descriptions.
+
+---
+
+## 2026-08-11 — Host-owned cell templates, skippable parameters step, step-sequencing fix (v0.5.0)
+
+Five requests in one branch, four of them pushing the same direction: BIWT should not know
+about PhysiCell.
+
+### The reported crash (and what it really was)
+
+Repro: a Visium `.h5ad` with `*_probability` columns → answer **No** to spot deconvolution →
+**Back** at the cluster-column step → answer **Yes** → a "Spatial Data" window appears that
+should not exist on that path → Continue → `KeyError: None` in `collect_cell_type_data`.
+
+Root cause was an ordering bug, not a predicate bug. `advance()` invalidates downstream session
+state *after* the leaving window's `process_window` has already committed. The deconvolution
+window committed three fields that `_STEP_FIELDS` assigns to *later* steps — `current_column`,
+`cell_types_list_original`, `use_spatial_data` — so the invalidation wiped them the instant they
+were written. Back was never required: toggling No→Yes on the first window (which sets
+`stale_futures`) and clicking Continue reproduced it.
+
+The fix draws a line that did not exist before:
+
+- **`_STEP_FIELDS` = what the user chose. `reseed_derived_state()` = everything that follows
+  from those choices.** Reseed is idempotent and total, runs at the end of
+  `_invalidate_downstream_of` and again before every predicate evaluation, and must never
+  overwrite a user decision. `cell_types_max` / `cell_prob_feature_dicts` moved out of
+  `_STEP_FIELDS` into reseed's care; the "skip SpatialQuery fields when the data is
+  non-spatial" special case in `_invalidate_downstream_of` was deleted, since reseed subsumes it.
+- **`use_spatial_data` is now a derived property**, not a stored tri-state.
+  `spatial_query_answer` holds the user's answer; the property folds in "deconvolution implies
+  spatial" and "no coordinates means no". It therefore always returns a real `bool`, which also
+  kills a latent `setChecked(None)` TypeError at `positions.py:352`. Three writers became one
+  answer plus one derivation.
+- The SpatialQuery predicate gained `not perform_spot_deconvolution`, so the spurious window is
+  now unreachable rather than merely unlikely. The `"__spot_deconv__"` sentinel is gone — the
+  ClusterColumn predicate already tested the flag, so the sentinel only ever existed to be
+  wiped and then dereferenced.
+
+Rejected: a per-window `commit()` hook called after invalidation. It does not fix the reported
+symptom, because `use_spatial_data` was also written in the deconvolution window's constructor
+and toggle handler, and it would need a two-phase `validate()`/`commit()` protocol across all
+eight windows (two of them block advancing on validation failure).
+
+### Three more bugs the work surfaced
+
+1. **`apply_rename` was not idempotent under deconvolution** — silent data corruption. It
+   rewrote `cell_prob_feature_dicts` in place while zipping against the *unfiltered*
+   `spatial_data`, and the rename window calls it on every Continue. Second pass after a rename
+   dropped every cell (`ValueError: zero-size array to reduction` downstream); second pass after
+   any spot had been filtered paired every probability profile with the *wrong* coordinate, with
+   no error at all. Now writes `cell_prob_feature_dicts_final` and never consumes its own
+   output. `spatial_data_final` was also owned by no step; both are now in the RenameCellTypes
+   bucket.
+2. **Re-import left a dead window in the fresh history.** `_start_walkthrough` cleared the
+   stacks but not `self.window`, so `advance()` pushed a window bound to the discarded session
+   onto the new history — Go back would then show it reading the new session live.
+3. **A numeric cell-type column silently dropped every cell.** `collect_cell_type_data`
+   stringified the unique-label list but not the per-cell list, and the rename mapping is keyed
+   by the former. Integer Leiden/Louvain cluster ids are a completely ordinary thing to select,
+   and selecting one produced either an empty output or a crash. Found by the new ownership
+   test walking a fixture with no categorical column.
+
+The last one is a good argument for the test that found it: `TestStepFieldOwnership` drives the
+real controller, snapshots `dataclasses.fields(session)` around each commit, and asserts no step
+writes a field owned by a later step. The comparison window is deliberately narrow — from just
+before `process_window` to the moment `advance()` is entered — so it excludes the *next* window's
+constructor, which legitimately initializes its own fields after the invalidation. That
+distinction cost two iterations to get right: a wider window flags `PositionsWindow`
+initializing `coords_by_type`, and a rule of "≤ max(leaving, arriving) step" would have let the
+original bug through.
+
+### Cell parameters: names out, provenance in
+
+`BiwtResult.cell_definitions_xml` is **removed**. `BiwtResult.cell_templates` maps each final
+cell-type name to `(path, name, content)`. The shape was chosen over the two simpler
+alternatives for one reason: the user can load their own template file mid-walkthrough, so a
+bare template *name* is meaningless to a host that has never seen it, while content alone loses
+which template was picked. Unassigned types are absent, so `{}` is normal — that is what Skip
+produces.
+
+- **BIWT ships no templates.** `cell_templates.toml` (2,902 lines, 29 PhysiCell phenotype
+  blocks) and `xml_defaults.py` are deleted along with the whole `core/parameters/` subpackage,
+  whose `__init__` docstring promised a template registry this change repudiates. A copy of the
+  TOML went to `bin/BIWT_parameters/cell_templates.toml` in the Studio repo (untracked; the
+  Studio session commits it). `load_templates_from_file` survives in the new
+  `core/templates.py`, now rejecting non-string values — a stray `[section]` header nests
+  everything after it, and that would have surfaced in the host long after the file left sight.
+- All XML generation is gone: `_patch_domain_xml`, `_set_text`, the `_finish` assembly block and
+  its three function-local imports, `_make_cell_definition` and its never-resetting
+  `_cell_id_counter`. Worth noting what left with the last one: `except ET.ParseError: pass`
+  silently emitted an empty `<cell_definition>` for a malformed template.
+- The step is **always shown** (a user can always supply their own templates) and **always
+  skippable**: a Skip button, a `(none)` row at the top of every dropdown, and no must-assign
+  gate. Skip drives the dropdowns to `(none)` rather than writing `{}` directly — this is the
+  last step, so Back-then-forward can bring the cached window back, and it must not display
+  selections that contradict what was returned.
+- `(none)` carries a distinct sentinel object, deliberately **not** `None`: `None` already means
+  "section header, or a combo mid-rebuild", and conflating the two would make an explicit
+  unassignment indistinguishable from no information — it would be dropped on every sort-mode
+  switch. Pinning that row at index 0 in both modes also fixed a pre-existing wart, where By
+  Source mode put a bold non-selectable header in row 0 that Qt auto-selected into every combo.
+- Three session write sites collapsed to one `_sync_session()` that *rebuilds* the mapping from
+  the dropdowns, guarded by a `_rebuilding` flag: `setCurrentIndex` does not signal when the
+  index is unchanged, so an incremental writer can be left holding whatever the transient
+  `clear()` produced.
+- By Name labels now show the bare template name while one file is loaded and tag every entry
+  with its source once two or more are — per the request, because with several libraries in play
+  even a unique name leaves you asking which file supplied `TREM2+ M1 Macrophages` versus
+  `TREM2+ Macrophages`.
+
+### Name matching is the host's decision
+
+Studio is implementing a `difflib` similarity check, and duplicating that rule here would be a
+standing desync risk. So: `BiwtInput.name_matches` takes a `(str, str) -> bool` predicate and
+**replaces BIWT's rule and its cutoff entirely**; `name_match_cutoff` (0.85) tunes only the
+default. A predicate rather than a scorer, because "are these the same cell type?" is the
+question the host actually answers.
+
+One policy, both call sites: rename suggestions and template pre-selection now share
+`best_match`, which replaces the old exact-then-bidirectional-substring rule at the rename step
+(a short host name no longer matches everything containing it). Nothing tested
+`suggest_name_mappings`, so that cost no test churn — only new tests.
+
+The default gates on **equal digit runs** before scoring similarity, and that gate is
+load-bearing rather than a refinement. At 0.85, similarity alone accepts `M1`/`M2 Macrophage`
+(0.92), `CD4`/`CD8 T Cell` (0.90), `M0`/`M1 Macrophage` (0.87) and `Layer 2`/`Layer 6` (0.86),
+while still admitting `Fibroblast`/`Fibroblasts` (0.95) and `Tumor`/`tumour` (0.91).
+
+Known gap, documented rather than papered over: `PD-1hi CD137lo CD8 T Cell` and
+`PD-1lo CD137lo CD8 T Cell` hold the *same* digits (1, 137, 8) and score 0.92, so they match.
+The plan claimed the digit gate caught that pair; writing the test proved otherwise. Widening
+the rule to hi/lo qualifiers was the wrong move — it would diverge from Studio's — so the gap is
+named in the docstring, in a test, and in the handoff doc, where a host is pointed at
+`name_matches` and told to import `default_name_matches` rather than copy it.
+
+### Also
+
+- `BiwtInput.extra_cell_template_paths` → `cell_template_paths` (it is not "extra" when it is
+  the only source). `BiwtData.microns_per_data_unit` → `host_units_per_data_unit`; the Visium
+  extractor keeps its name, since 55 µm/spot is an assay fact rather than a host convention.
+- Numeric constants stayed out of scope by decision: `is_2d`'s 20 µm voxel, the ±10 µm z-slab,
+  2494 µm³ cell volume, the hardcoded µm axis labels, and "PhysiCell" in the pyproject keywords.
+- `docs/assets/screenshots/cell-parameters.png` deleted: it showed the removed experimental
+  banner, `(built-in)` suffixes and a populated dropdown. Needs regenerating against the new
+  window — `mkdocs build --strict` will not catch a stale image.
+- `docs/integration/templates-and-matching.md` is the durable host-facing guide for the two
+  jobs BIWT now declines: supplying a template library and owning the name-match rule. It
+  carries the worked assembly example, the digit-rule table, and a short 0.4→0.5 delta for any
+  host, not just Studio.
+- The Studio-specific migration note lives at `host-migration-v0.5.md` in the repo root and is
+  **gitignored** — it is an artifact to hand to the Studio session, not documentation. Anything
+  in it worth keeping was folded into the page above.
+
+### Not verified here
+
+`mkdocs build --strict` could not run — mkdocs is not installed in this environment. The two
+failure modes it would have caught were checked statically instead: every mkdocstrings target in
+`docs/reference/` resolves against the real modules, every relative link under `docs/` points at
+a file that exists, and every nav entry exists.
+
+### Follow-up: matching against a library loaded mid-step
+
+The first cut deliberately did *not* re-resolve defaults after a runtime file add, on the
+grounds that a selection might be deliberate. That was too blunt — it meant a user who loaded
+their own library got no matching against it at all, which is most of the value of loading one.
+
+Now the window distinguishes rows the user **picked** from rows merely **showing a computed
+value**, and a file load re-auto-matches only the latter. The distinction is free in Qt:
+`QComboBox.activated` fires only for a real user pick, while `currentIndexChanged` also fires
+for every programmatic one — so a sort-mode switch or a model rebuild cannot be mistaken for a
+decision. Bulk **All to default** / **All to (none)** count as decisions; **Auto-match** clears
+the record, because afterwards every row holds exactly what auto-matching computes and there is
+nothing left to protect.
+
+All three actions exist at both scopes: a "Set all:" row, and a compact `QToolButton` beside
+each dropdown. I initially dropped the per-row buttons on a horizontal-space argument, which
+was not mine to make — they were asked for explicitly, and the retraction case they cover
+(*forget my pick on this row, follow the library*) has no other affordance, since a per-row
+Auto-match is what removes that row from `_touched`.
+
+Each pair shares a glyph — ⟳ recompute, ⌂ the `default` template, ∅ no template — defined once at
+module level and used in both the bulk button and the row button, so the correspondence is
+visible rather than only asserted in a tooltip. A test pins that pairing, because it is the kind
+of thing that silently drifts when one label is reworded. Per-row tooltips name both the cell
+type and the bulk button they mirror.
+
+The middle action started as a star, which was wrong: both readings of ★ miss. "Favourite"
+implies a user preference, but the button assigns a library template the user never marked;
+"best" is nearly backwards, since `default` is the plainest fallback — what you get when nothing
+matched. Rendered, it was also the heaviest mark in the row, drawing the eye to the least
+consequential action. Candidates were mocked up side by side in the real widget (⟳ ★ ∅ / word /
+⌂ / all-words / ✱ / ◉) and ⌂ was chosen: home reads as the baseline you return to. Worth noting
+for future edits that ✱ reads as a wildcard and ◉ as "selected", so neither is a safe substitute.
+
+While in that layout: the rows had been spread over the full height of the scroll area, so a
+trailing `addStretch(1)` now packs them at the top.
+
+Two earlier tests encoded the old never-re-resolve rule and were removed rather than adapted:
+one asserted the whole mapping was unchanged after an add, and one used a programmatic
+`setCurrentIndex` where it meant a user pick — which is now precisely the case the window
+treats differently. `TestReMatchOnFileAdd` is the authoritative place for the merge semantics.
+
+### Follow-up: library files come and go, and an ambiguous `default` is no default
+
+Two decisions from review, both instances of the same principle — when the evidence is
+ambiguous, withdraw rather than guess.
+
+**A `default` defined by two loaded files means there is no default.** Previously
+`_first_key_for_name` resolved it path-alphabetically, so the ⌂ action and the auto-match
+fallback tier silently picked one library's baseline over the other's by a rule no user could
+predict — the same silent-fallback shape that was just removed from the Studio config path. Now
+the ⌂ buttons disable and the fallback tier drops. Two implementation notes worth keeping:
+
+- The core function needed no signature change. `default_template_choices` already receives the
+  template names as a *multiset* (`[name for name, _ in self._template_db]`), so
+  `names.count(DEFAULT_TEMPLATE_NAME) == 1` is the whole test.
+- A disabled control with no explanation reads as a bug, so the tooltip is swapped for the reason
+  ("more than one loaded file defines a 'default' template — pick the one you want from the
+  dropdown"). A test asserts the explanation, not just the disabled state.
+
+Both templates stay individually selectable, labeled with their source, so nothing is lost —
+which is what makes withdrawing the shortcut acceptable rather than obstructive.
+
+**Template files can now be removed**, the host's own library included: what the host passes is a
+starting point, not a fixture the user is stuck with. Removal shares one merge path with loading
+(`_remerge`), so the touched rule governs both: untouched rows re-auto-match against whatever the
+library now holds, picked rows keep their choice. The one case removal adds is a row whose
+template just ceased to exist — there is no choice left to preserve, so it is dropped from
+`_touched` and rejoins the re-matched rows rather than silently inheriting some other template
+from the surviving files. A test pins that specifically, since "quietly substitutes a different
+template" is the failure mode that would be hardest to notice.
+
+Nice interaction between the two: removing one of two conflicting libraries resolves the
+ambiguity and the ⌂ action comes back on its own.
+
+### Follow-up: `reseed_derived_state` was half dead code
+
+Review flagged the method as suspiciously specialized to spot deconvolution. Two of its branches
+turned out to be dead, and both were the ones that made it look like it was policing spatial
+policy in general:
+
+- **`spatial_query_answer = False` for data with no coordinates.** Redundant. The
+  `use_spatial_data` property short-circuits on `not data.has_spatial` *before* it ever reads the
+  answer, and the SpatialQuery predicate requires `has_spatial` too — so the stored False changed
+  nothing. The only other reference in `src/` is a comment.
+- **Forcing `perform_spot_deconvolution` off when the data has no coordinates.** Unreachable. The
+  flag is only written by `SpotDeconvolutionQueryWindow`, and that window is only built when the
+  SpotDeconvQuery predicate fires, which requires `has_spatial`. The state it repaired cannot
+  occur, so the repair was defensive code guarding an invariant the predicate already holds — and
+  the test covering it was really testing the branch's own existence. Replaced with a test that
+  the predicate never offers the step for non-spatial data.
+
+What is left is the derivation that genuinely has to happen — the three probability-derived arrays
+and the raw coordinates — and the reason it reads as deconvolution-heavy is that deconvolution is
+the only answer in the walkthrough from which *bulk* data follows. That is now stated in the
+docstring, so the next reader has the same question answered without re-deriving it.
+
+The general lesson, worth remembering the next time this mechanism grows: a *logical* implication
+("deconvolution means spatial is in use") wants a derived property, not stored state plus a
+repair pass. Only a *computed* one — arrays over N spots — needs the repair pass at all.
+
+A deeper refactor is available if this ever grows again, but it is blocked on one field rather
+than on general effort, which is worth writing down.
+
+`reseed_derived_state` derives **four** values. Three — `cell_types_max`,
+`cell_prob_feature_dicts`, `spatial_data` — are pure functions of `data` (true of the first two
+only since `apply_rename` stopped mutating its input), so each could be a `cached_property` keyed
+on nothing: a new import builds a new session, so the cache can never go stale.
+
+The fourth, `cell_types_list_original`, is not. It is computed two different ways —
+from the probability *column names* when deconvolution is on, and from
+`data.obs[current_column]` when it is off — so it depends on `current_column`, a user choice. A
+data-keyed cache is simply wrong for it: change the column and the cached value is stale. And it
+is the field the original crash was about, the one `EditCellTypesWindow` needs, so it is the
+reason the repair pass exists at all. Converting the other three would therefore be 3/4 of the
+work for none of the payoff: `reseed_derived_state` would still have to run to rebuild this one.
+
+Converting it too means an uncached branching property, which drags `cell_types_original` along
+(`[str(x) for x in data.obs[current_column]]`, O(N) per read and read in a loop by
+`apply_rename`, so it wants caching keyed on `current_column`) — i.e. the repair pass is replaced
+by a cache-key mechanism rather than by nothing. `collect_cell_type_data()` disappears with it,
+and 23 call sites go: 20 in tests, plus `ClusterColumnWindow.process_window` and the
+`_make_edit_cell_types` factory. Worth it only if a third concern lands in the repair pass.
+
+### The version is now visible
+
+`biwt.__version__` already existed, reading the installed distribution metadata so `pyproject.toml`
+stays the single source. What was missing was anywhere a *person* could see it.
+
+It now appears on the walkthrough's home screen, under the title. That is the surface that
+matters: a host embeds BIWT as a tab, where the window title is never drawn, and the step windows
+come and go — the home screen is the one thing that stays put. The window title carries it too,
+which only helps standalone use. A test asserts both, because "the version label quietly stopped
+rendering" is invisible until someone asks what version they are running.
+
+Note the fallback: an uninstalled source tree reports `0.0.0+unknown` rather than guessing. That is
+honest, and it is the ecosystem-standard behavior for metadata-derived versions.
+
+### Checkpoint: row layout, library persistence, tied names, and an empty `cell_type_map`
+
+**Row layouts were per-row HBoxes, so nothing lined up.** Reported from the rename step, where a
+merged type is labeled with *every* original name that fed it: five merged Epithelial subtypes
+produced a label wide enough to force a horizontal scrollbar, leaving that row's own field a stub
+and every other row's field starting at a different x. Both the rename and cell-parameters steps
+are now `QGridLayout`, so labels share a column, and generated labels go through a new
+`elided_row_label` helper (`widgets.py`) that clips to a cap and puts the full text in the
+tooltip. The cap is what bounds the window: it is now sized for the cap rather than for the text,
+and the label column can no longer be dictated by one outlier. A trailing row stretch packs rows
+at the top instead of spreading them down the viewport.
+
+**A user-loaded template library was collateral damage of step invalidation.** It lived on the
+window, and the window is rebuilt whenever the user goes back and changes an earlier step — so a
+file they loaded silently vanished. The library now lives on the session
+(`template_library_paths`), seeded once from `BiwtInput.cell_template_paths`, and is deliberately
+*not* in `_STEP_FIELDS`: loading a library is an action, not an answer to a step. Only *Remove
+templates from file…* takes a file out. Files are re-read on each rebuild, which also picks up
+on-disk edits and drops a file that has become unreadable — `_load_template_file` returns the
+absolute path or `None` so an unreadable one leaves the library rather than re-warning on every
+rebuild.
+
+**Tied template names are flagged rather than silently resolved.** Two libraries can both define
+`Tumor`; matching then has two equally good candidates and breaks the tie by path order, which is
+arbitrary from the user's side. The row's dropdown now carries a tooltip naming the file the shown
+template came from and the others that define the name. A tooltip because it costs no layout, and
+the dropdown label already shows *which* file won — only the existence of a contest had to be
+added. This is the softer sibling of the `default` rule: a tie on `default` withdraws the action
+entirely, because there the whole point is an unambiguous baseline; a tie on a matched name still
+has a defensible answer, so it is annotated instead of withdrawn.
+
+**`BiwtResult.cell_type_map` came back `{}` on every single run.** `_finish` read
+`session.cell_type_config.resolve()`, and `cell_type_config` was a `CellTypeConfig` that nothing
+ever populated — the session comment admitted as much ("new-style, not yet fully wired") while the
+real decisions sat in `cell_type_dict_on_rename`. The docs promised an audit trail from every
+original label to its final name; the code returned an empty dict. Now
+`WalkthroughSession.resolved_cell_type_map()` builds it from the decisions the walkthrough
+actually records, and the never-populated field is deleted so the same trap cannot be re-set.
+`CellTypeConfig` / `CellTypeAction` survive in `core/cell_types.py`, tested and documented, but
+are now used by nothing — worth either wiring into the edit step or dropping.
+
+Two lessons from how this one was found: it was visible in the `BiwtResult` repr I printed during
+my own end-to-end verification and I read straight past it, and no test asserted on
+`cell_type_map` at all — `_finish` was covered for coordinates and templates only. There are now
+tests at both levels.
+
+**The Qt test suite was segfaulting.** Not one bad module: dropping *any* of three made it go
+away, which is the signature of a cumulative resource problem. Qt keeps every top-level widget
+alive until something destroys it, and these tests build walkthrough windows (with matplotlib
+canvases) per test and never destroyed theirs. Past a few hundred, the offscreen platform faults —
+in whichever module happens to run next, which is what made it look like an unrelated regression
+in the navigation tests. Fixed once, in `conftest.py`: an autouse `_reap_widgets` fixture destroys
+leftover top-level widgets after every test. Autouse so no module has to remember and adding one
+cannot reintroduce it. Suite verified stable across repeated runs.
+
+### Small corrections from review
+
+- Per-row button tooltips were verbose ("Auto-match Tumor — same as Set all: Auto-match, for this
+  type only"). They now say only what the button does: **Auto-match**, **Assign default**,
+  **Assign (none)**. The "Set all" row directly above pairs the same three glyphs with words, so a
+  row tooltip does not have to re-explain the pairing or repeat which cell type it sits beside. The
+  third reads "Assign (none)" rather than "No template" to stay parallel with "Assign default" and
+  to name the dropdown entry it actually selects. The *disabled* default tooltip stays long — an
+  explanation of why a control is unavailable earns its length.
+- The Studio handoff note claimed a host might have "worked around" the empty `cell_type_map` and
+  that such a workaround would now be wrong. Invented: Studio's `_biwt_complete` only ever read
+  `coordinates`, `to_csv` and the XML field. Corrected to say plainly that nothing breaks and the
+  field is simply worth using now.
+
+### The tie notice became a dismissible marker
+
+The tooltip-only version was invisible until hovered, which is a poor flag. Rows whose template
+name is shared now carry an **ⓘ** in a narrow column of their own, with the same text as the
+dropdown's tooltip. Informational rather than a warning glyph: the selection is perfectly valid,
+there simply happened to be more than one candidate.
+
+Clicking it hides it, and that is deliberately not remembered. `_refresh_row_flags` recomputes
+every row's flag from scratch on each call — any selection change, library change or sort switch —
+so a dismissed marker returns if the row is still ambiguous, and disappears for good once it is
+not. Per-row "already silenced for this selection" state would cost more than the notice is worth.
+
+One layout snag on the way: `row_label` set `wordWrap` on every label, and a wrapped QLabel will
+shrink to its longest *word*, so short labels started breaking before the ⇒ once the marker column
+took its 20 px. Wrapping is now applied only to labels that actually exceed the cap, and those get
+a fixed width so the column cannot collapse under them.
+
+The notice text then went through two more passes, both cutting:
+
+- It said "'Tumor' is defined by more than one loaded file. This is the one from templates_a.toml;
+  also available from templates_b.toml." Everything before the last clause is on screen already —
+  the dropdown label reads `Tumor (templates_a.toml)`. Now: `'Tumor' also defined by
+  templates_b.toml.`
+- It lived on both the dropdown and the marker. The marker *is* the notice — visible without
+  hovering anything — so the dropdown's copy was one sentence too many and is gone.
+
+The `⇒` then had to leave the label. Appended as a suffix it rode along to the end of the last
+wrapped line, so on a merged row it sat several lines below the field it points at. It is now
+`row_arrow()` in a column of its own between label and field, vertically centered — which also
+means the label helper no longer takes a `suffix`, and the two windows gained a column each. A
+geometry test pins the arrow to the vertical center of its field and to the left of it.
+
+### Long names, everywhere they land
+
+Reported from the positions window: a cell type renamed to a 100-character string ran its
+checkbox off the edge of the panel. The question raised was whether to build a scrollable label.
+
+**No** — a scroll area per row means a dozen tiny scrollbars nobody thinks to drag, and it still
+hides the text. Two shared primitives instead, both in `widgets.py`, chosen by whether the widget
+can wrap:
+
+- `row_label(text)` — wraps within a capped column, so every character stays on screen and the row
+  grows taller rather than the window growing wider. For `QLabel`s in a grid or column layout: the
+  rename step, the cell-parameters step, and now the cell-counts name column.
+- `set_elided_text(widget, text, suffix="")` — clips and puts the full name in the tooltip, for
+  widgets whose text **cannot** wrap. `QCheckBox` is the whole reason it exists: the positions
+  step's cell-type list and the edit step's keep/merge/delete list.
+
+The `suffix` argument is not decoration. The edit step appends `⇒ Merge Gp. #2` to a checkbox and
+later reads that annotation *back off the label* to decide whether dissolving a merge partner is
+needed, so clipping had to be applied to the name and the annotation appended after — otherwise a
+long name would have silently eaten the suffix and changed behavior. (That code reading display
+text as state is fragile independent of this change and worth revisiting.)
+
+Also confirmed while here: the arrow-column fix from the previous entry did apply to the
+cell-parameters step. A 100-character name there wraps and the ⇒ sits beside the dropdown with
+matching vertical centers — the screenshot that prompted the question predated the change.
+
+### Display text as state, in the edit step
+
+`_set_keep` decided whether a type was leaving a merge group by asking its checkbox:
+`if "⇒ Merge Gp." in old_text`. That is why the elision work had to append the annotation *after*
+clipping — the label had quietly become load-bearing.
+
+The reason it was written that way is more interesting than the smell: **the session dict cannot
+express group membership.** `cell_type_dict_on_edit` maps original → intermediate, and a group's
+first member maps to *itself* — byte for byte what a kept type looks like. So state alone genuinely
+could not tell "kept" from "leader of a merge group", and the label was the only place that
+distinction was recorded. Fixed by recording it: `self._merge_group: dict[str, int]`, cell type →
+group id, window state rather than session state. The label is now write-only.
+
+Two things worth recording about the fix itself:
+
+**I chased a case that cannot happen, twice.** With group ids in hand, re-merging an
+already-merged type looked like it needed handling: first as "dissolve the partner it strands"
+(wrong — the old mapping had all three merged the whole time, so that would have ejected a type from
+a merge the user made), then as "absorb the old group" (harmless, but pointless). Both were dead
+code. `_merge_cb` disables a merged type's checkbox, and the only way out of a group is that type's
+own Keep button, which removes it from the group first — so a type can never belong to two groups,
+and the reconciliation had no reachable trigger. My tests only reached it because
+`setChecked(True)` works on a disabled widget when called from code.
+
+The mistake underneath was a level confusion: I reasoned about a transition of the *mapping* while
+the *GUI* already made that transition unreachable. Same lesson as the reseed branches earlier in
+this branch — check what guards the state before writing code to repair it. The absorption block is
+gone, and the tests that replaced it assert the guard instead: merging disables the checkbox, Keep
+is the only way back and re-enables it, and no type ever holds two group ids.
+
+**The reversion check on the new tests was not evidence.** Stashing the source and re-running them
+produced eight failures, but on `AttributeError: _merge_group` — they fail because they reference the
+new attribute, not because they caught the old behavior. The one honest claim about the old label
+read is narrower than it looks, too: a cell type *named* "Tumor ⇒ Merge Gp. #1" would have been
+misread as merged, but `_dissolve_solo_merge_partner` then finds no partners and no-ops, so the
+misreading was harmless. The real argument for this change is the coupling, not a live bug.
+
+### The landing window
+
+Three changes, from a review of a screen that was mostly empty space and a sentence.
+
+**Format chips that carry information.** The static "Supported formats: …" line is now a chip per
+format showing whether *this environment* can read it, from
+`core.data_loader.supported_formats()` — `FormatSupport` probes with
+`importlib.util.find_spec`, so asking costs nothing and imports nothing. An unavailable format's
+tooltip names the missing module, the pip extra, and the install docs. This matters because the
+alternative is what BIWT did before: click Import, pick an `.rds`, and learn from an error dialog
+that the R stack is missing. The dev environment this was written in is itself an example —
+`anndata2ri` is absent, so the `.rds` chip renders red.
+
+**The dead space became a drop target.** The screen reserved a large empty band between two
+stretches; it is now a dashed frame holding the Import button, accepting a dragged file. A drag is
+only accepted for a single local file with a supported extension, so an unusable drag never
+highlights the target. `_import_cb` was split so the button and the drop share one `_import_file`.
+
+**The two pre-answers are grouped and honest.** "Skip domain validation **on import**" was
+factually wrong — `domain_accepted` is read at the *positions* step, nowhere near import. And it
+was not the only pre-answer: the cell-type column hint silently makes the cluster-column step
+auto-continue, skipping a step with no indication. Both now sit under a **Shortcuts** header with a
+caption naming what each one skips.
+
+**Rejected: more pre-answers to speed-run the wizard.** Every remaining question is
+*data-dependent* — has this file coordinates, probability columns, which column holds the labels —
+so answering before the file is open means guessing, and a wrong guess silently changes behavior.
+The real bottleneck is getting the file in, which is what the drop zone addresses.
+
+### Dropping template libraries, and what that means off the desktop
+
+The cell-parameters step now takes dropped `.toml` files, several at once, and the Add dialog
+became multi-select to match. Both go through one `_add_template_files`, which loads everything and
+then re-matches **once** — not per file, or a type could be decided by the first library and left
+there when a better match arrives in the same drop. A test covers exactly that.
+
+Unlike the landing screen's data-file drop, several at a time is the point here: libraries
+accumulate, where a second data file would replace the session.
+
+**The Galaxy question, checked rather than assumed.** Studio already runs there, and its
+`bin/galaxy_functions.py` shows the model: the user gives a dataset id, `galaxy_ie_helpers.get()`
+pulls that dataset from the history *into the container's working directory* (which is why the
+Galaxy panel prints `pwd:`), and the app then opens it by path. `put()` sends results back. So:
+
+- The GUI is streamed from a container. A drag from the user's own desktop never reaches it —
+  no drop event arrives at all. Not broken, just inert.
+- `QFileDialog` still works, but browses the **server's** filesystem: the container, where
+  `get()` deposits datasets. That makes the button the only route there, which is why the drop
+  is strictly additive and the button was never replaced by a drop zone.
+- The cleanest Galaxy path is the one the API already supports: the host stages the file and
+  passes it in `cell_template_paths`.
+
+One wrinkle worth remembering: staged Galaxy datasets have opaque names, so the source labels BIWT
+derives from basenames (`dataset_47.dat`) would be unhelpful there. A host-supplied display name
+per library would fix it — not built, not needed until someone runs this in Galaxy for real.
+
+### Disabled controls stopped looking disabled inside Studio
+
+Reported from a real Studio run: the ⌂ button does not grey out when it is disabled, and the row
+buttons generally look like the host's, not BIWT's.
+
+The cause is not the host stylesheet, which is what it looked like. `bin/studio.py` calls
+
+```python
+palette.setColor(QPalette.ButtonText, Qt.black)
+palette.setColor(QPalette.WindowText, Qt.black)
+studio_app.setPalette(palette)
+```
+
+and `QPalette.setColor(role, color)` with **no ColorGroup argument sets every group** — `Active`,
+`Inactive` *and* `Disabled`. So disabled button and checkbox text is painted the same black as
+enabled, and Qt's usual way of showing "you cannot use this" is gone for every widget in the
+application. BIWT relies on that state in several places: a merged cell type's checkbox, the
+`Remove templates` button with nothing loaded, and the ⌂ actions when no library defines a
+`default` (or two do).
+
+Fixed by not depending on the ambient palette. `base.py` now carries a `_WINDOW_STYLE` with
+explicit `:disabled` rules, applied to every step window, and the per-row buttons set their own
+stylesheet — which outranks both the window rule and anything the host installed. Widgets that
+already style themselves (the green nav buttons, the keep/merge/delete colors) still win, as they
+should.
+
+Two things worth recording:
+
+- **Studio's app stylesheet is also malformed**: `"QLineEdit { background-color: white };"` has a
+  stray `;` after the closing brace, which is what prints *"Could not parse application
+  stylesheet"* at startup — visible in the screenshot that opened this whole branch. It is likely
+  discarded wholesale, which is why the palette was the culprit rather than the stylesheet.
+- **The test that proves this is a pixel comparison**, not a stylesheet-string assertion: render
+  the button enabled and disabled under a Studio-like palette and require the images to differ.
+  Stripping the fix fails exactly one of the three — the row `QToolButton`. The two `QPushButton`
+  cases pass either way on this platform style, so they are guards on what the user must see
+  rather than evidence the rules are load-bearing.
+
+### The row glyphs, measured instead of guessed
+
+The house was unidentifiable at row scale — it reads as a small triangle. Replaced with a **gear**,
+which is both distinctive and apt: a template *is* a parameter set. (Third glyph for this action;
+the star before it was wrong for meaning, the house for legibility.)
+
+Two things came out of making them bigger without letting the rows grow:
+
+- **The buttons are pinned to their dropdown's height** (`dd.sizeHint().height()`, passed into
+  `_row_action`), so the glyph can be set as large as fits without the row expanding to
+  accommodate it. Row pitch is unchanged at 34 px, verified by rendering.
+- **The first font bump did nothing at all.** `font-size: 17px` produced pixel-identical output to
+  the inherited size — measured by counting ink pixels, not by looking. Measuring each candidate
+  size gave the real answer: 24px is the largest that keeps a margin inside a 30x28 button, with
+  the widest glyph (∅) reaching 18x19 px. There is now a test comparing rendered ink against a
+  button styled identically *minus* the font rule, so a future no-op change cannot pass unnoticed.
+
+### From glyphs to packaged icons
+
+Enlarging the text glyphs fixed legibility and exposed the deeper problem: the three marks are
+drawn by *different fonts*. Whatever the fallback chain hands back for ⟳, ⚙ and ∅ has its own
+metrics, so at one nominal size they rendered 13x11, 14x15 and 18x19 — visibly mismatched, and
+liable to differ again inside an embedding application, which is where it was reported from.
+
+They are now three packaged SVGs (`gui/icons/action_*.svg`), loaded through a new
+`widgets.action_icon()`. SVG rather than PNG for two reasons: it stays crisp on a HiDPI screen
+without a second @2x asset, and it is already the house convention — the positions step's plotter
+buttons load `gui/icons/*.svg` the same way, and `pyproject.toml` already ships that directory.
+
+Both scopes use the same icon, so the row button and its "Set all" counterpart still pair visibly.
+The size is one constant (20 px inside the 30x28 button, still pinned to the dropdown height, row
+pitch unchanged at 34).
+
+The `default` action's icon is a **house inside a ring**. The ring is the point: it gives this icon
+the same circular silhouette as the circular arrow and the slashed circle, so the three read as one
+set. The house is deliberately small — a first attempt filled the ring and turned into a dark blob
+at 20 px, which is the size it is actually used at. Chosen by rendering candidates at real size next
+to a 5x magnification and comparing, not by eyeballing the source.
+
+Three tests replaced the ones that asserted on glyph text: every action icon loads (a missing SVG
+gives a null QIcon and a *blank* button, which nothing else here would notice), the three render
+differently from each other (the copy-paste failure), and each row button's icon renders
+pixel-identically to its bulk counterpart's. The disabled-state pixel test needed no change and
+still passes, which was the open question in moving from styled text to icons — Qt's generated
+disabled pixmap stays distinguishable under Studio's flattened palette.
+
+The guide embeds the icons in its action table rather than naming them in words, so the page shows
+what the button shows. Two details worth keeping in mind:
+
+- **Markdown image syntax, not raw `<img>`.** mkdocs rewrites relative paths in markdown links and
+  images to suit directory URLs; it passes raw HTML `src` through verbatim, so an `<img>` needs the
+  path the *served* page will use (`../../assets/...`) while the markdown form takes the path the
+  *source tree* uses (`../assets/...`). The latter is what a source-tree link checker can verify, and
+  `attr_list` is already enabled so `{ width="20" }` sizes it.
+- **The docs keep their own copy** under `docs/assets/icons/`, because mkdocs only serves files
+  inside `docs/`. A test asserts the copies are byte-identical to the packaged originals and names
+  the `cp` that fixes it, so editing an icon cannot leave the guide showing the old one.
+
+  Two copies is not ideal and the alternatives were weighed. A `on_files` mkdocs **hook** could
+  register the packaged icons into the build, giving one source of truth — but the icons have to end
+  up in the `Files` collection rather than merely copied, or `mkdocs build --strict` fails link
+  validation on the markdown references, and mkdocs is not installed in this environment so that
+  cannot be verified here. `pymdownx.snippets` (already enabled) could inline the SVG source, but a
+  table cell must stay on one line, so the SVGs would have to be single-line files — unreadable and
+  uncommentable. A symlink is fragile and worse on Windows. Three ~500-byte files with a hard test
+  beats an unverifiable build hook; worth revisiting when someone has a docs build in front of them.
+
+### Two fixes from a Studio run
+
+**The ambiguous-`default` tooltip was too wordy.** Now: "Multiple 'default' templates found.
+Manually select which template to apply." The long version explained the mechanism; the short one
+says what happened and what to do.
+
+**By Source mode lost the source.** Its items were bare names under per-file headers, which reads
+fine while the list is open and loses everything the moment it closes: a `QComboBox` displays only
+the current *item's* text, never the group header it sat under. So a template picked in By Source
+mode showed as plain `default`, with no way to tell which of two libraries it came from — visible in
+the two screenshots side by side.
+
+First fix was to suffix the By Source items too, which works but clutters a list whose headers
+already name the file. The better answer was suggested in review: let the popup and the closed box
+say different things. Qt paints a closed combo from `currentText()`, but `paintEvent` is
+overridable, so `gui.widgets.RelabelledComboBox` takes a `display_for_index` callable and swaps
+`QStyleOptionComboBox.currentText` before drawing. The popup keeps `Tumor` under a
+`templates_a.toml` header; the box reads `Tumor (templates_a.toml)`. Nothing else changes — the
+model, the signals and `currentText()` are untouched, so no slot had to be disconnected and the
+selection logic is unaffected. (The other route, `setEditable(True)` with a read-only line edit,
+also works but changes the widget's whole appearance on macOS.)
+
+A test compares the rendered pixels against a plain combo holding the *item's* text, because
+`displayed_text()` could return the right string while `paintEvent` still drew the model's.
+
+Worth noting how nearly this went wrong: the first patch attempt silently did nothing, because the
+indent in `QStandardItem(f"\u2003{name}")` is an em-space and my match pattern used a regular one.
+`str.replace` does not complain about a pattern it never finds. The behavior test caught it, then
+the *same* mistake appeared in the test's own assertion — an argument for asserting on behavior
+(`currentText()`) rather than on markup whenever there is a choice.
+
+The em-space in `QStandardItem(f"\u2003{name}")` defeated `str.replace` **three times** in a row
+while editing that line — a literal em-space in a search pattern is invisible next to a regular
+one, and `str.replace` reports success when it matches nothing. Matching on the surrounding
+expression with a regex, and asserting on behavior rather than markup, are the two habits that
+caught it each time.
+
+### Right-aligning the source
+
+Asked for in review, and once the paint is already ours it is only a layout: draw the frame from the
+style with an empty label, take the `SC_ComboBoxEditField` rect, then the template name
+left-aligned and the source right-aligned in grey. The sources then line up down the column, which
+is what makes two libraries comparable at a glance.
+
+The interesting part is the question that came with it — what happens when the box is too narrow.
+The rule: **the source goes, the name stays.** The name identifies the choice; a path elided to
+`templ…` qualifies nothing, so spending the last pixels on it is worse than dropping it. The
+qualifier only earns its place while the name still has room to be legible (a six-character floor),
+and below that the name itself elides and takes the whole field.
+
+That decision lives in `text_layout(width)`, a pure function returning the two strings that will be
+drawn, so the rule is tested at four widths without rendering anything. The painting then has no
+logic left in it worth testing beyond "it draws what text_layout said", which one pixel comparison
+covers.
+
+### `domain_used.source` was lying
+
+Reported from a Studio run: the emitted domain came back as `user_edited` with the *data* extent,
+after the user had merely pressed Enter on the domain dialog without touching anything. Two
+separate defects, and the report caught both at once.
+
+**`result()` hardcoded `source="user_edited"`.** Every accepted domain claimed the user had edited
+it. That is not a cosmetic mislabel: `docs/integration/api-contract.md` tells a host to check
+`source != "preferred"` to learn whether its own domain survived the walkthrough, and after this
+dialog the answer was unconditionally yes. The field was unfalsifiable. It is now derived from the
+bounds — `"preferred"` if they match the host's domain, `"data_range"` if they match the data extent
+in host units, `"user_edited"` only if neither. `"preferred"` takes precedence where the two
+coincide, since the host's domain did in fact survive. The comparison tolerance covers the round
+trip through the fields: `%g` keeps six significant digits, so a value merely displayed and read
+back differs by at most a relative 5e-7.
+
+**`user_edited` was never documented.** It appears in neither `DomainSpec`'s docstring nor the
+api-contract table, both of which listed only preferred / anndata_metadata / data_range / default.
+A host reading the docs had no reason to expect the value it was actually receiving. Added to both.
+
+The remaining question is a product decision, not a bug: on first open the dialog pre-fills from the
+data, and `QDialogButtonBox.Ok` is the default button, so **Enter adopts the data extent**. That is
+defensible — the dialog only appears when the domains mismatch, and the data extent is usually the
+fix — but it means dismissing an unread dialog silently replaces the host's configured domain. With
+the source now honest, a host can at least see that it happened; whether Enter should instead be a
+no-op (pre-fill the host domain, make "Use Data Domain" the deliberate act) is left to the
+maintainer.
+
+### Three answers, three words: `host` / `data` / `user`
+
+That open question got answered, and the vocabulary got cut down with it.
+
+**The pre-fill now depends on whether the data has a say.** Spatial coordinates in use → the dialog
+opens on the data extent, because that is the domain the cells actually occupy and adopting it is
+almost always the fix. No spatial data → it opens on the host's domain, because a computed extent
+from scaled non-spatial layout is not a meaningful box to hand someone as a default. Enter is still
+Ok, so in both cases pressing it accepts something sensible rather than something arbitrary — which
+was the actual complaint, not the label. Carried by a new `initial_preset` argument, so the auto-open
+on domain mismatch and the manual open from the button can differ if they ever need to.
+
+**Four source values, one of them redundant.** `anndata_metadata` and `data_range` are both "the
+data's own extent" — they differ only in *how* BIWT found it, which no host has a decision to make
+about. Collapsed to `data`. `preferred` named the field it arrived in rather than who supplied it;
+`user_edited` was a verb phrase where the other three were nouns. The vocabulary is now `host` /
+`data` / `user`, plus `default` for the fallback box when nobody supplied anything — and
+`biwt.types.DomainSource` names them so no host has to type the strings.
+
+Three values because there are exactly three answers a host can act on: your domain survived, the
+user took the data's instead, or the user typed something else. Two spellings of the second one is a
+distinction that exists in BIWT's implementation and nowhere in the host's decision.
+
+### A `NameError` that 473 passing tests could not see
+
+Caught in a live Studio run, not by the suite: `positions.py` used `DomainSource` in
+`_maybe_show_domain_editor` without importing it. Fixed by the obvious one-line import — the
+interesting part is why the suite was blind to it.
+
+`PositionsWindow.__init__` can open a modal dialog, so **every test deliberately stops short of
+building it** (`test_walkthrough_nav.py` names the reason in a comment). That exemption made an
+entire module's method bodies unreachable, and an undefined name inside them is a runtime error with
+no test to trip it. The gap was in the harness, not the coverage count.
+
+Two guards, because the two failure modes are different sizes:
+
+**`tests/test_static_checks.py`** runs pyflakes' name resolution over every module in the package
+and fails on `UndefinedName` / `UndefinedLocal` / `UndefinedExport` only. Style messages are
+excluded on purpose — unused imports are an opinion, an undefined name is a crash. This is the
+general fix: it does not care which lines tests can reach, so it covers every method body BIWT will
+ever have, including the ones no harness can construct. Verified against the actual defect: all four
+call sites reported.
+
+**`TestPositionsDomainAutoShow`** in `test_walkthrough_nav.py` removes the exemption instead of
+working around it. Patching `DomainEditorDialog.exec_` to return `Rejected` costs one line and makes
+the modal harmless, so the step is now walked for real — and while there, it pins the behavior from
+the previous entry: the auto-shown editor pre-fills the data extent and reports `DATA`.
+
+Writing the paired negative test surfaced a rule worth restating: a domain mismatch is not only
+"the data escapes the box". `classify_domain_mismatch` also flags `"small"`, so 400 µm of cells in a
+±500 µm domain opens the dialog — sparse is a mismatch too. My first attempt at "no dialog when the
+data fits" asserted against that and failed correctly.
+
+### The host boundary had one entry point and no clock
+
+Asked directly: is `create_biwt_widget` the only thing a host calls, given the domain it takes can
+change between building the tab and running the walkthrough? Yes — and the answer turned out to be
+about *when* a value is read, not which values exist.
+
+**The failure is structural on the host side.** Studio builds the BIWT tab in `ICs.__init__`,
+which runs from `PhysiCellXMLCreator.__init__` before the main window is ever shown, and nothing
+rebuilds it for the life of the process — not File>Open, not a sample-model load. On `development`
+the `BiwtInput` is a *local variable*, so it is not merely unrefreshed, it is unrefreshable. Fifteen
+seconds of ordinary use reaches it: launch, type `xmax = 2000` on Config Basics, go to ICs → BIWT,
+import. Six domain `QLineEdit`s with no change signals, an `xml_root` that holds the on-disk bounds
+until a save, and no hook that means "the user is about to run BIWT."
+
+**Six of seven fields were already read lazily**, off `session.biwt_input` at the point of use, so
+the plumbing was nearly there. What was missing was a sanctioned way to change the object — and a
+guarantee about what happens when someone does.
+
+**Chosen: a provider callable, pulled once per run.** `create_biwt_widget` now takes a `BiwtInput`
+*or* a zero-argument callable returning one. Pull rather than push, because push asks the host a
+question it cannot answer here — there is no event that means "now" — while BIWT knows exactly one
+moment when a fresh answer is both needed and safe to take: the import. Two resolution points
+(construction, which only seeds the domain-check checkbox; and each successful import), and nothing
+in between. The Studio delta is negative: the companion session's `refresh_biwt_input`, its six
+`textChanged` connects, its stored input and its `reset_info` hook all delete, and with them the
+torn-read defense their own comment describes (pairing a new `xmin` with an old `xmax`) — a pull at
+import has no torn read to defend against.
+
+**The snapshot is the other half, and it closed a live bug.** `BiwtInput.snapshot()` copies
+`preferred_domain` and both lists, so a host editing its own `DomainSpec` in place cannot rewrite a
+domain the run already placed cells into. Demonstrated before fixing: mutating the host's spec set
+`domain_used.xmax` to 9999 *after* the coordinates were computed, so the result asserted that
+domain and coordinates agreed when they did not.
+
+**And it removed a second name for the same thing.** `session.inferred_domain` latched the host's
+domain at import while `session.preferred_domain` read it live — and `_maybe_show_domain_editor`
+feeds *one* dialog invocation from both, the mismatch warning from the latched copy and the
+"Use <host> Domain" preset and `_source_of` from the live one. Any host refresh made them disagree:
+
+    after import:       preferred=(-500, 500)   effective=(-500, 500)
+    after host refresh: preferred=(-2000, 2000) effective=(-500, 500)
+
+That is the same class of lie in `domain_used.source` as the previous entry, re-entering through the
+refresh path. `inferred_domain` was a pure duplicate — one writer, two readers — so it is gone and
+`effective_domain` is `user_domain or preferred_domain`. Note the test that had been setting it
+passed anyway: a plain dataclass accepts an unknown attribute without complaint, so the assertion
+was exercising a field that no longer existed. The replacement asserts `hasattr` is false.
+
+**What freezing costs, stated rather than hidden:** a host edit during a run is invisible until the
+next import, and `domain_accepted` is honored only at construction. Both are deliberate — the first
+is what makes the warning, the placement and `domain_used` describe one box; the second keeps the
+checkbox authoritative, since it is on screen by then.
+
+**One correction shipped with it.** `celldef_tab.get_cell_type_names()` appeared in BIWT's own
+module docstring and in the handoff doc as the way a host reads its cell types. It does not exist in
+Studio — it never did. The real accessor is `celldef_tab.param_d.keys()`. An illustrative example
+invented an API and then got quoted as though it were one.
+
+### The host's own cell types are answers too
+
+Asked for: `BiwtInput.host_cell_type_names` should feed the cell-parameters step, not just rename
+suggestions — and where the user picks one, the returned tuple's first element must be something
+obviously *not* a filepath that says "this cell type already exists in the host", leaving the host
+to decide what to do about it.
+
+**The signal.** `biwt.types.HOST_SOURCE = "<host>"`, and the value is `(HOST_SOURCE, host_name, "")`.
+Angle brackets because no filesystem accepts them: a host that forgets the check fails at once
+rather than reading some file that happens to exist. Content is the empty string because there is
+genuinely nothing to hand back — the host holds the definition. That does mean an unguarded
+`ET.fromstring(content)` raises, which is the loud failure the sentinel is chosen to produce, and it
+is now the one item on the Studio checklist marked as able to crash the host if ignored.
+
+**Matching.** Host names pool with template names and go through the same `best_match`, so the same
+`name_matches` predicate decides rename suggestions and parameter pre-selection — one rule, three
+call sites. Per the request they tie rather than outrank, and it is worth recording which way a tie
+currently falls: `_first_key_for_name` sorts by `(name, path)`, and `/abs/path` sorts before
+`<host>`, so a same-named file template wins. Upweighting the host is deferred and noted in the PRD;
+it needs a ranking notion, and `name_matches` is a boolean by design.
+
+**Two places where "the same as a library" would have been wrong.**
+
+*The `default` tier.* `default` is a common cell-type name — conventional in PhysiCell models,
+though not guaranteed by anything. Pooling a host cell type of that name into the fallback tier
+would make `default` ambiguous whenever it happened to appear, and the response to an ambiguous
+`default` is to withdraw the shortcut, so the feature would have disabled the button on a collision
+that says nothing about which template is the baseline. Host names are therefore candidates for
+*matching* but never eligible to *be* the baseline, which the
+`default_template_choices(host_names=...)` signature now encodes rather than leaves to the caller.
+
+*The source qualifier.* A file qualifier is suppressed while only one file is loaded, on the
+grounds that it is noise. A host qualifier is not, at any count: it is what distinguishes "a type
+you already have" from "a template". Without it, a host that passes cell types and no library would
+show a dropdown that reads exactly like a template list and means something else entirely.
+
+The reserved source also stays out of *Remove templates from file…* — the host's cell types are not
+something BIWT loaded, so they are not something it can unload — and is never shown to the user:
+rows read `Tumor (Studio)`, using `host_name`. The sentinel is an API signal, not UI text.
+
+One synergy worth noting with the previous entry: this feature reads `host_cell_type_names` at
+window-build time, so it is only trustworthy because the input is now resolved per run. Before
+that, a Studio user who added a cell type after launch would have been offered the list as it stood
+when the application started.
+
+### The host wins the tie, and it needed no scoring
+
+I had filed "upweight the host" as deferred work needing a ranking notion. That was wrong, and the
+question that corrected it was the right one: the two candidates already score *equally*, so the
+winner is decided by source order — and there is only ever one host source to hoist. The fix is the
+sort key in `_first_key_for_name`: `(name, path != HOST_SOURCE, alpha_key(path))`. False sorts before
+True, so the host's entry heads its name group and `setdefault` takes it.
+
+What stays deferred is narrower than I first described, and worth stating precisely: preference
+applies to **identical** names. Where the host offers `Tumor` and a file offers `Tumour` and both
+match a data type, the winner is still first-in-name-order, because `best_match` ranks candidates by
+name and a boolean predicate gives nothing to rank sources by. That case does need scoring. An exact
+collision never did.
+
+`_source_paths` now orders the host first as well, so the group that wins a tie is also the group
+listed first in **By Source** mode. One test flipped — it had encoded the old outcome in both its
+assertion and its comment — and two were added: the host winning a collision, and a file template
+still winning a name the host does not define.
+
+### pyflakes found two tests that had never run
+
+Added as a guard against unreachable-line `NameError`s, the static check earned its place on a
+different failure the same day. Widened to cover `tests/` and to treat `RedefinedWhileUnused` as
+fatal, it reported:
+
+    tests/test_session.py:1171: redefinition of unused 'TestCollectCellTypeData' from line 325
+
+Two classes, one name. Python keeps the second, so `test_extracts_unique_types_sorted` and
+`test_per_cell_labels_match_obs` had been silently absent from every run — pytest collected 3 tests
+where the file defines 5. Nothing failed, which is exactly why it survived: a dropped test is
+indistinguishable from a passing one in the summary line. Renamed to
+`TestCollectCellTypeDataEdgeCases`, and the count went 508 → 510.
+
+The other two reports were benign but real: a duplicated `_labels` helper in `test_gui_smoke.py`
+(identical behavior, so nothing was testing the wrong thing — the first definition was simply dead)
+and one unused import.
+
+Also cleaned the 14 unused imports and one unused local pyflakes had been reporting all along.
+Two were worth a check rather than a delete: `biwt.gui.__init__`'s `QWidget` is a deliberate PyQt5
+availability probe carrying its own `# noqa` and comment, and stays — which is why `UnusedImport` is
+not in the fatal set. `widgets.py`'s `QRadioButton as QRadioButton_custom` looked like a re-export,
+but nothing in BIWT or Studio imports it: Studio has its own `QRadioButton_custom` in
+`studio_classes.py`, and BIWT's was an alias to the plain widget, i.e. a name left behind by the
+copy from Studio that never did anything. Deleted.
+
+### Matching gets tiers, and the host's `default` becomes the baseline
+
+Three reports from a live run, and the third reversed a decision from the entry above.
+
+**The host lost a tie it was supposed to win.** Naming a data type `tumor` picked templates_a's
+`Tumor` over the host's `tumor`. The preference I had added lived in `_first_key_for_name`, which is
+keyed on the name *string* — so it only fired when the two sources spelled a name identically. But
+`best_match` short-circuits on a case-insensitive exact match, and `tumor` and `Tumor` are both
+exact matches, so the name that came back was already the library's and the source preference never
+got a say.
+
+Fixed by tiering in core instead: `best_match` gained `exact_only`, and the candidate pools are now
+tried host-then-library at the exact tier, then host-then-library at the similarity tier. Provenance
+breaks ties *within* a tier; quality still comes first, so an exact template match beats a merely
+similar host name. `default_template_choices` became `matched_candidates` — it answers only "which
+name names this cell type", which is the part that is pure.
+
+**The ⓘ marker only fired on identical spellings.** Same root cause, different symptom: `tumor` and
+`Tumor` in two sources are one contest, and the row said nothing. It now compares candidates with
+the matching rule rather than `==`, and names the rival's spelling when it differs, since the
+dropdown does not show it: `'tumor' also defined by templates_a.toml (as 'Tumor').`
+
+**A third defect nobody had reported.** Fixing the first two made me trace the fallback path, where
+a type that matched nothing takes the template named `default`. The resolution went through
+`_first_key_for_name`, which prefers the host — so a host cell type called `default` won the lookup
+and became the baseline it was explicitly barred from being. Both my tests missed it: one used a
+library with no `default`, the other went through the button rather than auto-match.
+
+**And then the bar came off entirely.** The report: "the 'set to default' button seems to ignore the
+host's `default` cell type. if anything, it should prefer this." Correct, and it makes the design
+simpler rather than more complex. A library `default` is a generic starting point; the host's is
+that host's *actual* default cell type, which is what the action asks for. So the host's outranks
+any library's — and it settles the case that previously had no answer at all: two libraries each
+defining `default` used to withdraw the action, and a host `default` now outranks both and keeps the
+buttons working.
+
+That collapsed a duplication I had been carrying. The "which `default` is the baseline" rule was
+expressed twice — once in core counting names, once in the window counting keys — because core knew
+about `host_names` but not about sources. It is now `_baseline_key()` in the window, once, where
+sources are known; core is out of the fallback business; and the `TemplateChoice(name, matched)`
+flag I had just added to carry the distinction across that boundary was deleted with it. The same
+key serves the `default` buttons and the auto-match fallback tier, so the two controls cannot
+disagree about what `default` means — which they briefly did.
+
+Also gone: the rule suppressing a host rival on the ⓘ marker for a fallback selection. It existed
+because host entries were ineligible for that tier; now they are eligible, so the case cannot arise.
+
+**Still deferred, with the reason recorded.** The full ranking is host cell types, then libraries the
+user loaded, then libraries the host supplied — a generic framework library being the weakest answer.
+Only the first tier exists. The obstacle is classification, not mechanism: a host may let users
+pre-register their own libraries, which then arrive through `cell_template_paths` indistinguishable
+from the framework's own, so a "host-supplied" tier would silently demote a user's library. That
+distinction has to be settled at the API boundary before the ranking is worth building.
+
+### A review pass, and what it found that I could not
+
+Ran a five-dimension review over the staged branch — correctness, docs-vs-code accuracy, whether
+the new tests bite, lifecycle interactions, hostile host input — each dimension's findings then put
+to a skeptic told to refute them. 22 reported, 21 confirmed with a concrete repro, 1 refuted.
+
+**The crash class was the real find: four ways a host mistake took down the host's whole process.**
+An exception raised in a Qt slot is not caught by anything — PyQt5 calls `qFatal`, so the process
+aborts. Every one of these was a `SIGABRT` in a live probe, mid-session, in Studio:
+
+- `_resolve_host_input`'s guard did not cover `snapshot()`, so a `BiwtInput` of the right *type*
+  carrying `None` in a list field aborted the import. The guard now wraps the whole resolution,
+  including the non-callable branch, which had the same hole.
+- A non-string in `host_cell_type_names` — an integer id, one stray `None` — reached `casefold()`
+  while sorting and aborted at the rename step. Dropped in `snapshot()` now, the one point both
+  entry paths pass through. The cell-parameters step already filtered them, so the two consumers
+  had disagreed.
+- `cell_template_paths="/path/x.toml"` (a bare string where a list belongs) was iterated into
+  characters, opening one modal "could not load" dialog *per character* — 106 of them for a
+  106-character path, each blocking. `__post_init__` now rejects a string for either list field, so
+  it fails at the host's own construction site.
+- A degenerate host domain — zero width, NaN, inf — was accepted unchecked and died several steps
+  later dividing by zero in the counts step or inside matplotlib. `_usable_domain` now repairs
+  inverted bounds by swapping (the intent is unambiguous, and it silently stacked every cell on one
+  line) and substitutes BIWT's own box for a non-finite or flat extent, reported as `DEFAULT`. Flat
+  *z* is left alone: a 2-D host domain is legitimate.
+
+**Two genuine behavior bugs, neither in code this branch wrote.** Keeping or deleting a merge
+group's *leader* left the other members still pointing at it, so they were folded into a type the
+user had just removed from the group — or, after Delete, into a type absent from the output
+entirely. Only the group-of-two case had been handled. And `_maybe_show_domain_editor` latched
+`domain_accepted = True` on its non-spatial shortcut, so answering No at the spatial query and then
+going back to Yes permanently suppressed the mismatch dialog — the one prompt that lets a user adopt
+the data extent or set a µm/pixel factor. The shortcut is read-only now; nothing else reads the flag
+on that path.
+
+**The test-bite dimension was the most uncomfortable, and the most useful.** It mutated the source
+and reported which of my tests still passed:
+
+- The spot-deconvolution fix from this very branch — `cell_prob_feature_dicts_final` — had *no*
+  test. Restoring the pre-branch expression left the whole suite green, while a renamed cell type
+  silently lost its probability mass and placed nothing. `_plot_spot_deconvolution` is its only
+  reader and no test reached the positions step, the same gap that let the `DomainSource` NameError
+  ship. Covered now, and verified to fail against the reverted line.
+- `initial_preset` was never passed by any test, so both the branch and its caller could be deleted
+  with 541 passing — and a non-spatial run would have offered ±500 in place of a host's ±2000.
+- The wrong-type provider test could not tell "kept the previous context" from "reset to defaults",
+  because the context it kept *was* the default. It now starts from a distinctive one.
+- `test_duplicate_and_empty_host_names_are_ignored` filtered its assertion to rows containing
+  "Tumor", so the blank rows it was named for were invisible to it — and they were reaching the
+  model as selectable rows handing the host `(HOST_SOURCE, "", "")`.
+- The `RelabelledComboBox` paint test passed with *either* `drawText` deleted, including the
+  secondary the class exists for: comparing one widget's pixels to another's only proves something
+  differs. It changes one half at a time now and requires the pixels to move; verified against both
+  mutants.
+- Two tests used repo-root-relative fixture paths, so from any other cwd the missing file opened a
+  blocking modal inside the constructor: the suite **hung** instead of failing.
+
+**Docs drift, again in the direction of claims nobody checked.** `on_complete(None)` on cancel was
+documented in four places and has never happened — a host clearing a "running" flag in that branch
+would wait forever; deleted, and pinned by a test. `studio.md` asserted both that Studio passes
+`host_cell_type_names` and that it does not. `docs/reference/gui.md` asked mkdocstrings for a
+`closeEvent` that does not exist. The rename page still said the names land in "generated PhysiCell
+cell-definitions XML", which this branch deleted. And the README's "300 passing tests" was replaced
+with no number at all: a count is re-verified on every branch or it rots, which is how `155`
+survived four releases.
+
+**One refutation worth keeping.** A finder re-reported the host-`default` fallback bug I had fixed
+mid-review; the skeptic checked the current tree, found it already resolved *in the opposite
+direction*, and explicitly warned that applying the suggested patch would recreate the disagreement
+in mirror image. That is the check earning its place — a stale finding applied faithfully is a new
+bug.
+
+### A simplification pass, run as seven reviews
+
+With the branch committed, seven agents read the whole diff at once — reuse, simplification,
+altitude, efficiency, prose, tests, docs structure. Net **−300 lines** with nothing lost, and four
+findings that were defects rather than debt.
+
+**A CI break I had shipped.** I renamed `default_template_choices` to `matched_candidates` mid-branch
+and never updated `docs/reference/core.md`. `mkdocs build --strict` runs in CI and mkdocs is not
+installed locally, so nothing here could catch it. Fixed, and `test_static_checks.py` now resolves
+every `:::` target and every `members:` entry in the docs against the real module — verified to fail
+on exactly that stale name.
+
+**The autouse widget reaper had made every test Qt-dependent.** It requested the `qapp` fixture,
+whose `importorskip` therefore ran ahead of every test in the suite — so with PyQt5 absent the 64
+Qt-free tests reported as *skipped* rather than run, and a Qt-less CI leg would have gone green
+while testing nothing. It now reaches for `QApplication.instance()` directly and returns if there is
+none. Confirmed by running the two pure-Python modules with PyQt5 blocked at the import hook: 64
+passed.
+
+**A pixel-test class that passed with the feature deleted.** `TestDisabledLooksDisabledUnderAHostPalette`
+compared grabs of enabled vs disabled widgets; deleting *both* of BIWT's `:disabled` stylesheet
+rules left all three tests green, because the difference it measured was Qt's own disabled-icon
+rendering. 76 lines, replaced by nothing: `isEnabled()` assertions elsewhere already cover the
+behavior.
+
+**41 redundant refresh passes per window build.** `__init__` populated the model without the
+`_rebuilding` guard the rest of the file uses, so each of the shared model's `appendRow` calls
+signalled every combo, and each signal re-derived the whole tie relation — 2n+1 passes, 42% of
+construction, quadratic in cell types × templates. Construction now routes through the same
+`_rebuild_and_restore` everything else uses: **41 calls → 1**.
+
+**What got simpler.** `CellTypeConfig`/`CellTypeAction` were dead — 84 lines still exported and
+documented, superseded by `resolved_cell_type_map()`. The four-call host-first tiering in
+`matched_candidates` became one `best_match` with a rank comparator, which also deleted the
+`exact_only` parameter it needed; the deferred third source tier is now a change to one lambda.
+`_STEP_ORDER` is derived from `_step_predicates` instead of restating its eight labels, and
+`_STEP_FIELDS` holds names only — its 22 reset *values* were a second copy of the dataclass
+defaults, free to drift, and `_reset_to_default` reads them off the dataclass instead. I checked
+both derivations against the committed tables: identical, including every reset value.
+
+Four host-input guards became one: `__post_init__` normalizes lists, host name and domain, and
+`snapshot()` is a copy again rather than also being the sanitizer — which fixed a real seam, since
+the caller had been reaching back into the object `snapshot()` had just produced to finish
+validating it. `host_label` went with it: a property guarding a field nobody should read, replaced
+by normalizing the field.
+
+The two yes/no query steps became one base class. They had ~35 identical lines, and this branch had
+already fixed the same `idToggled` arity bug in both — independently, with the same comment, which
+is the evidence you want before merging. 121 lines → 44 across the two, one copy of the guard.
+
+In the cell-parameters window: the label rule was implemented twice, once on the paint path;
+computing it with the model deleted a method and took the allocation out of `paintEvent`. Nine
+action wrappers for three actions at two scopes became three methods taking the cell types they
+apply to. `_first_key_for_name` stored the key it was keyed by. 901 lines → 806.
+
+**Prose.** The docs said the same thing in up to six places — the "unassigned types are absent"
+rule in four, the `HOST_SOURCE` example verbatim in both a docstring and a page, the digit-gate
+derivation in six. Each now has one owner and the rest link. A comment block stated its point twice
+and then described the icon as a gear, which it has not been since the house replaced it.
+
+### One copy of "what the windows do to the session"
+
+Four test modules each wrote out the step sequence — pick a column, keep every type, rename,
+`apply_rename` — and `test_session.py` wrote it fifteen more times inline. That is not just
+duplication: a session-field rename has to be chased through every copy, and a missed one builds a
+window against a stale session rather than failing, which is exactly what happened when
+`use_spatial_data` became `spatial_query_answer` mid-branch.
+
+`tests/helpers.py` now holds it once, split at the seams the windows themselves have —
+`pick_column`, `keep_all`, `rename_to`, and `session_through_rename` composing the three — plus
+`walkthrough_with_data` and `window_at_rename`. Plain functions rather than fixtures, because most
+callers need them inside a module-level factory rather than as a test argument. `FIXTURES` and
+`DOMAIN` live there too, deleted from the seven modules that each re-declared them.
+
+`test_gui_smoke` had re-declared `make_widget` and `drive_import`, which conftest already provides —
+and its copies did not register widgets for teardown, which is what the autouse reaper exists for.
+`test_load_cell_parameters` had three copies of the same five-line "add a template file" helper plus
+four inline duplicates of it; one now, hoisted above its first use.
+
+Net −129 lines across the modules against +78 for the shared file. The number is not the point:
+there is now one place to edit when a step's contract changes.
+
+### The legend outlived its window
+
+Reported from a live run: the Positions legend stays on screen after leaving that step, including
+after going back and invalidating it.
+
+It is its own top-level window, so it does not follow the step window unless told to — and it was
+being told in two specific places: `process_window`, and the Go back *button*'s `pre_cb`. Both are
+exits, but neither is *the* exit. Probing all four routes out:
+
+    after Continue:                  hidden
+    after go_back_to_prev_window():  VISIBLE   <- the controller's own route
+    after invalidating it:           VISIBLE   <- reported
+    after re-import:                 VISIBLE
+
+The Back button is one caller of `go_back_to_prev_window`; the controller calls it directly too, and
+neither discarding a stale cached window nor re-importing goes anywhere near that button. What all
+four share is `self.window.hide()` — so the legend now follows a `hideEvent` on the window it
+belongs to, and the two explicit calls are gone. One rule where there were two special cases, and it
+covers the exits nobody has written yet.
+
+`showEvent` brings it back, because back-then-forward without changes deliberately reuses the window
+and its plot; the legend is that plot's key, so it belongs to the same preserved state.
+
+### The last step had nowhere to go
+
+Reported after Skip: "biwt exits and there's nothing left. I can't go back." Not Skip's doing —
+plain Continue from the cell-parameters step did the same, and Skip only made it easy to reach.
+
+`advance()` hid the current window *first*, then looked for a next one. On the last step there is
+none, so `_finish()` fired against a widget with nothing visible in it. The window was also pushed
+onto the history while still being `self.window`, so Go back would have popped the step the user was
+already standing on.
+
+Now nothing is put away until there is a replacement to put in its place. The last step stays on
+screen after the result is emitted, and Go back reaches the step before it.
+
+BIWT still does not decide what happens after completion — the docs are explicit that the widget
+does not close or reset itself, because the host owns that. What changed is only that "the host
+decides" no longer means "the user is looking at a blank panel while it does".
+
+### The audit's leftovers
+
+Two published examples assembled a host XML document straight from `cell_templates` values without
+checking for `HOST_SOURCE`. That sentinel is not a path and its content is empty, so a host copying
+either example hit `ParseError` on the ordinary case where a type matched one of the host's own cell
+types. Both now skip it, which is also the correct behavior: the host already has that definition.
+
+`data_loader.py` raised its "no obs columns" `LoadError` from inside the `try` that wraps AnnData
+access, so it came back out re-wrapped as a read failure — a file BIWT understood perfectly well was
+reported as one it could not read. Moved out.
+
+The rest were tests for behavior nothing exercised. The one that mattered: every domain-editor test
+rejected the dialog, so the branch that writes the user's domain to the session — the one deciding
+where cells land and what `domain_used` reports — had never run. Four more cover the invalidation on
+a second Go back, the import lockout's two release paths, library-path deduplication, and Positions
+declining to latch `domain_accepted` on a non-spatial pass. Each was confirmed by breaking the code
+it guards and watching exactly that test fail.
+
+### The triage, and what the loader now decides
+
+Five calls came back on the coverage audit, and they were all about the same question: when the
+file's numbers are wrong or ambiguous, does BIWT guess, refuse, or carry on?
+
+An obsm entry now has to be 2 or 3 columns wide to count as coordinates. The name was doing all
+the work before, so `spatial_connectivities` — an N×N adjacency matrix — matched on "spatial" and
+its first three columns became x/y/z. Worse, it outranked the real `imagerow`/`imagecol` columns
+sitting in obs. The check went into `_find_spatial_key`, which `infer_domain`,
+`setup_spatial_data` and the location description all share, so one guard covers every reader.
+
+The y-flip needed no change at all. It belongs to `imagerow`/`imagecol` and fires wherever those
+are read; an obsm array has no column names, so it is taken as given. The audit had read the
+disagreement between a file's two routes as a bug, but a file offering both is simply not
+expected to agree with itself. Both directions are pinned now.
+
+z is scaled when the file supplies z. A synthesized ±10 slab is not a measurement in data units,
+so the factor has nothing to convert — but a real z column is, and leaving it alone shipped two
+of three axes converted. `data_has_z` mirrors `infer_domain`'s resolution order exactly, because
+a flag that describes different coordinates than the domain would be worse than no flag.
+
+A probability outside `[0, inf)` is worth zero rather than deleting its cell type. One NaN used
+to fail `(obs[col] >= 0).all()` for the whole column and the type vanished with no error. The
+clamp had to go where the weights are built, not only where the columns are chosen: a raw NaN
+wins `argmax`, so a single bad spot nominated its own type as that spot's maximum.
+
+An `.rda` workspace is searched by class instead of taking `base::ls()`'s first name, which is
+sorted — so a workspace holding `annotations` and `seurat_obj` imported `annotations`. Several
+datasets or none is refused rather than guessed at. Which one the user meant is genuinely
+unknowable, it would have to be asked somewhere, and a one-object file keeps the run
+reproducible from the file alone.
+
+Four findings were left alone on the same reasoning in reverse: the signal to the user is already
+clear, so a warning would only be noise. And one was not a bug — the domain editor defaulting to
+the data extent is the intent.

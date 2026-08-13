@@ -3,6 +3,7 @@
 from __future__ import annotations
 from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout, QLabel, QComboBox
 from PyQt5.QtCore import QTimer
+from biwt.core.cell_types import alpha_key
 from biwt.gui.windows.base import BiwinformaticsWalkthroughWindow
 from biwt.gui.widgets import GoBackButton
 
@@ -20,7 +21,7 @@ class ClusterColumnWindow(BiwinformaticsWalkthroughWindow):
         s = walkthrough.session
         hint = walkthrough.column_line_edit.text().strip()
 
-        col_keys = sorted(s.data.obs.columns.tolist())
+        col_keys = sorted(s.data.obs.columns.tolist(), key=alpha_key)
 
         self.auto_continue = False
         if hint and hint in col_keys:
@@ -61,5 +62,5 @@ class ClusterColumnWindow(BiwinformaticsWalkthroughWindow):
         s = self.walkthrough.session
         s.current_column = self.column_combobox.currentText()
         s.collect_cell_type_data()
-        # use_spatial_data stays None → SpatialQuery will be shown if needed
+        # spatial_query_answer stays None → SpatialQuery is shown if needed
         self.walkthrough.advance()

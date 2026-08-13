@@ -16,7 +16,7 @@ The Qt layer. `create_biwt_widget` is the host entry point; everything else here
 
 `WalkthroughSession` is the pure-Python state machine behind the widget — no Qt dependency.
 All the answers you give during the walkthrough accumulate here, and each step window reads
-and writes it. Internal, but the clearest single place to understand what the wizard tracks.
+and writes it. Internal.
 
 ::: biwt.gui.walkthrough.WalkthroughSession
     options:
@@ -38,4 +38,5 @@ and writes it. Internal, but the clearest single place to understand what the wi
       show_root_heading: true
       show_root_toc_entry: false
       members:
-        - closeEvent
+        - advance
+        - go_back_to_prev_window

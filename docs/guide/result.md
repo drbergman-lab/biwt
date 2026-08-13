@@ -31,31 +31,40 @@ How every original label in your data maps to its final name:
 ```
 
 `None` means the type was [deleted](edit-cell-types.md) and contributes no cells. This is your
-audit trail: it records every decision you made at the edit and rename steps, so a reviewer
-can trace an output population back to the clusters it came from.
+audit trail: it records every decision you made at the edit and rename steps.
 
 ### `domain_used`
 
 The [`DomainSpec`][biwt.types.DomainSpec] actually applied when placing cells — which may
 differ from what the host passed in, if you changed it in
-[the domain editor](domain.md). Its `source` field says where it came from (`preferred`,
-`data_range`, `anndata_metadata`, or `default`), so the host can tell whether its own domain
-was overridden.
+[the domain editor](domain.md). Its `source` field says where it came from — `host`, `data`,
+`user` or `default` — so the host can tell whether its own domain was overridden.
 
-### `cell_definitions_xml`
+### `cell_templates`
 
-A complete PhysiCell settings XML string, if you assigned
-[phenotype templates](cell-parameters.md). It contains the standard scaffold sections, your
-domain, and a `<cell_definitions>` block with one entry per cell type.
+The [parameter templates](cell-parameters.md) you assigned, as a mapping from final cell-type
+name to `(path, name, content)` — the `.toml` file the template came from, its name in that
+file, and its content **verbatim**.
 
-`None` if you assigned no templates.
+BIWT never parses that content, so a PhysiCell host receives exactly the `<phenotype>` block
+its own template file holds, and owns every decision about assembling a config from it — see
+[templates and name matching](../integration/templates-and-matching.md) if you are writing a
+host.
+
+Where you picked one of the host's own cell types, `path` is
+[`HOST_SOURCE`][biwt.types.HOST_SOURCE] and the content is empty — the host already holds that
+definition.
+
+Types you left unassigned are **absent** from the mapping, so `{}` is a normal result — that is
+what Skip produces. Hosts have two more rules to follow here; see
+[the API contract](../integration/api-contract.md#biwtresult--biwt-to-host).
 
 ## What the host does with it
 
 That is up to the host. BIWT's contract ends at the callback.
 
 PhysiCell Studio, for example, offers Overwrite / Append / Browse / Cancel when the target
-`cells.csv` already exists, and separately offers to save the XML as a new config file. A
+`cells.csv` already exists, and separately assembles a PhysiCell config from the templates. A
 notebook host might just call `result.to_csv(...)` or work with the DataFrame directly.
 
 If you are writing a host, see [embedding BIWT](../integration/index.md).
@@ -69,14 +78,23 @@ def on_complete(result):
     result.to_csv("config/cells.csv")
 ```
 
-That writes only the four PhysiCell columns, without the DataFrame index. To save the XML:
+That writes only the four columns, without the DataFrame index. The templates are yours to
+assemble — for a PhysiCell host, one `<cell_definition>` per type wrapping the content BIWT
+handed back:
 
 ```python
+import xml.etree.ElementTree as ET
+
+from biwt.types import HOST_SOURCE
+
 def on_complete(result):
     result.to_csv("config/cells.csv")
-    if result.cell_definitions_xml:
-        with open("config/PhysiCell_settings.xml", "w") as f:
-            f.write(result.cell_definitions_xml)
+    cell_defs = ET.Element("cell_definitions")
+    for i, (cell_type, (path, name, content)) in enumerate(result.cell_templates.items()):
+        if path == HOST_SOURCE:
+            continue                     # you already define this type; no content to parse
+        cd = ET.SubElement(cell_defs, "cell_definition", name=cell_type, ID=str(i))
+        cd.append(ET.fromstring(content))
 ```
 
 ## Starting over

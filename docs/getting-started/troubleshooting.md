@@ -66,8 +66,7 @@ installed in the conda environment; and/or `which R` gives `/usr/local/bin/R`.
 **Cause.** `R_HOME` is unset, so `rpy2` resolves `R` from `PATH`, where a system R is found
 before — or instead of — the conda R.
 
-**Fix.** Pin `R_HOME` to the environment's R. Scoped to the env, re-applied on every
-activation, no global PATH edits:
+**Fix.** Pin `R_HOME` to the environment's R, re-applied on every activation:
 
 ```bash
 conda env config vars set R_HOME="$CONDA_PREFIX/lib/R"

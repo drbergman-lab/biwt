@@ -10,21 +10,18 @@ cell-type labels.
 
 <figure markdown>
   ![The cluster column dropdown, listing every obs column](../assets/screenshots/cluster-column-dropdown.png){ width="291" }
-  <figcaption>Every metadata column is offered, alphabetically. Only one of these is a
-  cell-type annotation.</figcaption>
+  <figcaption>Every metadata column is offered, alphabetically.</figcaption>
 </figure>
 
 The message above the dropdown names the column BIWT looked for and did not find — `type` by
 default, or whatever you set on the [import screen](import.md#default-cell-type-column).
 
-This is the single most consequential choice in the wizard. Everything downstream — which
-types exist, what you can merge, how many cells of each go into the domain — derives from
-this column.
+Everything downstream — which types exist, what you can merge, how many cells of each go into
+the domain — derives from this column.
 
 ## Picking the right column
 
-Real objects carry a lot of columns, and several of them look plausible. Typical candidates
-in a Seurat or Scanpy object:
+Typical candidates in a Seurat or Scanpy object:
 
 | Column | Usually holds | Good choice? |
 |---|---|---|
@@ -33,9 +30,9 @@ in a Seurat or Scanpy object:
 | `orig.ident`, `sample`, `batch` | Which sample the cell came from | No — this is experimental design, not cell identity |
 | `predicted.id` | Labels transferred from a reference | Yes, if that is your annotation |
 
-If you pick a numeric cluster column, you get cell types named `0`, `1`, `2`. That works, and
-you can give them real names at the [rename step](rename-cell-types.md) — but if you already
-have an annotated column, use it and save yourself the mapping.
+If you pick a numeric cluster column, you get cell types named `0`, `1`, `2`. You can give
+them real names at the [rename step](rename-cell-types.md) — but if you already have an
+annotated column, use it and save yourself the mapping.
 
 !!! tip "Not sure which column is which?"
     Inspect the object before you start. In Python, `adata.obs.head()` and

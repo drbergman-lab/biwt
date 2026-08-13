@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+<!-- Mirrored byte-for-byte in src/biwt/gui/icons/ and docs/assets/icons/ (a test
+     asserts it). After editing: cp src/biwt/gui/icons/action_*.svg docs/assets/icons/ -->
+  <!-- The "default" template: a house inside a ring.
+       The ring earns its place — it gives this icon the same circular silhouette
+       as the other two actions (a circular arrow, a slashed circle), so the three
+       read as one set at row size.  The house is deliberately small: filling the
+       ring turns it into a blob at 20 px, which is the size it is actually used
+       at.  Ring weight matches action_no_template.svg. -->
+  <circle cx="12" cy="12" r="8.4" fill="none" stroke="#333333" stroke-width="2"/>
+  <path d="M12 7.9 L17 12 L15.5 12 L15.5 15.4 L8.5 15.4 L8.5 12 L7 12 Z"
+        fill="#333333" stroke="#333333" stroke-width="0.5" stroke-linejoin="round"/>
+</svg>

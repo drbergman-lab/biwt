@@ -12,16 +12,28 @@ venv/
 env/
 
 # Test scripts (not part of the package)
-test_biwt.py
+/test_biwt.py
+
+# Standalone hosts for driving BIWT by hand. They exist to be edited during a
+# testing session — a tracked copy would collect everyone's local edits.
+/scratch_*.py
 
 # Miscellaneous
 *.DS_Store
 
 # R test fixtures regenerated on every CI run (see tests/fixtures/make_fixtures.R)
 tests/fixtures/toy_*.rds
+# Coverage data, when run from the repo root
+/.coverage
+
 # MkDocs build output
 site/
 
 # Generated documentation-screenshot data (see scripts/make_screenshot_data.py)
 screenshot_data.h5ad
 screenshot_deconv.h5ad
+
+# Handoff note for the PhysiCell Studio session — an artifact of the 0.5 API
+# change, not documentation. See docs/integration/ for the durable host guide.
+/host-migration-v0.5.md
+/manual-test-plan.md

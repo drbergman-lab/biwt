@@ -1,18 +1,16 @@
 # Spatial query
 
-**Shown when:** BIWT found spatial coordinates in your data. If it found none, there is
-nothing to ask and this screen is skipped — placement will be random.
+**Shown when:** BIWT found spatial coordinates in your data. If it found none, this screen is
+skipped — placement will be random.
 
 ## The question
 
 "Use the spatial coordinates from the data?" Yes or no. The prompt names *where* it found
-them, which is worth reading: BIWT checks `obsm` first, then `obs`/CSV columns, and some of
-the places it looks are more trustworthy than others.
+them: BIWT checks `obsm` first, then `obs`/CSV columns.
 
 <figure markdown>
   ![The spatial data query](../assets/screenshots/spatial-query-yes.png)
-  <figcaption>Note that the prompt names where the coordinates were found — worth reading
-  before you answer.</figcaption>
+  <figcaption>The prompt names where the coordinates were found.</figcaption>
 </figure>
 
 | Source named in the prompt | Usually holds | Use it? |
@@ -29,8 +27,7 @@ matched, so a UMAP sitting alongside real coordinates is never picked up by mist
 ## Yes — place cells where the data says
 
 Cells are placed at their recorded positions, uniformly scaled and centered to fit the
-domain. Relative geometry is preserved exactly: a tumor core stays a core, an immune margin
-stays a margin, and the ratio of any two distances is unchanged.
+domain. Relative geometry is preserved exactly: the ratio of any two distances is unchanged.
 
 Consequences:
 
@@ -56,7 +53,7 @@ Consequences:
 ## Which to pick
 
 Say **yes** when spatial arrangement is part of what you are modeling — tumor–immune
-architecture, spatial gradients, anything where "where the cells are" is the point.
+architecture, spatial gradients.
 
 Say **no** when the arrangement is not meaningful, or you do not want it. Two common cases:
 

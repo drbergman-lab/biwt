@@ -20,15 +20,14 @@ pytest.importorskip("PyQt5")
 import matplotlib
 matplotlib.use("Agg")
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QFileDialog, QMessageBox
+from PyQt5.QtWidgets import QMessageBox
 
 from biwt.core.data_loader import (
     INSTALL_DOCS_URL,
     TROUBLESHOOTING_DOCS_URL,
     LoadError,
 )
-from biwt.gui.walkthrough import create_biwt_widget
-from biwt.types import BiwtInput, DomainSpec
+from biwt.types import DomainSpec
 
 FIXTURES = Path(__file__).parent / "fixtures"
 DOMAIN = DomainSpec(xmin=-500, xmax=500, ymin=-500, ymax=500)
@@ -37,32 +36,22 @@ CSV_FIXTURES = ["spatial.csv", "nonspatial.csv", "spot_deconv.csv", "spatial_pix
 
 
 @pytest.fixture
-def widget(qapp):
-    w = create_biwt_widget(BiwtInput(preferred_domain=DOMAIN), on_complete=lambda _r: None)
-    yield w
-    w.deleteLater()
-
-
-def _drive_import(widget, monkeypatch, path: Path) -> None:
-    """Monkeypatch the file dialog to select *path*, then run the import."""
-    monkeypatch.setattr(
-        QFileDialog, "getOpenFileName",
-        staticmethod(lambda *a, **k: (str(path), "")),
-    )
-    widget._import_cb()  # import → session setup → infer_domain → seed factor → first window
+def widget(make_widget):
+    """The walkthrough widget alone; this module never reads the result."""
+    return make_widget()[0]
 
 
 @pytest.mark.parametrize("name", CSV_FIXTURES)
-def test_import_builds_first_window(widget, monkeypatch, name):
-    _drive_import(widget, monkeypatch, FIXTURES / name)
+def test_import_builds_first_window(widget, drive_import, name):
+    drive_import(widget, name)
     assert widget.session.data is not None
     assert widget.session.data.n_cells > 0
     assert widget.window is not None            # a step window was constructed
 
 
-def test_import_anndata_builds_first_window(widget, monkeypatch):
+def test_import_anndata_builds_first_window(widget, drive_import, monkeypatch):
     pytest.importorskip("anndata")
-    _drive_import(widget, monkeypatch, FIXTURES / "test_AnnData.h5ad")
+    drive_import(widget, "test_AnnData.h5ad")
     assert widget.session.data is not None
     assert widget.window is not None
 
@@ -83,11 +72,11 @@ def _capture_message_boxes(monkeypatch) -> list:
     return boxes
 
 
-def test_dependency_error_dialog_links_to_docs(widget, monkeypatch):
+def test_dependency_error_dialog_links_to_docs(widget, drive_import, monkeypatch):
     boxes = _capture_message_boxes(monkeypatch)
     monkeypatch.setitem(sys.modules, "anndata2ri", None)
 
-    _drive_import(widget, monkeypatch, FIXTURES / "no_such_file.rds")
+    drive_import(widget, "no_such_file.rds")
 
     assert len(boxes) == 1
     text = boxes[0].text()
@@ -98,10 +87,10 @@ def test_dependency_error_dialog_links_to_docs(widget, monkeypatch):
     assert widget.session.data is None
 
 
-def test_file_error_dialog_has_no_docs_link(widget, monkeypatch):
+def test_file_error_dialog_has_no_docs_link(widget, drive_import, monkeypatch):
     boxes = _capture_message_boxes(monkeypatch)
 
-    _drive_import(widget, monkeypatch, FIXTURES / "unsupported.txt")
+    drive_import(widget, "unsupported.txt")
 
     assert len(boxes) == 1
     text = boxes[0].text()
@@ -111,7 +100,7 @@ def test_file_error_dialog_has_no_docs_link(widget, monkeypatch):
     assert widget.session.data is None
 
 
-def test_dialog_renders_whichever_docs_url_the_error_carries(widget, monkeypatch):
+def test_dialog_renders_whichever_docs_url_the_error_carries(widget, drive_import, monkeypatch):
     # The dialog must not hardcode the install page — R-stack failures point at
     # troubleshooting instead.
     boxes = _capture_message_boxes(monkeypatch)
@@ -165,7 +154,7 @@ def test_scale_factor_label_is_derived_from_both_domains(qapp):
     assert "(pixel)" in legend
 
 
-def test_error_message_is_html_escaped(widget, monkeypatch):
+def test_error_message_is_html_escaped(widget, drive_import, monkeypatch):
     boxes = _capture_message_boxes(monkeypatch)
 
     widget._show_import_error(LoadError("bad <class> & 'quote'", docs_url=INSTALL_DOCS_URL))
@@ -173,3 +162,181 @@ def test_error_message_is_html_escaped(widget, monkeypatch):
     text = boxes[0].text()
     assert "&lt;class&gt;" in text
     assert "<class>" not in text
+
+
+def test_finish_returns_cell_templates_and_no_xml(widget):
+    """_finish hands the template triples straight through and builds no XML.
+
+    Also the only coverage of the function-local imports _finish used to carry:
+    a stale one would otherwise surface only at the very end of a real run.
+    """
+    got = []
+    widget.on_complete = got.append
+    widget.session.cell_templates = {
+        "Tumor": ("/tmp/t.toml", "Tumor", "OPAQUE-TUMOR"),
+    }
+    widget._finish()
+
+    result = got[0]
+    assert result.cell_templates == {
+        "Tumor": ("/tmp/t.toml", "Tumor", "OPAQUE-TUMOR"),
+    }
+    assert not hasattr(result, "cell_definitions_xml")
+
+
+def test_finish_returns_the_cell_type_map(widget):
+    """The host is promised an audit trail: every original label to its final
+    name, None where the type was deleted.  It used to be empty on every run."""
+    got = []
+    widget.on_complete = got.append
+    s = widget.session
+    s.cell_types_list_original = ["Epithelial-cancer", "Epithelial-unspecified", "B cell"]
+    s.cell_type_dict_on_rename = {
+        "Epithelial-cancer": "tumor", "Epithelial-unspecified": "tumor",
+    }
+    widget._finish()
+
+    assert got[0].cell_type_map == {
+        "Epithelial-cancer": "tumor",
+        "Epithelial-unspecified": "tumor",
+        "B cell": None,
+    }
+
+
+def test_the_version_is_visible_on_the_home_screen(widget):
+    """A host embeds BIWT as a tab, where no window title is ever shown, so the
+    version has to be on the screen itself."""
+    from PyQt5.QtWidgets import QLabel
+
+    import biwt
+
+    shown = " ".join(lbl.text() for lbl in widget.findChildren(QLabel))
+    assert biwt.__version__ in shown
+    assert biwt.__version__ in widget.windowTitle()
+
+
+# ---------------------------------------------------------------------------
+# The landing window
+# ---------------------------------------------------------------------------
+
+
+def test_a_chip_is_shown_for_every_format(widget):
+    from biwt.core.data_loader import supported_formats
+
+    shown = " ".join(_labels(widget))
+    for fmt in supported_formats():
+        assert fmt.label in shown
+
+
+def test_an_unavailable_format_says_how_to_install_it(widget, drive_import, monkeypatch):
+    """The point of the chips: BIWT used to reveal a missing dependency only
+    after the user picked a file and read an error dialog."""
+    from PyQt5.QtWidgets import QLabel
+
+    from biwt.core.data_loader import INSTALL_DOCS_URL, supported_formats
+
+    unavailable = [f for f in supported_formats() if not f.available]
+    if not unavailable:
+        pytest.skip("every optional data dependency is installed here")
+
+    fmt = unavailable[0]
+    chip = next(lbl for lbl in widget.findChildren(QLabel) if fmt.label in lbl.text())
+    assert "✗" in chip.text()
+    assert fmt.extra in chip.toolTip()
+    assert INSTALL_DOCS_URL in chip.toolTip()
+
+
+def test_the_domain_shortcut_names_the_step_it_affects(widget):
+    # It suppresses the dialog at the *positions* step; the old label said
+    # "on import", which is not when it applies.
+    assert "import" not in widget._domain_accepted_cb.text().lower()
+    assert "positions step" in widget._domain_accepted_cb.toolTip()
+
+
+def test_both_shortcuts_explain_what_they_skip(widget):
+    captions = " ".join(_labels(widget)).lower()
+    assert "skips the cluster-column step" in captions
+    assert "positions step" in captions
+
+
+def _drop(widget, *paths):
+    from PyQt5.QtCore import QMimeData, QPointF, Qt, QUrl
+    from PyQt5.QtGui import QDropEvent
+
+    mime = QMimeData()
+    mime.setUrls([QUrl.fromLocalFile(str(p)) for p in paths])
+    event = QDropEvent(QPointF(10, 10), Qt.CopyAction, mime,
+                       Qt.LeftButton, Qt.NoModifier)
+    widget.dropEvent(event)
+    return event
+
+
+def test_dropping_a_file_imports_it(widget):
+    _drop(widget, FIXTURES / "nonspatial.csv")
+    assert widget.session.data is not None
+    assert widget.session.data.n_cells == 6
+    assert widget.window is not None          # the walkthrough started
+
+
+def test_dropping_an_unreadable_extension_does_nothing(widget, drive_import, tmp_path):
+    junk = tmp_path / "notes.txt"
+    junk.write_text("nope")
+    _drop(widget, junk)
+    assert widget.session.data is None
+
+
+def test_dropping_several_files_does_nothing(widget):
+    _drop(widget, FIXTURES / "nonspatial.csv", FIXTURES / "spatial.csv")
+    assert widget.session.data is None
+
+
+def test_the_drop_zone_highlights_only_for_a_droppable_file(widget, drive_import, tmp_path):
+    from PyQt5.QtCore import QMimeData, QPointF, Qt, QUrl
+    from PyQt5.QtGui import QDragEnterEvent
+
+    def _drag(path):
+        mime = QMimeData()
+        mime.setUrls([QUrl.fromLocalFile(str(path))])
+        event = QDragEnterEvent(QPointF(10, 10).toPoint(), Qt.CopyAction, mime,
+                                Qt.LeftButton, Qt.NoModifier)
+        widget.dragEnterEvent(event)
+        return event.isAccepted()
+
+    junk = tmp_path / "notes.txt"
+    junk.write_text("nope")
+    assert _drag(FIXTURES / "nonspatial.csv")
+    assert not _drag(junk)
+
+
+def test_the_readme_quick_start_runs(qapp, tmp_path, monkeypatch):
+    """Every line of the README's snippet, in order.
+
+    It is the first code a new host runs, and nothing else in the suite touched
+    ``apply_light_palette`` — a bad QPalette role there would raise on line one of
+    a user's first attempt.
+    """
+    from biwt.core.positioning import build_ic_dataframe
+    from biwt.gui.theme import apply_light_palette
+    from biwt.gui.walkthrough import create_biwt_widget
+    from biwt.types import BiwtInput, BiwtResult, DomainSpec
+
+    domain = DomainSpec(xmin=-500, xmax=500, ymin=-500, ymax=500, units="micron")
+    biwt_input = BiwtInput(preferred_domain=domain)
+
+    written = []
+
+    def on_complete(result):
+        out = tmp_path / "cells.csv"
+        result.to_csv(str(out))
+        written.append(out)
+
+    apply_light_palette(qapp)
+    widget = create_biwt_widget(biwt_input, on_complete=on_complete)
+    widget.show()
+
+    # Then the callback's own body, on the empty result a Skip produces.
+    on_complete(BiwtResult(
+        coordinates=build_ic_dataframe({}), cell_type_map={}, domain_used=domain,
+    ))
+    assert written and written[0].exists()
+    assert written[0].read_text().splitlines()[0] == "x,y,z,type"

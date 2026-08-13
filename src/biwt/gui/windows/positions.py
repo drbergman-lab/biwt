@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import copy
 import os
 
 import numpy as np
@@ -16,19 +15,20 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from PyQt5 import QtCore, QtGui
 from PyQt5.QtWidgets import (
     QApplication, QDialog, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QCheckBox, QPushButton, QScrollArea, QButtonGroup, QGridLayout,
-    QLineEdit, QSplitter, QSpinBox, QMessageBox, QShortcut,
+    QPushButton, QScrollArea, QButtonGroup, QGridLayout,
+    QSplitter, QSpinBox, QMessageBox, QShortcut,
 )
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QIcon, QKeySequence
 
 from biwt.gui.windows.base import BiwinformaticsWalkthroughWindow
 from biwt.gui.widgets import (
-    GoBackButton, ContinueButton, LegendWindow, QCheckBox_custom, QLineEdit_custom,
+    GoBackButton, ContinueButton, LegendWindow, QCheckBox_custom, QLineEdit_custom, set_elided_text,
 )
 from biwt.core.domain import classify_domain_mismatch
 from biwt.core.positioning import apportion_spot_cells, compute_spatial_placement
 from biwt.gui.walkthrough import DomainEditorDialog, _build_mismatch_message, _scale_domain
+from biwt.types import DomainSource
 
 
 # ---------------------------------------------------------------------------
@@ -205,7 +205,7 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
         vbox = QVBoxLayout()
         vbox.addWidget(splitter, stretch=1)
 
-        go_back_button = GoBackButton(self, walkthrough, pre_cb=self._close_legend)
+        go_back_button = GoBackButton(self, walkthrough)
         self.continue_to_write_button = ContinueButton(
             self, self.process_window
         )
@@ -232,16 +232,20 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
         s = self.walkthrough.session
         if s.domain_accepted:
             return
-        # Domain doesn't affect non-spatial placement (random positions fill the domain).
+        # Domain doesn't affect non-spatial placement (random positions fill the
+        # domain), so there is nothing to ask.  Deliberately without latching
+        # `domain_accepted`: this window is rebuilt when the user goes back and
+        # switches the spatial answer to Yes, and a flag set on the non-spatial pass
+        # would suppress the one prompt that lets them adopt the data extent.
         if not s.use_spatial_data:
-            s.domain_accepted = True
             return
         data_d = s.data_domain   # raw coordinate range (data units)
-        if data_d is None or data_d.source == "default":
+        if data_d is None or data_d.source == DomainSource.DEFAULT:
             s.domain_accepted = True
             return
         # Compare the data extent in host units (raw × factor) vs the domain.
-        data_host = _scale_domain(data_d, s.scale_factor) if s.scale_factor else data_d
+        data_host = (_scale_domain(data_d, s.scale_factor, scale_z=s.data_has_z)
+                     if s.scale_factor else data_d)
         mismatch = classify_domain_mismatch(data_host, s.effective_domain)
         if mismatch is None:
             s.domain_accepted = True
@@ -251,11 +255,13 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
         dlg = DomainEditorDialog(
             self, data_d, s.preferred_domain,
             context_message=msg,
-            initial_domain=s.user_domain,   # None on first open ⇒ dialog shows raw×factor
+            initial_domain=s.user_domain,   # None on first open ⇒ the preset decides
+            initial_preset=DomainSource.DATA,   # only reached when spatial is in use
             host_name=host_name,
-            file_factor=(s.data.microns_per_data_unit if s.data else None),
+            file_factor=(s.data.host_units_per_data_unit if s.data else None),
             current_factor=s.scale_factor,
             apply_scale=s.apply_scale,
+            data_has_z=s.data_has_z,
         )
         if dlg.exec_() == QDialog.Accepted:
             user_domain, factor, apply = dlg.result()
@@ -278,7 +284,6 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
         self.plot_zmin = d.zmin
         self.plot_zmax = d.zmax
         self.plot_dz   = d.zmax - d.zmin
-        self.plot_zdel = 20.0  # default PhysiCell voxel thickness
         self.plot_is_2d = d.is_2d
 
     def _close_legend(self) -> None:
@@ -346,7 +351,8 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
 
         self.checkbox_dict: dict[str, QCheckBox_custom] = {}
         for ct in s.cell_types_list_final:
-            cb = QCheckBox_custom(ct)
+            cb = QCheckBox_custom("")
+            set_elided_text(cb, ct)
             placeable = self._is_placeable(ct)
             # Pre-select all when the spatial plotter is the default.
             cb.setChecked(s.use_spatial_data and placeable)
@@ -552,8 +558,8 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
     def _is_placeable(self, ct: str) -> bool:
         """False when *ct* has no cells to place, i.e. a count of zero.
 
-        A zero count is legitimate — the type still gets a ``<cell_definition>``
-        in the output config, it just contributes no cells.  Such a type is
+        A zero count is legitimate — the type still reaches the host in
+        ``cell_type_map``, it just contributes no cells.  Such a type is
         treated as already placed: its checkbox stays disabled so it cannot be
         selected and does not hold up ``_refresh_continue_gate``.
         """
@@ -645,7 +651,6 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
     # ------------------------------------------------------------------
 
     def process_window(self) -> None:
-        self._close_legend()
         self.walkthrough.session.positions_set = True
         self.walkthrough.advance()
 
@@ -694,26 +699,31 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
         return (x0, y0) if self.plot_is_2d else (x0, y0, 0.5 * (self.plot_zmin + self.plot_zmax))
 
     def _default_wh(self, x0y0=None, factor=0.5):
+        """Half-extents for a shape centred at *x0y0*, per axis.
+
+        Its only caller passes the domain midpoint, so the distance to either
+        bound is the same number and *factor* applies to it directly.
+
+        This used to branch on which side was farther and, on the longer one,
+        shift the centre and write it into a parameter field. Both halves of that
+        were wrong. The branch can only be taken when halving the bounds rounds
+        one side up — the screenshot fixture's y range is such a case, off by
+        2e-13 — and ``_create_patch_history`` runs before the parameter fields
+        exist, so taking it raised ``AttributeError`` from the constructor and
+        PyQt5 turned that into a fatal abort. It also wrote a centre the returned
+        parameters did not agree with.
+        """
         if x0y0 is None:
             x0y0 = self._default_center()
-        dim_lengths = []
         bounds = [
             (self.plot_xmin, self.plot_xmax),
             (self.plot_ymin, self.plot_ymax),
             (self.plot_zmin, self.plot_zmax),
         ]
-        for i, c in enumerate(x0y0):
-            mn, mx = bounds[i]
-            dL = abs(mn - c)
-            dR = abs(mx - c)
-            if dL > dR:
-                dl = factor * dL
-                c -= dl
-                self._assign_par(c, i)
-            else:
-                dl = factor * dR
-            dim_lengths.append(dl)
-        return tuple(dim_lengths)
+        return tuple(
+            factor * max(abs(mn - c), abs(mx - c))
+            for (mn, mx), c in zip(bounds, x0y0)
+        )
 
     def _default_radius(self, x0y0=None, factor=0.9):
         if x0y0 is None:
@@ -1411,6 +1421,10 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
         i_start = 0
         new_pos = np.empty((N, 3))
         new_pos[:, 2] = 0
+        # Give up the way the 3-D twin below does.  Without this, a region the
+        # domain cannot reach spins here forever, and it runs in the Plot slot —
+        # so the host stops repainting and has to be killed.
+        max_fails = max_start = 100
         while i_start < N:
             if r0 == 0:
                 d = r1 * np.sqrt(np.random.uniform(size=N - i_start))
@@ -1425,9 +1439,14 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
                 and self.plot_ymin <= b <= self.plot_ymax
             ])
             if len(xy) == 0:
+                max_fails -= 1
+                if max_fails <= 0:
+                    return np.empty((0, 3))
                 continue
-            new_pos[i_start:i_start + len(xy), :2] = xy
-            i_start += len(xy)
+            max_fails = max_start
+            n = min(len(xy), N - i_start)
+            new_pos[i_start:i_start + n, :2] = xy[:n]
+            i_start += n
         return new_pos
 
     def _wedge_sample_3d(self, N, x0, y0, z0, r1, r0=0.0,
@@ -1470,8 +1489,28 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
     # Plot-cell dispatch and single-type helpers
     # ------------------------------------------------------------------
 
+    def _draw_cells(self, coords, radius, color, edgecolor="none") -> None:
+        """Draw *coords* in whichever projection the axes are currently in.
+
+        Each spatial call site used to make this choice for itself and two of the
+        three assumed 2-D, so a 3-D domain reached ``canvas.draw()`` with a
+        ``PatchCollection`` on a 3-D axes.  The ``AttributeError`` that raises
+        escapes the Plot slot, and PyQt5 turns that into a fatal abort.
+        """
+        if self.plot_is_2d:
+            self.circles(coords, s=radius, color=color, edgecolor=edgecolor,
+                         linewidth=0.5, alpha=self.alpha_value)
+        else:
+            self.ax0.scatter(coords[:, 0], coords[:, 1], coords[:, 2],
+                             s=8.0, color=color, alpha=self.alpha_value)
+
+    def _legend_artist(self, color, edgecolor="none"):
+        """The legend key that matches what ``_draw_cells`` draws."""
+        if self.plot_is_2d:
+            return Patch(facecolor=color, edgecolor=edgecolor)
+        return plt.Line2D([], [], marker="o", color=color, markersize=8.0)
+
     def plot_cell_pos(self) -> None:
-        s = self.walkthrough.session
         self.preview_constrained_to_axes = False
         n_per_spot = self.num_box.value() if hasattr(self, "num_box") else 1
 
@@ -1498,11 +1537,12 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
 
         if self.plot_is_2d:
             x0, y0, width, height = self.current_pars
+            z0 = depth = None
         else:
             x0, y0, z0, width, height, depth = self.current_pars
 
         if s.perform_spot_deconvolution:
-            self._plot_spot_deconvolution(x0, y0, width, height, n_per_spot)
+            self._plot_spot_deconvolution(x0, y0, z0, width, height, depth, n_per_spot)
         else:
             for ct, cb in self.checkbox_dict.items():
                 if not cb.isChecked():
@@ -1527,35 +1567,22 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
                 coords = coords[inbounds]
 
                 if n_per_spot == 1:
-                    s.coords_by_type[ct] = np.vstack((s.coords_by_type[ct], coords))
-                    if self.plot_is_2d:
-                        self.circles(coords, s=cell_r, color=self.color_by_celltype[ct],
-                                     edgecolor="none", linewidth=0.5, alpha=self.alpha_value)
-                        self.legend_artists.append(
-                            Patch(facecolor=self.color_by_celltype[ct], edgecolor="none")
-                        )
-                    else:
-                        self.ax0.scatter(
-                            coords[:, 0], coords[:, 1], coords[:, 2],
-                            s=8.0, color=self.color_by_celltype[ct], alpha=self.alpha_value
-                        )
-                        self.legend_artists.append(
-                            plt.Line2D([], [], marker="o", color=self.color_by_celltype[ct],
-                                       markersize=8.0)
-                        )
+                    new_pos = coords
                 else:
                     r = cell_r * np.sqrt(n_per_spot)
-                    all_new = np.empty((0, 3))
+                    new_pos = np.empty((0, 3))
                     for cc in coords:
-                        all_new = np.vstack((all_new, self._wedge_sample_2d(
-                            n_per_spot, cc[0], cc[1], r
-                        )))
-                    s.coords_by_type[ct] = np.vstack((s.coords_by_type[ct], all_new))
-                    self.circles(all_new, s=cell_r, color=self.color_by_celltype[ct],
-                                 edgecolor="none", linewidth=0.5, alpha=self.alpha_value)
-                    self.legend_artists.append(
-                        Patch(facecolor=self.color_by_celltype[ct], edgecolor="none")
-                    )
+                        sub = self._wedge_sample_2d(n_per_spot, cc[0], cc[1], r)
+                        # The sampler works in x/y and zeroes z; the disc belongs at
+                        # the depth of the spot it came from, which is 0 in 2-D.
+                        sub[:, 2] = cc[2]
+                        new_pos = np.vstack((new_pos, sub))
+
+                s.coords_by_type[ct] = np.vstack((s.coords_by_type[ct], new_pos))
+                self._draw_cells(new_pos, cell_r, self.color_by_celltype[ct])
+                self.legend_artists.append(
+                    self._legend_artist(self.color_by_celltype[ct])
+                )
 
                 self.legend_labels.append(ct)
                 cb.setEnabled(False)
@@ -1564,7 +1591,8 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
                 self.undo_all_button.setEnabled(True)
                 self.plot_cells_button.setEnabled(False)
 
-    def _plot_spot_deconvolution(self, x0, y0, width, height, n_per_spot: int) -> None:
+    def _plot_spot_deconvolution(self, x0, y0, z0, width, height, depth,
+                                 n_per_spot: int) -> None:
         s = self.walkthrough.session
         selected = {ct for ct, cb in self.checkbox_dict.items() if cb.isChecked()}
         cell_r = np.sqrt((((9 * np.pi * 2494 ** 2) / 16) ** (1.0 / 3)) / np.pi)
@@ -1572,10 +1600,37 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
             self.spatial_base_coords[:, :2] * [width, height] + [x0, y0],
             np.zeros((self.spatial_base_coords.shape[0], 1)),
         ))
+        if not self.plot_is_2d:
+            # Without this every spot sits at z=0 regardless of the domain, so a
+            # domain that does not straddle zero puts all of them outside it.
+            coords_all[:, 2] = self.spatial_base_coords[:, 2] * depth + z0
+
+        # Drop spots the domain does not reach, as the non-deconvolution branch
+        # above already does.  The placement rectangle can be larger than the
+        # domain, and a spot outside it has nowhere to put a cell: at one cell per
+        # spot that cell landed outside the domain, and above one the sampler had
+        # nothing it could accept and spun until the host was killed.
+        inbounds = (
+            (coords_all[:, 0] >= self.plot_xmin) & (coords_all[:, 0] <= self.plot_xmax)
+            & (coords_all[:, 1] >= self.plot_ymin) & (coords_all[:, 1] <= self.plot_ymax)
+        )
+        if not self.plot_is_2d:
+            inbounds &= (
+                (coords_all[:, 2] >= self.plot_zmin) & (coords_all[:, 2] <= self.plot_zmax)
+            )
+
+        # Same for every spot, so decided once.
+        edge = "black" if n_per_spot == 1 else "none"
+        sub_r = cell_r * np.sqrt(n_per_spot)
+        by_type: dict[str, list] = {}
 
         for idx, pos in enumerate(coords_all):
+            if not inbounds[idx]:
+                continue
+            # spatial_base_coords comes from spatial_data_final, so index the
+            # post-rename dicts that were built alongside it.
             probs = {
-                k: v for k, v in s.cell_prob_feature_dicts[idx].items()
+                k: v for k, v in s.cell_prob_feature_dicts_final[idx].items()
                 if k in selected
             }
             if not probs:
@@ -1583,45 +1638,46 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
 
             spot_counts = apportion_spot_cells(probs, n_per_spot)
 
-            color_seq: list[str] = []
-            type_seq:  list[str] = []
+            type_seq: list[str] = []
             for pf, cnt in spot_counts.items():
-                color_seq.extend([self.color_by_celltype[pf]] * cnt)
                 type_seq.extend([pf] * cnt)
 
-            if not color_seq:
-                color_seq = ["gray"] * n_per_spot
-                type_seq  = ["Unknown"] * n_per_spot
+            if not type_seq:
+                type_seq = ["Unknown"] * n_per_spot
             else:
-                while len(color_seq) < n_per_spot:
-                    color_seq.append(color_seq[0])
+                while len(type_seq) < n_per_spot:
                     type_seq.append(type_seq[0])
-            color_seq = color_seq[:n_per_spot]
-            type_seq  = type_seq[:n_per_spot]
+            type_seq = type_seq[:n_per_spot]
 
             if n_per_spot == 1:
-                ct = type_seq[0]
-                coord = np.array(pos).reshape(1, 3)
-                s.coords_by_type.setdefault(ct, np.empty((0, 3)))
-                s.coords_by_type[ct] = np.vstack((s.coords_by_type[ct], coord))
-                self.circles(coord, s=cell_r, color=color_seq[0],
-                             edgecolor="black", linewidth=0.5, alpha=self.alpha_value)
-                s.plotted_cell_types_per_spot.append({
-                    "spot_coords": pos,
-                    "cell_types": type_seq,
-                    "sub_spots": [pos],
-                })
+                sub_spots = np.array(pos).reshape(1, 3)
             else:
-                r = cell_r * np.sqrt(n_per_spot)
-                sub_spots = self._wedge_sample_2d(n_per_spot, pos[0], pos[1], r)
-                for i, color in enumerate(color_seq):
-                    self.circles(sub_spots[i:i+1], s=cell_r, color=color,
-                                 edgecolor="none", linewidth=0.5, alpha=self.alpha_value)
-                s.plotted_cell_types_per_spot.append({
-                    "spot_coords": pos,
-                    "cell_types": type_seq,
-                    "sub_spots": sub_spots,
-                })
+                sub_spots = self._wedge_sample_2d(n_per_spot, pos[0], pos[1], sub_r)
+                # The sampler zeroes z; the disc belongs at its spot's depth.
+                sub_spots[:, 2] = pos[2]
+
+            # Batch by cell type rather than drawing each cell as it is decided:
+            # a per-cell draw makes one collection per cell, and a 3-D axes depth
+            # sorts every collection on every draw, so a 704-spot Visium file at 4
+            # cells per spot took minutes to render instead of a moment.
+            for i, ct in enumerate(type_seq):
+                by_type.setdefault(ct, []).append(sub_spots[i:i + 1])
+
+            s.plotted_cell_types_per_spot.append({
+                "spot_coords": pos,
+                "cell_types": type_seq,
+                "sub_spots": sub_spots,
+            })
+
+        for ct, chunks in by_type.items():
+            placed = np.vstack(chunks)
+            # Only the single-cell arm used to store anything, so every cell drawn
+            # for n_per_spot > 1 was discarded — the canvas filled, the checkboxes
+            # marked placed, and the host received an empty DataFrame.
+            s.coords_by_type.setdefault(ct, np.empty((0, 3)))
+            s.coords_by_type[ct] = np.vstack((s.coords_by_type[ct], placed))
+            self._draw_cells(placed, cell_r, self.color_by_celltype.get(ct, "gray"),
+                             edgecolor=edge)
 
         for ct in selected:
             cb = self.checkbox_dict.get(ct)
@@ -2115,10 +2171,13 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
             self, data_d, s.preferred_domain,
             context_message="",
             initial_domain=s.user_domain,   # revisit current domain if set
+            initial_preset=(DomainSource.DATA if s.use_spatial_data
+                            else DomainSource.HOST),
             host_name=s.biwt_input.host_name,
-            file_factor=(s.data.microns_per_data_unit if s.data else None),
+            file_factor=(s.data.host_units_per_data_unit if s.data else None),
             current_factor=s.scale_factor,
             apply_scale=s.apply_scale,
+            data_has_z=s.data_has_z,
         )
         if dlg.exec_() == QDialog.Accepted:
             user_domain, factor, apply = dlg.result()
@@ -2177,9 +2236,6 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
                     self.patch_history[5].append(self._default_spatial_pars())
                     self.patch_history_idx[5] = len(self.patch_history[5]) - 1
 
-        # Domain area changed → confluence-based cell counts are stale.
-        self.walkthrough.session.cell_counts_confirmed = False
-
         # Replot all previously placed cells (restores visual state and legend);
         # also re-enables checkboxes for any cell types that have no placed cells.
         # (This also recomputes scatter marker sizes for the new domain, before
@@ -2195,7 +2251,7 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
         """Check if any placed cells fall outside new domain.
 
         Scans s.coords_by_type to find cells that would spawn outside the
-        new domain bounds. Accounts for 2D vs 3D dimensionality.
+        new domain bounds.
 
         Args:
             new_domain: DomainSpec with new bounds (xmin/max, ymin/max, zmin/max, is_2d).
@@ -2214,8 +2270,10 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
             mask = ((coords[:, 0] < new_domain.xmin) | (coords[:, 0] > new_domain.xmax) |
                     (coords[:, 1] < new_domain.ymin) | (coords[:, 1] > new_domain.ymax))
 
-            if not new_domain.is_2d:
-                mask |= ((coords[:, 2] < new_domain.zmin) | (coords[:, 2] > new_domain.zmax))
+            # Unconditionally: 2-D placement emits z=0 and a 2-D domain contains
+            # 0, so an ordinary 2-D domain still reports nothing — but a 3-D one
+            # shrunk to a slab leaves real cells outside it.
+            mask |= ((coords[:, 2] < new_domain.zmin) | (coords[:, 2] > new_domain.zmax))
 
             if mask.any():
                 out_of_bounds[ct] = int(mask.sum())
@@ -2287,9 +2345,34 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
     # Lifecycle
     # ------------------------------------------------------------------
 
+    def hideEvent(self, event):  # noqa: N802
+        """Take the legend with us.
+
+        The legend is its own top-level window, so it does not follow this one
+        unless told to — and every way of leaving this step goes through
+        ``hide()``: Continue, Go back, discarding a stale cached window, and
+        re-importing.  Hooking the hide covers all four; the two explicit
+        ``_close_legend`` calls this replaces covered only the first two.
+        """
+        self._legend_was_visible = bool(
+            self.legend_window is not None and self.legend_window.isVisible()
+        )
+        if self._legend_was_visible:
+            self.legend_window.hide()
+        super().hideEvent(event)
+
+    def showEvent(self, event):  # noqa: N802
+        """Bring it back with us.
+
+        Back-then-forward without changes reuses this window and keeps its plot;
+        the legend is that plot's key, so it is part of the same state.
+        """
+        if getattr(self, "_legend_was_visible", False) and self.legend_window is not None:
+            self.legend_window.show()
+        super().showEvent(event)
+
     def closeEvent(self, event):  # noqa: N802
-        if hasattr(self, "legend_window") and self.legend_window is not None:
-            self.legend_window.close()
+        self._close_legend()
         if hasattr(self, "figure"):
             self.figure.clear()
         super().closeEvent(event)

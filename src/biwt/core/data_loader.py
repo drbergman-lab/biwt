@@ -5,7 +5,9 @@ Supported formats
 -----------------
 .h5ad          AnnData (requires biwt[anndata])
 .rds           Seurat / SingleCellExperiment / SpatialExperiment via rpy2 + anndata2ri (requires biwt[seurat])
-.rda / .rdata  R workspace files (same rpy2 requirement; loaded with base::load())
+.rda / .rdata  R workspace files (same rpy2 requirement, loaded with base::load();
+               the object of a supported class is used, and an ambiguous
+               workspace is refused rather than guessed at)
 .csv           Flat tabular; spatial coordinates inferred from column names
 
 All paths return a ``BiwtData`` object with a common interface so downstream
@@ -51,18 +53,20 @@ class BiwtData:
         Path the data was loaded from.
     probability_columns:
         Obs columns that look like per-cell-type deconvolution probabilities.
-    microns_per_data_unit:
-        Conversion factor (microns per one raw data-coordinate unit) that the
+    host_units_per_data_unit:
+        Conversion factor (host units per one raw data-coordinate unit) that the
         *file itself* provided, or ``None`` if none.  Currently only 10x Visium
-        `.h5ad` (via ``scalefactors``) supplies this.  It seeds the editable
-        scale factor in the domain editor; it is never applied silently.
+        `.h5ad` (via ``scalefactors``) supplies this, and what it supplies is
+        µm/pixel — so the value only means "host units" for a host measuring in
+        microns.  It seeds the editable scale factor in the domain editor; it is
+        never applied silently.
     """
     obs: pd.DataFrame
     obsm: dict = field(default_factory=dict)
     spatial_location: Optional[str] = None
     file_path: str = ""
     probability_columns: list = field(default_factory=list)
-    microns_per_data_unit: Optional[float] = None
+    host_units_per_data_unit: Optional[float] = None
 
     @property
     def column_names(self) -> list[str]:
@@ -118,6 +122,71 @@ class LoadError(Exception):
 _R_EXTENSIONS = {".rds", ".rda", ".rdata"}
 
 
+@dataclass(frozen=True)
+class FormatSupport:
+    """One importable file format, and whether this environment can read it.
+
+    Lets a host say so *before* the user picks a file: BIWT's optional data
+    dependencies are otherwise discovered by failing an import and reading the
+    error dialog.
+    """
+    extensions: tuple
+    description: str
+    requires: tuple = ()      # module names that must be importable
+    extra: str = ""           # the pip extra that installs them
+
+    @property
+    def label(self) -> str:
+        return " ".join(self.extensions)
+
+    @property
+    def missing(self) -> tuple:
+        """Required modules that are not importable, in declaration order."""
+        import importlib.util
+
+        absent = []
+        for module in self.requires:
+            try:
+                found = importlib.util.find_spec(module) is not None
+            except (ImportError, ValueError):
+                found = False       # a package whose own parent is missing
+            if not found:
+                absent.append(module)
+        return tuple(absent)
+
+    @property
+    def available(self) -> bool:
+        return not self.missing
+
+    @property
+    def hint(self) -> str:
+        """Why it is unavailable and how to fix it, or '' when it is available."""
+        if self.available:
+            return ""
+        needs = " and ".join(self.missing)
+        fix = f"\npip install {self.extra}" if self.extra else ""
+        return f"Needs {needs}, which is not installed.{fix}"
+
+
+def supported_formats() -> list:
+    """Every format ``load`` accepts, with its availability in this environment.
+
+    Probed with ``importlib.util.find_spec``, so asking is cheap and does not
+    import the dependency.
+    """
+    return [
+        FormatSupport(
+            extensions=(".h5ad",), description="AnnData",
+            requires=("anndata",), extra="biwt[anndata]",
+        ),
+        FormatSupport(
+            extensions=(".rds", ".rda", ".rdata"), description="Seurat / SCE",
+            requires=("rpy2", "anndata2ri"), extra="biwt[seurat]",
+        ),
+        FormatSupport(extensions=(".csv",), description="flat table"),
+    ]
+
+
 def load(file_path: str) -> BiwtData:
     """Load single-cell data from *file_path* and return a ``BiwtData``.
 
@@ -165,17 +234,64 @@ def _load_h5ad(file_path: str) -> BiwtData:
         raise LoadError(f"Failed to read '{file_path}' as AnnData: {e}") from e
 
     mpu = _extract_visium_microns_per_pixel(adata)
-    return _from_anndata_object(adata, file_path, microns_per_data_unit=mpu)
+    return _from_anndata_object(adata, file_path, host_units_per_data_unit=mpu)
+
+
+# Classes anndata2ri can convert.  SpatialExperiment is an SCE subclass and goes
+# through the SCE path; Seurat needs a re-read so its own method is available.
+_SCE_CLASSES = ("SingleCellExperiment", "SpatialExperiment", "SummarizedExperiment")
+_R_DATASET_CLASSES = _SCE_CLASSES + ("Seurat",)
+
+
+def _pick_workspace_object(env, obj_names: list, file_path: str) -> str:
+    """Return the name of the single loadable dataset in an R workspace.
+
+    ``base::ls()`` returns names *sorted*, so taking the first took whatever
+    sorted first rather than whatever was saved first — a workspace holding
+    ``annotations`` and ``seurat_obj`` imported ``annotations``.  Choosing by
+    class instead makes the common multi-object workspace work.
+
+    More than one dataset is refused rather than guessed at.  Which one the user
+    meant is genuinely unknown, and it would have to be asked somewhere; a file
+    holding exactly one object also keeps the run reproducible from the file
+    alone.
+    """
+    matches = []
+    for name in obj_names:
+        try:
+            classes = tuple(env[name].rclass)
+        except Exception:
+            continue                       # not an R object we can inspect
+        if any(c in _R_DATASET_CLASSES for c in classes):
+            matches.append(name)
+
+    if len(matches) == 1:
+        return matches[0]
+    listing = ", ".join(obj_names)
+    if not matches:
+        raise LoadError(
+            f"'{file_path}' contains no Seurat or SingleCellExperiment object.\n"
+            f"Objects found: {listing}.\n"
+            "Re-save the workspace with the dataset in it, or export it with "
+            "saveRDS() to a .rds file.",
+            docs_url=TROUBLESHOOTING_DOCS_URL,
+        )
+    raise LoadError(
+        f"'{file_path}' contains more than one dataset: {', '.join(matches)}.\n"
+        "BIWT cannot tell which one you meant. Re-save just that one into its "
+        "own file — save(obj, file=\"one.rda\") or saveRDS(obj, \"one.rds\").",
+        docs_url=TROUBLESHOOTING_DOCS_URL,
+    )
 
 
 def _load_r_file(file_path: str, suffix: str) -> BiwtData:
     """Load an R object file (.rds, .rda, or .rdata) via rpy2 + anndata2ri.
 
     .rds files contain a single serialised R object (``saveRDS`` / ``readRDS``).
-    .rda / .rdata files are R workspace files that can contain multiple named
-    objects (``save`` / ``load``).  We grab the first object in the workspace;
-    if the file was produced by a standard Seurat/SCE export workflow it will
-    contain exactly one object.
+    .rda / .rdata files are R workspace files that can hold several named objects
+    (``save`` / ``load``); the one of a supported class is used, and anything
+    ambiguous is refused with the reason.  The extension is matched lowercased,
+    so the conventional ``.RData`` spelling works.
     """
     try:
         import anndata2ri
@@ -202,21 +318,18 @@ def _load_r_file(file_path: str, suffix: str) -> BiwtData:
             # readRDS returns the object directly
             robj = base.readRDS(file_path)
         else:
-            # load() reads into an environment; grab the first named object
+            # load() reads into an environment; pick the dataset out of it
             env = reval("new.env(parent = emptyenv())")
             base.load(file_path, envir=env)
             obj_names = list(base.ls(env))
             if not obj_names:
                 raise LoadError(f"No objects found in R workspace '{file_path}'.")
-            robj = env[obj_names[0]]
+            ws_name = _pick_workspace_object(env, obj_names, file_path)
+            robj = env[ws_name]
 
         classname = tuple(robj.rclass)[0]
 
-        if classname in (
-            "SingleCellExperiment",
-            "SpatialExperiment",  # SCE subclass; anndata2ri converts it via the SCE path
-            "SummarizedExperiment",
-        ):
+        if classname in _SCE_CLASSES:
             adata = anndata2ri.rpy2py(robj)
         elif classname == "Seurat":
             reval("library(Seurat)")
@@ -225,14 +338,13 @@ def _load_r_file(file_path: str, suffix: str) -> BiwtData:
             if suffix == ".rds":
                 reval(f'x <- readRDS("{file_path}")')
             else:
-                reval(f'load("{file_path}"); x <- get(ls()[1])')
+                reval(f'load("{file_path}"); x <- get("{ws_name}")')
             adata = reval("as.SingleCellExperiment(x)")
             adata = anndata2ri.rpy2py(adata)
         else:
             raise LoadError(
                 f"R object class '{classname}' is not supported. "
-                "Expected: Seurat, SingleCellExperiment, SpatialExperiment, "
-                "or SummarizedExperiment."
+                f"Expected one of: {', '.join(_R_DATASET_CLASSES)}."
             )
     except LoadError:
         raise
@@ -244,7 +356,7 @@ def _load_r_file(file_path: str, suffix: str) -> BiwtData:
         ) from e
 
     mpu = _extract_visium_microns_per_pixel(adata)
-    return _from_anndata_object(adata, file_path, microns_per_data_unit=mpu)
+    return _from_anndata_object(adata, file_path, host_units_per_data_unit=mpu)
 
 
 def _load_csv(file_path: str) -> BiwtData:
@@ -281,7 +393,7 @@ def _load_csv(file_path: str) -> BiwtData:
 def _from_anndata_object(
     adata,
     file_path: str,
-    microns_per_data_unit: Optional[float] = None,
+    host_units_per_data_unit: Optional[float] = None,
 ) -> BiwtData:
     """Build a BiwtData from an in-memory AnnData object."""
     try:
@@ -289,6 +401,11 @@ def _from_anndata_object(
         obsm = dict(adata.obsm)
     except Exception as e:
         raise LoadError(f"Could not read obs/obsm from AnnData object: {e}") from e
+
+    if obs.shape[1] == 0:
+        # Nothing to pick a cell-type column from; the step would offer an empty
+        # dropdown and the next one would read None.
+        raise LoadError(f"'{file_path}' has no obs columns to label cell types with.")
 
     obsm_loc = _detect_spatial_location_from_obsm(obsm)
     spatial_loc = obsm_loc or _detect_spatial_location_from_obs(obs)
@@ -308,7 +425,7 @@ def _from_anndata_object(
         spatial_location=spatial_loc,
         file_path=file_path,
         probability_columns=prob_cols,
-        microns_per_data_unit=microns_per_data_unit,
+        host_units_per_data_unit=host_units_per_data_unit,
     )
 
 
@@ -340,9 +457,26 @@ def _extract_visium_microns_per_pixel(adata) -> Optional[float]:
     return None
 
 
+def clamp_probabilities(values) -> np.ndarray:
+    """Return *values* as floats confined to ``[0, inf)``, everything else zeroed.
+
+    NaN, ±inf and negatives are not weights, but they are also not a reason to
+    discard the cell type they belong to: a single NaN used to fail an
+    ``(obs[col] >= 0).all()`` test for the whole column, so that type vanished
+    from the run with no error and no mention.  Zeroing the offending spot leaves
+    the rest of the column — and the cell type — intact.
+    """
+    arr = np.asarray(values, dtype=float)
+    return np.where(np.isfinite(arr) & (arr >= 0.0), arr, 0.0)
+
+
 def _find_probability_columns(obs: pd.DataFrame) -> list[str]:
-    """Return obs columns that look like per-cell-type deconvolution probabilities."""
+    """Return obs columns that look like per-cell-type deconvolution probabilities.
+
+    A column qualifies on its name plus any surviving mass once out-of-range
+    values are zeroed; an all-zero column weights nothing and is dropped.
+    """
     return [
         col for col in obs.columns
-        if col.endswith("_probability") and (obs[col] >= 0).all() and obs[col].sum() > 0
+        if col.endswith("_probability") and clamp_probabilities(obs[col]).sum() > 0
     ]

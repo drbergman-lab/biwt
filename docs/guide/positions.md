@@ -1,7 +1,6 @@
 # Positions
 
-**Shown when:** always. This is where cells actually get coordinates, and the most involved
-screen in the wizard.
+**Shown when:** always. This is where cells actually get coordinates.
 
 ## The shape of it
 
@@ -32,9 +31,6 @@ buttons light up, and the plot redraws them colored by type. **Continue** become
   shows the placement colored by cell type.</figcaption>
 </figure>
 
-Because placement is per-selection, you can build an initial condition in passes: place the
-tumor with one plotter, then the immune populations with another.
-
 ## The plotters
 
 Six ways to decide *where* the selected cells go. Three of them are named for the shape they
@@ -54,9 +50,7 @@ spherical sector, and the toolbar icons stay flat in both cases — the "Box" bu
 rectangle.
 
 **Spatial** is the one that uses your file's geometry; the other five are synthetic regions
-you define. That makes this screen useful even for non-spatial data — you are not limited to
-"scattered uniformly", you can build structure by placing different types into different
-regions.
+you define, so this screen is useful even for non-spatial data.
 
 ### In a 3-D domain
 
@@ -103,14 +97,11 @@ translation** — nothing else:
    [the domain editor](domain.md)).
 2. The resulting bounding box is centered in the domain.
 
-Because the scale is uniform, aspect ratio is always preserved. A circular tumor stays
-circular, and distances between any two cells scale by the same amount.
+Because the scale is uniform, aspect ratio is always preserved.
 
 !!! note "The cells may not fill the domain"
     If your data's aspect ratio differs from the domain's, the cells occupy a
-    correctly-proportioned region inside it rather than stretching to the edges. Distorting
-    tissue geometry to fill a box would corrupt exactly the spatial relationships you chose
-    to preserve.
+    correctly-proportioned region inside it rather than stretching to the edges.
 
     Resizing the domain changes the container, not the cell scale. To change how large the
     cells are relative to the domain, change the scale factor.
@@ -131,14 +122,12 @@ time with **Domain Settings…**.
 ## Undo
 
 **Undo** per cell type, or **Undo All**. Domain changes are undoable too: changing the domain
-recomputes the default placement while preserving any manual edit as an undo step, so
-experimenting with domain sizes does not silently discard your work.
+recomputes the default placement while preserving any manual edit as an undo step.
 
 ## Out-of-bounds cells
 
 If cells end up outside the domain, BIWT warns and offers to either clear the placement or
-keep it. Keeping them is legitimate — some hosts cull out-of-bounds cells, some clamp them —
-but it should be your decision rather than something you discover later.
+keep it. Keeping them is legitimate — some hosts cull out-of-bounds cells, some clamp them.
 
 ## Next
 

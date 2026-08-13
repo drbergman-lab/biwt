@@ -1,18 +1,24 @@
 # User guide
 
-The walkthrough is a sequence of small screens, each asking one question. This section covers
-every screen: what it asks, what your answer changes downstream, and what happens at the
-edges.
+The walkthrough is a sequence of small screens, each asking one question.
 
 If you have not run the wizard at all yet, do
-[your first walkthrough](../getting-started/first-walkthrough.md) first — it is much easier to
-read this with the screens in mind.
+[your first walkthrough](../getting-started/first-walkthrough.md) first.
+
+## Two steps you can pre-answer
+
+The landing screen has a **Shortcuts** group. Both entries answer a question the wizard would
+otherwise ask:
+
+- **Cell-type column** — if the imported file has a column with this name, it is used as the
+  cell-type column and [that step](cluster-column.md) is skipped.
+- **Skip domain validation** — suppresses the automatic domain-mismatch dialog at
+  [the positions step](positions.md). You can still open the domain editor from there.
 
 ## How steps are chosen
 
-BIWT does not show a fixed sequence. Before each screen it walks an ordered list of
-predicates and shows the first step whose condition is true. A step whose condition is false
-is skipped entirely — you never see it.
+Before each screen BIWT walks an ordered list of predicates and shows the first step whose
+condition is true. A step whose condition is false is skipped entirely.
 
 | # | Step | Shown when |
 |---|---|---|
@@ -32,16 +38,15 @@ host.
     BIWT numbers steps by which ones are actually being shown, so the same screen gets
     different numbers on different paths. Using spatial data, Positions is "Step 5"; without
     it, [cell counts](cell-counts.md) takes that number and Positions becomes "Step 6". The
-    pages in this guide are deliberately unnumbered for that reason — follow the names, not
-    the count.
+    pages in this guide are deliberately unnumbered — follow the names, not the count.
 
-Two consequences worth internalizing:
+Two consequences:
 
 - **Your answers change which screens exist.** Saying "yes" at the spatial query removes the
   cell-counts screen, because spatial data already determines how many cells there are.
 - **Going back can invalidate later choices.** If you navigate back and change an earlier
-  answer, BIWT clears the downstream state that depended on it rather than leaving stale
-  values in place. You will be asked those questions again.
+  answer, BIWT clears the downstream state that depended on it. You will be asked those
+  questions again.
 
 ## The two screens that aren't steps
 
@@ -49,8 +54,7 @@ Two consequences worth internalizing:
 the positions screen appears if BIWT detects a mismatch between your data's extent and the
 host's domain, and it can be reopened at any time from the positions screen.
 
-[Finishing up](result.md) describes what BIWT hands back — useful whether you are the person
-running the wizard or the person receiving the output.
+[Finishing up](result.md) describes what BIWT hands back.
 
 ## A note on units
 

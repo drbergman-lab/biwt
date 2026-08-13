@@ -17,6 +17,20 @@ jobs:
         with:
           python-version: "3.12"
 
+      # The tag is what triggers this workflow, but pyproject.toml is what names
+      # the wheel.  Nothing keeps them in step, so a tag pushed without bumping
+      # the version publishes the previous release's number to PyPI — which
+      # cannot be undone, since PyPI refuses to re-upload a filename.
+      - name: Check the tag matches the project version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          version=$(python -c 'import tomllib, pathlib; print(tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["version"])')
+          if [ "$tag" != "$version" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME declares $tag, but pyproject.toml says $version."
+            exit 1
+          fi
+          echo "Publishing $version as $GITHUB_REF_NAME."
+
       - name: Install build
         run: pip install build
 

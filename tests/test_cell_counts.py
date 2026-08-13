@@ -5,19 +5,14 @@ conftest.py.
 """
 from __future__ import annotations
 
-from pathlib import Path
 
 import pytest
 
 pytest.importorskip("PyQt5")
 
-from biwt.core import data_loader
-from biwt.gui.walkthrough import BioinformaticsWalkthrough
 from biwt.gui.windows.cell_counts import CellCountsWindow
-from biwt.types import BiwtInput, DomainSpec
+from helpers import window_at_rename
 
-FIXTURES = Path(__file__).parent / "fixtures"
-DOMAIN = DomainSpec(xmin=-500, xmax=500, ymin=-500, ymax=500)
 
 
 def _counts_window(zero_type=None):
@@ -25,17 +20,8 @@ def _counts_window(zero_type=None):
 
     The fixture has 6 rows: Tumor 2, T_cell 3, Macrophage 1.
     """
-    w = BioinformaticsWalkthrough(BiwtInput(preferred_domain=DOMAIN))
+    w = window_at_rename()
     s = w.session
-    s.data = data_loader.load(str(FIXTURES / "nonspatial.csv"))
-    s.current_column = "type"
-    s.collect_cell_type_data()
-    s.use_spatial_data = False
-    s.cell_type_dict_on_edit = {ct: ct for ct in s.cell_types_list_original}
-    s.compute_intermediate_types()
-    s.cell_types_list_final = list(s.intermediate_types)
-    s.cell_type_dict_on_rename = {ct: ct for ct in s.intermediate_types}
-    s.apply_rename()
     if zero_type:
         s.cell_counts[zero_type] = 0
     win = CellCountsWindow(w)
@@ -81,3 +67,113 @@ class TestProportionMode:
         assert win._w_prop["Tumor"].text() == "2"
         assert win._w_manual["T_cell"].text() == "3"
         assert win._w_manual["Tumor"].text() == "2"
+
+
+def test_a_long_cell_type_name_does_not_widen_the_counts_table(qapp):
+    """The name column wraps instead of pushing the numeric columns off-screen."""
+    from PyQt5.QtWidgets import QLabel
+
+    from biwt.gui.widgets import ROW_LABEL_MAX_WIDTH
+
+    long_name = "Epithelial-cancer" * 6
+    win = _counts_window()
+    s = win.walkthrough.session
+    s.cell_types_list_final = [long_name]
+    s.cell_counts = {long_name: 6}
+    s.cell_volume = {long_name: 2494.0}
+    rebuilt = CellCountsWindow(win.walkthrough)
+
+    label = next(lbl for lbl in rebuilt.findChildren(QLabel) if lbl.text() == long_name)
+    assert label.wordWrap()
+    assert label.maximumWidth() == ROW_LABEL_MAX_WIDTH
+
+
+class TestEveryTypeDeleted:
+    def test_the_total_is_zero_not_one(self, qapp):
+        """`or 1` guards the proportion divisions; it must not reach the display."""
+        from PyQt5.QtWidgets import QLineEdit
+
+        win = _counts_window()
+        s = win.walkthrough.session
+        s.cell_types_list_final = []
+        s.cell_counts = {}
+        s.cell_volume = {}
+        rebuilt = CellCountsWindow(win.walkthrough)
+        totals = [f.text() for f in rebuilt.findChildren(QLineEdit)]
+        assert totals[0] == "0"
+
+
+class TestInvalidCountIsRefused:
+    def test_a_rejected_manual_count_is_not_committed(self, qapp, monkeypatch):
+        """The Total already excludes what the validator rejects, so committing it
+        would send Positions a number the window never showed anywhere."""
+        from PyQt5.QtWidgets import QMessageBox
+
+        warned = []
+        monkeypatch.setattr(QMessageBox, "warning",
+                            staticmethod(lambda *a, **k: warned.append(a[2])))
+        win = _counts_window()
+        win._mode_group.button(3).setChecked(True)
+        win._mode_changed(3)
+        field = win._w_manual["Tumor"]
+        field.setText("9999999999")
+        assert not field.hasAcceptableInput()
+        before = dict(win.walkthrough.session.cell_counts)
+        advanced = []
+        win.walkthrough.advance = lambda: advanced.append(True)
+
+        win.process_window()
+        assert advanced == []
+        assert win.walkthrough.session.cell_counts == before
+        assert "highlighted" in warned[0]
+
+    def test_a_valid_manual_count_still_commits(self, qapp):
+        win = _counts_window()
+        win._mode_group.button(3).setChecked(True)
+        win._mode_changed(3)
+        win._w_manual["Tumor"].setText("42")
+        win.walkthrough.advance = lambda: None
+        win.process_window()
+        assert win.walkthrough.session.cell_counts["Tumor"] == 42
+
+
+class TestEmptyConfluenceField:
+    def test_an_empty_confluence_field_reads_as_zero(self, qapp):
+        """A blank field parses as None, and float(None) is a TypeError — raised
+        from Continue, which aborts the host process."""
+        win = _counts_window()
+        win.walkthrough.advance = lambda: None
+        win._mode_group.button(2).setChecked(True)
+        win._mode_changed(2)
+        for field in win._w_confluence.values():
+            field.setText("")
+
+        win.process_window()                      # must not raise
+        assert set(win.walkthrough.session.cell_counts.values()) == {0}
+
+
+class TestProportionModeCommits:
+    """The mode the shared helper leaves the window in, actually committed.
+
+    Every other test switched away from proportion mode before Continue, so the
+    line that reads the Proportion column had never run — it decides the row
+    counts per type in ``BiwtResult.coordinates`` for anyone scaling that way.
+    """
+
+    def test_the_proportion_column_is_what_reaches_the_session(self, qapp):
+        win = _counts_window()                 # already in proportion mode
+        s = win.walkthrough.session
+        for ct, w in win._w_prop.items():
+            w.setText({"Tumor": "40", "T_cell": "25", "Macrophage": "7"}[ct])
+
+        win.process_window()
+
+        assert s.cell_counts == {"Tumor": 40, "T_cell": 25, "Macrophage": 7}
+        assert s.cell_counts_confirmed
+
+    def test_an_empty_proportion_field_commits_zero(self, qapp):
+        win = _counts_window()
+        for w in win._w_prop.values():
+            w.setText("")
+        win.process_window()
+        assert set(win.walkthrough.session.cell_counts.values()) == {0}

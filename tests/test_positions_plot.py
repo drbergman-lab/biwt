@@ -13,8 +13,18 @@ matplotlib.use("Agg")
 from matplotlib.figure import Figure
 import pytest
 
+from pathlib import Path
+
 from biwt.core.positioning import compute_spatial_placement
 from biwt.gui.windows.positions import PositionsWindow
+from biwt.types import DomainSpec
+
+FIXTURES = Path(__file__).parent / "fixtures"
+
+# Deep enough that DomainSpec.is_2d is False, so the axes are a real 3-D
+# projection — the condition the reported crash needed.
+DOMAIN_3D = DomainSpec(xmin=-500, xmax=500, ymin=-500, ymax=500,
+                       zmin=-750, zmax=750)
 
 
 class _Dummy:
@@ -242,3 +252,268 @@ class TestRectDragParameterSlots:
             )
             PositionsWindow._rect_helper(d, SimpleNamespace(xdata=10, ydata=20), 110, 220)
             assert (writes[0], writes[1]) == (10, 20)
+
+
+# ---------------------------------------------------------------------------
+# Spot deconvolution: placement after the cell types have been edited
+# ---------------------------------------------------------------------------
+
+class TestSpotDeconvolutionPlacement:
+    """The post-rename probability dicts have to be the ones indexed.
+
+    ``apply_rename`` used to rewrite ``cell_prob_feature_dicts`` in place, which was
+    not idempotent and paired profiles with the wrong coordinates on a second pass.
+    The fix writes ``cell_prob_feature_dicts_final`` alongside ``spatial_data_final``
+    — and ``_plot_spot_deconvolution`` is its only reader, so nothing exercised it:
+    the old expression could be restored with the whole suite still green.
+
+    Without the fix the dicts are keyed by the *original* labels while the selection
+    holds the *final* ones, so every renamed type's probability mass silently
+    disappears and none of its cells are placed.
+    """
+
+    @staticmethod
+    def _walk_to_positions(qapp, monkeypatch):
+        from PyQt5.QtWidgets import QDialog, QFileDialog
+
+        from biwt.gui.walkthrough import DomainEditorDialog, create_biwt_widget
+        from biwt.types import BiwtInput, DomainSpec
+
+        monkeypatch.setattr(DomainEditorDialog, "exec_",
+                            lambda self: QDialog.Rejected)
+        widget = create_biwt_widget(
+            BiwtInput(preferred_domain=DomainSpec(xmin=0, xmax=300,
+                                                 ymin=0, ymax=300)),
+            on_complete=lambda result: None,
+        )
+        monkeypatch.setattr(
+            QFileDialog, "getOpenFileName",
+            staticmethod(lambda *a, **k: (str(FIXTURES / "spot_deconv.csv"), "")),
+        )
+        widget._import_cb()
+
+        def name():
+            return type(widget.window).__name__
+
+        assert name() == "SpotDeconvolutionQueryWindow"
+        widget.window.yes_rb.setChecked(True)
+        widget.window.process_window()                      # -> EditCellTypes
+
+        assert name() == "EditCellTypesWindow"
+        widget.window._checkbox["Macrophage"].setChecked(True)
+        widget.window._delete_cb()
+        widget.window.process_window()                      # -> RenameCellTypes
+
+        assert name() == "RenameCellTypesWindow"
+        widget.window._line_edits["Tumor"].setText("Neoplastic")
+        widget.window.process_window()
+
+        for _ in range(4):
+            qapp.processEvents()
+            if name() == "PositionsWindow":
+                return widget
+            widget.window.process_window()
+        raise AssertionError(f"never reached Positions (stuck on {name()})")
+
+    def test_a_renamed_type_is_still_placed(self, qapp, monkeypatch):
+        widget = self._walk_to_positions(qapp, monkeypatch)
+        win, s = widget.window, widget.session
+        assert sorted(s.cell_types_list_final) == ["Neoplastic", "T_cell"]
+
+        for cb in win.checkbox_dict.values():
+            cb.setChecked(True)
+        win.cell_pos_button_group.button(win.spatial_plotter_id).setChecked(True)
+        win.plot_cell_pos()
+
+        assert len(s.coords_by_type.get("Neoplastic", [])) > 0
+        # Every spot that was plotted placed something: nothing was dropped for
+        # want of a key.  Not every spot is plotted — this fixture's placement
+        # rectangle is x -50..350 against a 0..300 domain, so 3 of the 6 fall
+        # outside it and are skipped, the same way the non-deconvolution branch
+        # skips them.
+        assert len(s.plotted_cell_types_per_spot) == 3
+        assert sum(len(v) for v in s.coords_by_type.values()) == \
+            len(s.plotted_cell_types_per_spot)
+
+    def test_the_dicts_are_keyed_by_the_final_names(self, qapp, monkeypatch):
+        widget = self._walk_to_positions(qapp, monkeypatch)
+        s = widget.session
+        keys = {k for d in s.cell_prob_feature_dicts_final for k in d}
+        assert keys == {"Neoplastic", "T_cell"}
+        # The source dicts were not mutated to get there.
+        assert {k for d in s.cell_prob_feature_dicts for k in d} == {
+            "Macrophage", "T_cell", "Tumor",
+        }
+
+
+class TestPlottingIntoA3DDomain:
+    """Spatial plotting in a 3-D domain — reported as a hard crash.
+
+    ``self.circles()`` builds a 2-D ``PatchCollection``; adding one to a 3-D axes
+    makes ``canvas.draw()`` raise ``AttributeError: 'PatchCollection' object has
+    no attribute 'do_3d_projection'``. That escapes the Plot slot, and PyQt5 turns
+    an exception escaping a slot into a fatal abort, so it killed the host.
+
+    Three call sites chose a renderer independently and two assumed 2-D.
+    """
+
+    @staticmethod
+    def _at_positions(qapp, monkeypatch, fixture, domain, n_per_spot=1):
+        from PyQt5.QtWidgets import QDialog, QFileDialog
+
+        from biwt.gui.walkthrough import DomainEditorDialog, create_biwt_widget
+        from biwt.types import BiwtInput
+
+        monkeypatch.setattr(DomainEditorDialog, "exec_",
+                            lambda self: QDialog.Rejected)
+        widget = create_biwt_widget(
+            BiwtInput(preferred_domain=domain, domain_accepted=True),
+            on_complete=lambda result: None,
+        )
+        monkeypatch.setattr(
+            QFileDialog, "getOpenFileName",
+            staticmethod(lambda *a, **k: (str(FIXTURES / fixture), "")),
+        )
+        widget._import_cb()
+        for _ in range(8):
+            qapp.processEvents()
+            if type(widget.window).__name__ == "PositionsWindow":
+                break
+            widget.window.process_window()
+        assert type(widget.window).__name__ == "PositionsWindow"
+        win = widget.window
+        for cb in win.checkbox_dict.values():
+            cb.setChecked(True)
+        win.cell_pos_button_group.button(win.spatial_plotter_id).setChecked(True)
+        win.num_box.setValue(n_per_spot)
+        return widget, win
+
+    # The reported repro used a Visium .h5ad; spot_deconv.csv is the fixture with
+    # the same shape — coordinates plus *_probability columns.
+    @pytest.mark.parametrize("fixture,n_per_spot", [
+        ("spot_deconv.csv", 1),     # exactly what was reported
+        ("spot_deconv.csv", 4),     # the sub-spot renderer, same call site
+        ("spatial.csv", 1),         # already worked; guards against regressing it
+        ("spatial.csv", 3),         # the third call site
+    ])
+    def test_plotting_does_not_raise(self, qapp, monkeypatch, fixture, n_per_spot):
+        widget, win = self._at_positions(qapp, monkeypatch, fixture, DOMAIN_3D,
+                                         n_per_spot)
+        win.plot_cell_pos()          # would abort the host before the fix
+        s = widget.session
+        assert sum(len(v) for v in s.coords_by_type.values()) > 0
+
+    @pytest.mark.parametrize("fixture", ["spot_deconv.csv", "spatial.csv"])
+    def test_cells_land_inside_an_offset_z_range(self, qapp, monkeypatch, fixture):
+        """z=0 was hardcoded, so a domain not straddling zero placed every cell
+        outside itself."""
+        offset = DomainSpec(xmin=-500, xmax=500, ymin=-500, ymax=500,
+                            zmin=100, zmax=400)
+        widget, win = self._at_positions(qapp, monkeypatch, fixture, offset, 3)
+        win.plot_cell_pos()
+        placed = np.vstack([v for v in widget.session.coords_by_type.values()
+                            if len(v)])
+        assert len(placed) > 0
+        assert placed[:, 2].min() >= 100
+        assert placed[:, 2].max() <= 400
+
+    def test_every_drawn_cell_reaches_the_host(self, qapp, monkeypatch):
+        """The sub-spot arm drew cells and stored none, so the canvas filled while
+        ``coordinates`` came back empty — in 2-D as well as 3-D."""
+        flat = DomainSpec(xmin=-500, xmax=500, ymin=-500, ymax=500)
+        widget, win = self._at_positions(qapp, monkeypatch, "spot_deconv.csv",
+                                         flat, 4)
+        win.plot_cell_pos()
+        s = widget.session
+        drawn = sum(len(r["cell_types"]) for r in s.plotted_cell_types_per_spot)
+        assert drawn == 4 * len(s.plotted_cell_types_per_spot)
+        assert sum(len(v) for v in s.coords_by_type.values()) == drawn
+
+    def test_a_region_the_domain_cannot_reach_gives_up(self, qapp, monkeypatch):
+        """``_wedge_sample_2d`` had no fail counter where its 3-D twin does, so an
+        unreachable region spun forever inside the Plot slot.
+
+        Under a SIGALRM watchdog: without it a regression hangs the run instead of
+        failing it, which is how this went unnoticed in the first place.
+        """
+        import signal
+
+        widget, win = self._at_positions(qapp, monkeypatch, "spatial.csv",
+                                         DOMAIN_3D)
+
+        def _boom(signum, frame):
+            raise TimeoutError("_wedge_sample_2d did not give up")
+
+        old = signal.signal(signal.SIGALRM, _boom)
+        signal.setitimer(signal.ITIMER_REAL, 5.0)
+        try:
+            # A disc wholly outside the domain: nothing sampled can be accepted.
+            out = win._wedge_sample_2d(5, win.plot_xmax + 10_000, 0.0, 1.0)
+        finally:
+            signal.setitimer(signal.ITIMER_REAL, 0)
+            signal.signal(signal.SIGALRM, old)
+        assert out.shape == (0, 3)
+
+
+class TestBuildingOnAnAsymmetricDomain:
+    """The window must construct whatever the domain's bounds happen to be.
+
+    Reported from a real run: merge, rename, plot, go back, change the merges —
+    and the rebuilt window raised ``AttributeError: no attribute 'par_text'``
+    from its own constructor, which PyQt5 turns into a fatal abort.
+
+    ``_default_wh`` branched on which side of the centre was farther and, on the
+    longer one, wrote the shifted centre into a parameter field. The centre is the
+    midpoint, so the two sides are equal and that branch is only reachable when
+    halving the bounds rounds one side up. It also ran from
+    ``_create_patch_history``, before any parameter field existed.
+    """
+
+    # y is the axis that actually trips it for the documentation fixture: the
+    # midpoint of (-32.41, 2160.68) is 2.3e-13 nearer the top.
+    TIPPING = DomainSpec(xmin=-102.36, xmax=2441.1, ymin=-32.41, ymax=2160.68)
+
+    @staticmethod
+    def _positions_window(domain):
+        from helpers import window_at_rename
+
+        w = window_at_rename()
+        w.session.user_domain = domain
+        return PositionsWindow(w)
+
+    def test_the_tie_break_is_real_and_not_hypothetical(self):
+        """Guard the premise: if this stops being true the test proves nothing."""
+        mn, mx = self.TIPPING.ymin, self.TIPPING.ymax
+        c = 0.5 * (mn + mx)
+        assert abs(mn - c) > abs(mx - c)
+        assert abs(mn - c) - abs(mx - c) < 1e-9      # a rounding artefact, not real
+
+    def test_the_window_builds(self, qapp):
+        win = self._positions_window(self.TIPPING)
+        assert win.par_text != []                    # the fields it used to precede
+
+    @pytest.mark.parametrize("domain", [
+        DomainSpec(xmin=-500, xmax=500, ymin=-500, ymax=500),   # symmetric
+        DomainSpec(xmin=0, xmax=300, ymin=0, ymax=300),         # offset, exact
+        DomainSpec(xmin=100, xmax=400, ymin=-750, ymax=750),    # mixed
+    ])
+    def test_other_domains_still_build(self, qapp, domain):
+        assert self._positions_window(domain).par_text != []
+
+    def test_the_default_rectangle_is_unchanged(self, qapp):
+        """The rewrite must be numerically identical, not merely non-crashing.
+
+        With the centre at the midpoint, ``max(dL, dR)`` is the same number the
+        old ``else`` branch produced, so a symmetric domain keeps its exact
+        parameters: centre 0,0 and a quarter-domain half-extent.
+        """
+        win = self._positions_window(
+            DomainSpec(xmin=-500, xmax=500, ymin=-500, ymax=500))
+        assert win._default_rectangle_pars() == [0.0, 0.0, 250.0, 250.0]
+
+    def test_the_centre_agrees_with_the_extents(self, qapp):
+        """The old branch wrote a centre the returned parameters contradicted."""
+        win = self._positions_window(self.TIPPING)
+        x0, y0, w, h = win._default_rectangle_pars()
+        assert (x0, y0) == win._default_center()
+        assert (w, h) == win._default_wh(win._default_center())[:2]

@@ -5,8 +5,7 @@ The first screen has one button: **Import file…**. It offers `.h5ad`, `.rds`, 
 
 <figure markdown>
   ![The BIWT import screen](../assets/screenshots/import.png)
-  <figcaption>The starting screen. Everything else in the wizard follows from what you load
-  here.</figcaption>
+  <figcaption>Everything else in the wizard follows from what you load here.</figcaption>
 </figure>
 
 ## Default cell-type column
@@ -20,14 +19,13 @@ not — which is usual, since most objects call it `cell_type`, `celltype`, or
 
 > `'type' was not found in the obs columns. Select from the following:`
 
-So the field is a shortcut, not a requirement. Set it to your annotation column's name if you
-import many files with the same schema; otherwise leave it and pick from the dropdown.
+Set it to your annotation column's name if you import many files with the same schema;
+otherwise leave it and pick from the dropdown.
 
 ## Skip domain validation
 
 The checkbox below suppresses the [domain editor](domain.md) auto-opening at the positions
-step. Leave it unchecked unless you already know your domain is right — the check exists
-because coordinate/domain mismatches are the most common way to get a nonsensical result.
+step. Leave it unchecked unless you already know your domain is right.
 
 ## What BIWT reads from each format
 
@@ -40,13 +38,10 @@ because coordinate/domain mismatches are the most common way to get a nonsensica
 
 Whatever the source, BIWT normalizes it to the same internal shape: a table of per-cell
 metadata (`obs`), an optional array of spatial coordinates (`obsm`), and a cell count.
-Everything downstream works off that, so the format you started with stops mattering after
-this screen.
 
 !!! note "`.rda` / `.rdata` files with several objects"
-    BIWT takes the first object in the workspace. Files produced by a standard Seurat or SCE
-    export contain exactly one, so this is usually invisible — but if you saved several
-    objects together, re-save just the one you want.
+    BIWT takes the first object in the workspace. If you saved several objects together,
+    re-save just the one you want.
 
 ## How spatial coordinates are found
 
@@ -79,9 +74,8 @@ spatial coordinates, that unlocks the
 ## Re-importing
 
 Importing a second file resets the whole session. Every choice you made about the previous
-file — cluster column, merges, renames, counts, positions — is discarded, because none of it
-is meaningful against different data. This is intentional; there is no partial carry-over to
-be surprised by.
+file — cluster column, merges, renames, counts, positions — is discarded. There is no partial
+carry-over.
 
 ## When import fails
 

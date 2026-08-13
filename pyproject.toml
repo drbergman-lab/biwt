@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "biwt"
-version = "0.4.0"
+version = "0.5.0"
 description = "BioInformatics WalkThrough: import single-cell data and generate agent-based model initial conditions"
 authors = [
     { name = "Daniel Bergman", email = "dbergman1@som.umaryland.edu" },
@@ -40,8 +40,8 @@ classifiers = [
 dependencies = [
     "numpy>=1.22",
     "pandas>=1.4",
-    # cell_templates.py loads the built-in TOML at import time; the stdlib
-    # tomllib is only available on 3.11+, so 3.9/3.10 need the tomli backport.
+    # core/templates.py reads the host's and the user's TOML template files at
+    # runtime; stdlib tomllib is 3.11+, so 3.9/3.10 need the tomli backport.
     "tomli>=1.2; python_version < '3.11'",
 ]
 
@@ -71,7 +71,7 @@ all = ["biwt[anndata,seurat,gui]"]
 docs = ["mkdocs>=1.5", "mkdocs-material>=9.5", "mkdocstrings[python]>=0.24", "black>=24"]
 
 # pip install biwt[dev]      — development / testing extras
-dev = ["pytest>=7", "pytest-qt", "biwt[anndata,gui]"]
+dev = ["pytest>=7", "pytest-qt", "pyflakes>=3", "biwt[anndata,gui]"]
 # seurat is deliberately absent here: pip cannot install R. The R-dependent
 # .rds tests are covered by the separate `seurat` job in ci.yml, which builds
 # the R stack from conda and installs biwt[dev,seurat] on top.
@@ -80,8 +80,8 @@ dev = ["pytest>=7", "pytest-qt", "biwt[anndata,gui]"]
 where = ["src"]
 
 [tool.setuptools.package-data]
-# Include any non-Python assets inside the package (e.g. default XML templates)
-"biwt.core.parameters" = ["*.xml", "*.json", "*.toml"]
+# Non-Python assets inside the package.  BIWT ships no framework-specific data
+# (cell-parameter templates come from the host or the user), so this is icons.
 "biwt.gui" = ["icons/*.svg", "icons/*.png"]
 
 [tool.pytest.ini_options]

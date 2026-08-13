@@ -3,7 +3,7 @@ Domain inference logic.
 
 Priority order for resolving the final DomainSpec:
   1. preferred    — host-supplied DomainSpec (always wins if provided)
-  2. data_range   — min/max of the raw coordinate arrays (obsm or obs columns),
+  2. the data     — min/max of the raw coordinate arrays (obsm or obs columns),
                     used exactly as found.  The units are reported generically as
                     ``"data unit"`` — BIWT infers no unit name from the data (a
                     pixels→host-units scale factor is applied later, visibly, in
@@ -19,7 +19,7 @@ from __future__ import annotations
 from typing import Optional
 import numpy as np
 
-from biwt.types import DomainSpec
+from biwt.types import DomainSource, DomainSpec
 
 
 # ---------------------------------------------------------------------------
@@ -68,21 +68,48 @@ def infer_domain(
         if key and key in obsm:
             coords = np.asarray(obsm[key], dtype=float)
             if coords.ndim == 2 and coords.shape[1] >= 2:
-                return _domain_from_coords(coords, source="data_range")
+                return _domain_from_coords(coords, source=DomainSource.DATA)
 
     # --- try obs columns --------------------------------------------------
     if x_col and y_col:
         xy = build_obs_coords(obs, x_col, y_col, z_col, is_image_coords)
-        return _domain_from_coords(xy, source="data_range")
+        return _domain_from_coords(xy, source=DomainSource.DATA)
 
     return DomainSpec.default()
+
+
+def data_has_z(obs=None, obsm: Optional[dict] = None,
+               spatial_key: Optional[str] = None) -> bool:
+    """True when the file itself supplies a third coordinate axis.
+
+    A z the file did not provide is synthesized (``_domain_from_coords`` falls
+    back to ±10), and a synthetic depth is not a measurement in data units — so
+    the data→host scale factor has nothing to convert and must not be applied to
+    it.  A z the file *did* provide is a real measurement and is scaled with x
+    and y.
+
+    Resolution order mirrors ``infer_domain`` exactly, so the answer always
+    describes the same coordinates the domain was inferred from.
+    """
+    if obsm is not None:
+        key = spatial_key or _find_spatial_key(obsm)
+        if key and key in obsm:
+            coords = np.asarray(obsm[key])
+            if coords.ndim == 2 and coords.shape[1] >= 2:
+                return coords.shape[1] >= 3
+    try:
+        obs_cols = list(obs.columns) if obs is not None else []
+    except AttributeError:
+        obs_cols = []
+    x_col, y_col, z_col, _ = resolve_obs_coord_cols(obs_cols)
+    return bool(x_col and y_col and z_col)
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _domain_from_coords(coords: np.ndarray, source: str = "data_range",
+def _domain_from_coords(coords: np.ndarray, source: str = DomainSource.DATA,
                         units: str = "data unit") -> DomainSpec:
     """Build a DomainSpec from the bounding box of a coordinate array."""
     xmin, xmax = float(coords[:, 0].min()), float(coords[:, 0].max())
@@ -96,14 +123,27 @@ def _domain_from_coords(coords: np.ndarray, source: str = "data_range",
 
 
 def _find_spatial_key(obsm: dict) -> Optional[str]:
-    """Return the first obsm key that looks like spatial coordinates."""
-    priority = ["spatial", "X_spatial", "spatial_coords"]
-    for p in priority:
-        if p in obsm:
+    """Return the first obsm key holding usable spatial coordinates.
+
+    The name is not enough on its own: an entry called ``spatial_connectivities``
+    is an ``(N, N)`` adjacency matrix, and matching it on name alone read its
+    first three columns as x/y/z.  A candidate must therefore be a 2-D array of
+    exactly 2 or 3 columns; any other width means the entry is something else,
+    and the search moves on rather than stopping there.
+    """
+    def usable(key: str) -> bool:
+        try:
+            arr = np.asarray(obsm[key])
+        except Exception:
+            return False
+        return arr.ndim == 2 and arr.shape[1] in (2, 3)
+
+    for p in ["spatial", "X_spatial", "spatial_coords"]:
+        if p in obsm and usable(p):
             return p
     for key in obsm:
         kl = key.lower()
-        if "spatial" in kl or "coord" in kl:
+        if ("spatial" in kl or "coord" in kl) and usable(key):
             return key
     return None
 

@@ -9,7 +9,7 @@ deciding how many cells to place and where, and attaching phenotype parameters. 
 back a table of positioned cells ready to drop into a simulation.
 
 BIWT is a standalone, pip-installable package. It is host-agnostic: it ships a Qt widget and
-a small data contract, and any application can embed it.
+a small data contract.
 [PhysiCell Studio](https://github.com/PhysiCell-Tools/PhysiCell-Studio) is the current host.
 
 ---
@@ -57,24 +57,23 @@ The wizard ends by handing the host a [`BiwtResult`][biwt.types.BiwtResult]. Its
 | -198.7 | 91.6 | 0.0 | tumor |
 | 42.0 | -310.5 | 0.0 | macrophage |
 
-Those column names are the PhysiCell convention — note `type`, not `cell_type`. Optionally
-the result also carries a serialized PhysiCell cell-definitions XML block, assembled from
-whichever phenotype templates you picked.
+Those column names are the PhysiCell convention — `type`, not `cell_type`. The result
+also reports which parameter template you picked for each cell type, if the host offered any;
+turning those into a config is the host's job.
 
 **BIWT never writes to disk.** It returns the result in memory and the host decides where it
-goes. That is deliberate: it keeps the package usable from a notebook or a script, not only
-from inside an application that owns a file dialog.
+goes.
 
 ---
 
 ## Scope and limits
 
 BIWT is a *setup* tool. It does not run simulations, and it does not do bioinformatics
-analysis — it consumes the output of an analysis you have already done. In particular it
+analysis — it consumes the output of an analysis you have already done. It
 expects your cell-type calls to exist already, as a column in `obs` (or a set of per-spot
 probability columns, for deconvolved spatial data).
 
-Current limits worth knowing before you start:
+Current limits:
 
 - **3D placement is partial.** Give the domain a z extent greater than 20 µm and the
   [plotters](guide/positions.md) place cells in depth — including the Spatial plotter, which

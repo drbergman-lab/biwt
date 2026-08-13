@@ -13,11 +13,10 @@ with three options: **Keep**, **Merge**, or **Delete**. By default all are kept.
   as you go.</figcaption>
 </figure>
 
-When your data has spatial coordinates, a scatter plot sits alongside the list so you can see
-what you are about to change. The dropdown above it switches between available
-representations — `spatial` plus any dimensionality reductions your object carries — and
-**Marker Size** is worth turning down on dense data. **Show Legend** (⌘L) opens the color key
-in a popup.
+When your data has spatial coordinates, a scatter plot sits alongside the list. The dropdown
+above it switches between available representations — `spatial` plus any dimensionality
+reductions your object carries — and **Marker Size** is worth turning down on dense data.
+**Show Legend** (⌘L) opens the color key in a popup.
 
 ## Keep
 
@@ -28,9 +27,9 @@ The default. The type survives into the output as its own population.
 Combine two or more types into one. You pick a merge target, and every merged type collapses
 into it.
 
-This is the screen where a clustering result becomes a model. Single-cell analyses routinely
-produce more clusters than a simulation needs — eight T-cell subsets, four macrophage
-states, three fibroblast populations. If your model does not distinguish them, merge them.
+Single-cell analyses routinely produce more clusters than a simulation needs — eight T-cell
+subsets, four macrophage states, three fibroblast populations. If your model does not
+distinguish them, merge them.
 
 Typical merges:
 

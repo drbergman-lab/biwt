@@ -12,48 +12,63 @@ Host usage (e.g. from Studio's ICs tab):
     from biwt import BiwtInput, DomainSpec
     from biwt.gui import create_biwt_widget
 
-    biwt_input = BiwtInput(
-        preferred_domain=DomainSpec(xmin=-500, xmax=500, ymin=-500, ymax=500),
-        host_cell_type_names=celldef_tab.get_cell_type_names(),
-    )
-    widget = create_biwt_widget(biwt_input, on_complete=my_callback)
+    def host_input():                      # called at the start of each run
+        return BiwtInput(
+            preferred_domain=DomainSpec(xmin=-500, xmax=500,
+                                        ymin=-500, ymax=500),
+            host_cell_type_names=list(my_cell_definitions),
+        )
+
+    widget = create_biwt_widget(host_input, on_complete=my_callback)
     widget.show()
+
+A host that embeds the widget for the lifetime of the application passes the
+callable, so its domain and cell types are read when a run needs them rather
+than when the tab was built.  A ``BiwtInput`` instance also works, and is the
+right thing for a one-shot popup.
 
 ``my_callback`` receives a ``BiwtResult`` when the user finishes the workflow.
 
-Migration status
-----------------
-The step windows listed in ``_WINDOW_SEQUENCE`` are progressively migrated
-from ``bin/biwt_tab.py``.  Windows not yet migrated fall back to the legacy
-implementation via ``_legacy_window_fallback``.  Each migrated window is
-removed from the fallback list.
+Step selection
+--------------
+``_step_predicates`` is the single source of truth for which step comes next;
+``_STEP_FIELDS`` records which session fields each step owns, so that revisiting
+a step can invalidate everything downstream of it.  Anything *derived* rather
+than chosen belongs in ``WalkthroughSession.reseed_derived_state`` instead.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import math
+from dataclasses import MISSING, dataclass, field, fields
 from html import escape
-from typing import Optional, Callable, NamedTuple, Type
+from typing import Optional, Callable, NamedTuple
 import logging
 
 import numpy as np
-import pandas as pd
 
 from PyQt5.QtWidgets import (
-    QWidget, QDialog, QVBoxLayout, QHBoxLayout, QGridLayout,
+    QWidget, QDialog, QVBoxLayout, QHBoxLayout, QGridLayout, QFrame,
     QLabel, QPushButton, QLineEdit, QCheckBox, QToolButton,
     QFileDialog, QMessageBox, QDialogButtonBox,
 )
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QDoubleValidator
 
-from biwt.types import DomainSpec, BiwtInput, BiwtResult
+from biwt import __version__
+from biwt.types import (
+    DomainSource, DomainSpec, BiwtInput, BiwtInputSource, BiwtResult,
+)
 from biwt.core import data_loader
-from biwt.core.data_loader import BiwtData, LoadError
+from biwt.core.data_loader import (
+    INSTALL_DOCS_URL, BiwtData, LoadError, supported_formats,
+)
 from biwt.core import domain as domain_module
-from biwt.core.cell_types import CellTypeConfig, CellTypeAction, suggest_name_mappings
+from biwt.core.cell_types import alpha_key, default_name_matches
 from biwt.core.positioning import build_ic_dataframe
-from biwt.gui.widgets import QHLine, QLineEdit_custom, QVLine, SectionHeader
+from biwt.gui.widgets import (
+    QHLine, QLineEdit_custom, QVLine, SectionHeader, dropped_local_paths,
+)
 
 log = logging.getLogger(__name__)
 
@@ -92,28 +107,21 @@ class _Axis(NamedTuple):
     factor_scaled: bool   # does the data-unit ⇄ host-unit factor apply?
 
 
-# z is not ``factor_scaled``: it is a 2-D slab / synthetic depth rather than a
-# measurement in data units, so the factor has nothing to convert.  Its
-# data-units cells are still built, so the Z row matches the others and wiring
-# them up later is a matter of flipping this flag.
-_DOMAIN_AXES = (
-    _Axis("X", "width",  "xmin", "xmax", True),
-    _Axis("Y", "height", "ymin", "ymax", True),
-    _Axis("Z", "depth",  "zmin", "zmax", False),
-)
-
-
 def _scale_domain(d: DomainSpec, factor: float,
-                  source: str = "data_range", units: str = "micron") -> DomainSpec:
-    """Return *d* with its x/y bounds multiplied by *factor* (host-units per data unit).
+                  source: str = DomainSource.DATA, units: str = "micron",
+                  scale_z: bool = False) -> DomainSpec:
+    """Return *d* with its bounds multiplied by *factor* (host-units per data unit).
 
-    Z bounds are left untouched (a 2-D slab / synthetic depth, not a data-unit
-    measurement). Used to convert a raw data-range domain into host units.
+    x and y are always scaled.  z only when *scale_z* — see
+    ``biwt.core.domain.data_has_z``: a z the file supplied is a real measurement
+    and converts like the others, while a synthesized ±10 slab is not in data
+    units at all and the factor has nothing to convert.
     """
+    z = (d.zmin * factor, d.zmax * factor) if scale_z else (d.zmin, d.zmax)
     return DomainSpec(
         xmin=d.xmin * factor, xmax=d.xmax * factor,
         ymin=d.ymin * factor, ymax=d.ymax * factor,
-        zmin=d.zmin, zmax=d.zmax, source=source, units=units,
+        zmin=z[0], zmax=z[1], source=source, units=units,
     )
 
 
@@ -136,10 +144,14 @@ class DomainEditorDialog(QDialog):
     # **maximum** and anchors the minimum, so exactly one bound changes: set the
     # left edge, then set the width, and the width does not shift the left edge
     # back.
-    _AXES = _DOMAIN_AXES
+    _AXES = (
+        _Axis("X", "width",  "xmin", "xmax", True),
+        _Axis("Y", "height", "ymin", "ymax", True),
+        _Axis("Z", "depth",  "zmin", "zmax", False),
+    )
     # Bound attrs the factor applies to, in grid order.  Derived rather than
     # spelled out so it cannot drift from _AXES.
-    _XY = tuple(a for ax in _DOMAIN_AXES if ax.factor_scaled
+    _XY = tuple(a for ax in _AXES if ax.factor_scaled
                 for a in (ax.lo, ax.hi))
 
     def __init__(
@@ -149,10 +161,12 @@ class DomainEditorDialog(QDialog):
         preferred_domain: DomainSpec,
         context_message: str = "",
         initial_domain: Optional[DomainSpec] = None,
+        initial_preset: str = DomainSource.DATA,
         host_name: str = "Host",
         file_factor: Optional[float] = None,
         current_factor: Optional[float] = None,
         apply_scale: bool = True,
+        data_has_z: bool = False,
     ):
         super().__init__(parent)
         self.setWindowTitle("Domain Settings")
@@ -160,6 +174,9 @@ class DomainEditorDialog(QDialog):
         self.setMinimumWidth(660)
 
         self._data_domain = data_domain            # raw bounds, data units
+        # Whether the file supplied z at all; a synthesized slab is not in data
+        # units, so the factor must not be applied to it.
+        self._data_has_z = data_has_z
         self._preferred_domain = preferred_domain  # host bounds, host units
         self._file_factor = file_factor
         # Re-entrancy guard: bounds and extents write to each other, so whichever
@@ -192,7 +209,9 @@ class DomainEditorDialog(QDialog):
         self._factor_edit.setStyleSheet(_LE_STYLE)
         self._factor_edit.setMaximumWidth(120)
         self._factor_edit.setPlaceholderText(self._placeholder_for_empty())
-        F0 = current_factor if current_factor is not None else file_factor
+        # Not falling back to file_factor: a factor the user cleared must stay
+        # cleared, and the ↺ button is how the file's value comes back.
+        F0 = current_factor
         if F0 is not None:
             self._factor_edit.setText(f"{F0:g}")
         factor_hbox.addWidget(self._factor_edit)
@@ -236,7 +255,10 @@ class DomainEditorDialog(QDialog):
         dv = QDoubleValidator()
 
         def edit(width: int) -> QLineEdit_custom:
-            le = QLineEdit_custom(ndigits=2)
+            # No ndigits: _source_of compares what the fields hold against the
+            # host's domain, so rounding here makes a host domain of more than two
+            # decimals come back as 'user', with the bounds actually perturbed.
+            le = QLineEdit_custom()
             le.setValidator(dv)
             le.setStyleSheet(_LE_STYLE)
             # Fixed rather than expanding: a stretched field drags its closing
@@ -279,6 +301,11 @@ class DomainEditorDialog(QDialog):
         preset_hbox = QHBoxLayout()
         data_btn = QPushButton("Use Data Domain")
         data_btn.clicked.connect(self._fill_data)
+        if data_domain is None or data_domain.source == DomainSource.DEFAULT:
+            # No coordinates in the file, so data_domain is BIWT's fallback box —
+            # not the data's anything.  DEFAULT is what marks it as not real.
+            data_btn.setEnabled(False)
+            data_btn.setToolTip("This file has no spatial coordinates.")
         preferred_btn = QPushButton(f"Use {host_name} Domain")
         preferred_btn.clicked.connect(self._fill_preferred)
         preset_hbox.addWidget(data_btn)
@@ -300,10 +327,15 @@ class DomainEditorDialog(QDialog):
         layout.addWidget(btn_box)
 
         # --- initial population (before signals are connected) ---
+        # A revisit shows the domain in force.  Otherwise *initial_preset* decides,
+        # and the caller picks it from the session: the data extent is the useful
+        # starting point only when the data's own coordinates are being used.
         if initial_domain is not None:
             self._fill_host(initial_domain)   # revisit: host column = active domain
+        elif initial_preset == DomainSource.HOST:
+            self._fill_preferred()
         else:
-            self._fill_data()                 # first open: host = raw×F (or raw)
+            self._fill_data()                 # host = raw×F (or raw)
         self._update_data_units_enabled()
         self._update_reset_enabled()
         self._sync_extents_from_host()
@@ -480,23 +512,38 @@ class DomainEditorDialog(QDialog):
             self._host_fields[attr].setText(self._fmt(getattr(d, attr)))
         self._sync_du_from_host()
 
-    def _fill_data(self) -> None:
-        """Use Data Domain: data-units = raw bounds; host = raw × factor (or raw)."""
+    def _data_host_bounds(self) -> dict:
+        """The data extent in host units — what "Use Data Domain" puts in the fields.
+
+        Shared with ``result()``, which needs to recognise these values to report
+        an accurate ``DomainSpec.source``.
+        """
         d = self._data_domain
         zmin, zmax = d.zmin, d.zmax
         if abs(zmax - zmin) < 1e-6:
             zmin, zmax = -10.0, 10.0
         F = self._effective_factor()
+        bounds = {
+            attr: (getattr(d, attr) * F if F is not None else getattr(d, attr))
+            for attr in self._XY
+        }
+        # A z the file supplied is a data-unit measurement and converts like x and
+        # y; a synthesized slab is not, so the factor has nothing to convert.
+        if self._data_has_z and F is not None:
+            zmin, zmax = zmin * F, zmax * F
+        bounds["zmin"], bounds["zmax"] = zmin, zmax
+        return bounds
+
+    def _fill_data(self) -> None:
+        """Use Data Domain: data-units = raw bounds; host = raw × factor (or raw)."""
+        host_bounds = self._data_host_bounds()
+        F = self._effective_factor()
         for attr in self._XY:
-            raw = getattr(d, attr)
             if F is not None:
-                self._du_fields[attr].setText(self._fmt(raw))
-                self._host_fields[attr].setText(self._fmt(raw * F))
-            else:
-                self._host_fields[attr].setText(self._fmt(raw))
-        # Z is never scaled by the factor.
-        self._host_fields["zmin"].setText(self._fmt(zmin))
-        self._host_fields["zmax"].setText(self._fmt(zmax))
+                self._du_fields[attr].setText(self._fmt(getattr(self._data_domain, attr)))
+            self._host_fields[attr].setText(self._fmt(host_bounds[attr]))
+        self._host_fields["zmin"].setText(self._fmt(host_bounds["zmin"]))
+        self._host_fields["zmax"].setText(self._fmt(host_bounds["zmax"]))
 
     def _fill_preferred(self) -> None:
         """Use Host Domain: host = host bounds verbatim; derive data-units."""
@@ -637,6 +684,34 @@ class DomainEditorDialog(QDialog):
 
     # ------------------------------------------------------------------
 
+    def _source_of(self, bounds: dict) -> str:
+        """Which ``DomainSpec.source`` describes *bounds*.
+
+        The dialog used to stamp every accepted domain "user edited", which
+        made the field useless: a host is told to check ``source != HOST``
+        to see whether its own domain survived, and after this dialog the answer
+        was always yes — even when the user pressed Enter on the pre-filled values
+        without touching anything.  The bounds themselves say which it is.
+
+        Tolerance covers the round trip through the fields: ``%g`` keeps six
+        significant digits, so a value that was only displayed and read back
+        differs by at most a relative 5e-7.
+        """
+        def same_as(reference: dict) -> bool:
+            return all(
+                math.isclose(bounds[a], reference[a], rel_tol=1e-5, abs_tol=1e-6)
+                for a in bounds
+            )
+
+        # Host first: if the two coincide, the host's domain did survive — and
+        # its own source says whether it was ever really the host's, since an
+        # unusable one was replaced by BIWT's box before it got here.
+        if same_as({a: getattr(self._preferred_domain, a) for a in bounds}):
+            return self._preferred_domain.source
+        if same_as(self._data_host_bounds()):
+            return DomainSource.DATA
+        return DomainSource.USER
+
     def result(self) -> tuple[DomainSpec, Optional[float], bool]:
         """Return ``(host-units DomainSpec, scale_factor, apply_scale)``.
 
@@ -648,12 +723,9 @@ class DomainEditorDialog(QDialog):
             if v is None:                      # unreachable while OK is gated
                 raise ValueError(f"domain bound {attr!r} is not a number")
             return v
-        domain = DomainSpec(
-            xmin=hv("xmin"), xmax=hv("xmax"),
-            ymin=hv("ymin"), ymax=hv("ymax"),
-            zmin=hv("zmin"), zmax=hv("zmax"),
-            source="user_edited", units=self._host_units,
-        )
+        bounds = {a: hv(a) for a in ("xmin", "xmax", "ymin", "ymax", "zmin", "zmax")}
+        domain = DomainSpec(**bounds, source=self._source_of(bounds),
+                            units=self._host_units)
         return domain, self._effective_factor(), self._apply_cb.isChecked()
 
 
@@ -685,37 +757,6 @@ def _build_mismatch_message(
 
 
 # ---------------------------------------------------------------------------
-# XML helpers
-# ---------------------------------------------------------------------------
-
-def _patch_domain_xml(root, domain: "DomainSpec") -> None:
-    """Overwrite the <domain> child of *root* with values from *domain*."""
-    domain_elem = root.find("domain")
-    if domain_elem is None:
-        return
-    _set_text(domain_elem, "x_min", domain.xmin)
-    _set_text(domain_elem, "x_max", domain.xmax)
-    _set_text(domain_elem, "y_min", domain.ymin)
-    _set_text(domain_elem, "y_max", domain.ymax)
-    _set_text(domain_elem, "z_min", domain.zmin)
-    _set_text(domain_elem, "z_max", domain.zmax)
-    use_2d = domain_elem.find("use_2D")
-    dz_elem = domain_elem.find("dz")
-    if use_2d is not None and dz_elem is not None:
-        try:
-            dz = float(dz_elem.text)
-        except (TypeError, ValueError):
-            dz = 20.0
-        use_2d.text = "true" if (domain.zmax - domain.zmin) <= dz else "false"
-
-
-def _set_text(parent, tag: str, value) -> None:
-    el = parent.find(tag)
-    if el is not None:
-        el.text = str(value)
-
-
-# ---------------------------------------------------------------------------
 # Session — plain-data accumulator (no Qt)
 # ---------------------------------------------------------------------------
 
@@ -733,14 +774,13 @@ class WalkthroughSession:
 
     # ---- after file import -----------------------------------------------
     data: Optional[BiwtData] = None
-    inferred_domain: Optional[DomainSpec] = None
 
     # ---- domain editor overrides (set by DomainEditorDialog) -------------
-    user_domain: Optional[DomainSpec] = None     # user-edited domain (host units); overrides inferred
+    user_domain: Optional[DomainSpec] = None     # user-edited domain (host units); overrides the host's
     data_domain: Optional[DomainSpec] = None     # raw data bounding box (data units) computed at import
     domain_accepted: bool = False                # True once user has resolved domain dialog
     # Scale factor: host-units per one raw data-coordinate unit. Seeded from
-    # BiwtData.microns_per_data_unit; user-editable in the domain editor.
+    # BiwtData.host_units_per_data_unit; user-editable in the domain editor.
     scale_factor: Optional[float] = None
     apply_scale: bool = True                     # whether the factor scales cell placement
 
@@ -749,13 +789,19 @@ class WalkthroughSession:
     # spatial_data_final: post-rename/filter coords, same shape, in data units
     spatial_data: Optional[np.ndarray] = None
     spatial_data_final: Optional[np.ndarray] = None
-    use_spatial_data: Optional[bool] = None   # None = not yet asked
+    # The user's answer at the SpatialQuery step; None = not asked yet.
+    # Never read this directly to decide behavior — use the ``use_spatial_data``
+    # property, which folds in the cases where there is nothing to ask about.
+    spatial_query_answer: Optional[bool] = None
 
     # ---- spot deconvolution (optional) -----------------------------------
     spot_deconv_asked: bool = False                  # True once the query window is passed
     perform_spot_deconvolution: bool = False
     cell_types_max: Optional[list] = None            # max-prob type per spot
     cell_prob_feature_dicts: Optional[list] = None   # per-spot {type: prob} dicts
+    # Post-rename per-spot dicts, aligned row-for-row with spatial_data_final.
+    # Kept separate so apply_rename never consumes its own output.
+    cell_prob_feature_dicts_final: Optional[list] = None
 
     # ---- after cluster-column selection ----------------------------------
     current_column: Optional[str] = None             # obs column chosen by user
@@ -781,15 +827,19 @@ class WalkthroughSession:
     plotted_cell_types_per_spot: list = field(default_factory=list)  # spot-deconv records
     positions_set: bool = False
 
-    # ---- XML built in _finish() ------------------------------------------
-    cell_definitions_xml: Optional[str] = None   # in-memory XML; passed to BiwtResult
+    # ---- cell-parameter library ------------------------------------------
+    # Template files currently in play: seeded from BiwtInput.cell_template_paths
+    # the first time the step is built, then edited by the user's Add / Remove.
+    # Deliberately absent from _STEP_FIELDS — loading a library is an action, not
+    # an answer, so changing an earlier step must not silently undo it.  None
+    # means "not seeded yet".
+    template_library_paths: Optional[list] = None
 
     # ---- after load-cell-parameters step ---------------------------------
-    cell_definitions_registry: dict = field(default_factory=dict)
+    # final cell-type name → (toml path, template name, template content).
+    # Types the user left unassigned are absent; see BiwtResult.cell_templates.
+    cell_templates: dict = field(default_factory=dict)
     parameters_loaded: bool = False
-
-    # ---- legacy CellTypeConfig (new-style, not yet fully wired) ----------
-    cell_type_config: CellTypeConfig = field(default_factory=CellTypeConfig)
 
     # ------------------------------------------------------------------
     # Convenience properties
@@ -803,11 +853,26 @@ class WalkthroughSession:
     def effective_domain(self) -> DomainSpec:
         """Domain to use for coordinate placement.
 
-        Priority: user_domain (from editor) > inferred_domain > preferred_domain.
+        The host's domain until the user accepts an edited one in BIWT's own
+        editor.  There is deliberately no third value between them: a second
+        latched copy of the host's domain is what let one dialog compute its
+        mismatch warning against one box and resolve "Use <host> Domain"
+        against another.
         """
         if self.user_domain is not None:
             return self.user_domain
-        return self.inferred_domain or self.preferred_domain
+        return self.preferred_domain
+
+    @property
+    def data_has_z(self) -> bool:
+        """True when the imported file supplied a third coordinate axis.
+
+        Decides whether the scale factor applies to z: a z the file measured
+        converts like x and y, a synthesized slab has nothing to convert.
+        """
+        if self.data is None:
+            return False
+        return domain_module.data_has_z(obs=self.data.obs, obsm=self.data.obsm)
 
     def effective_scale(self) -> float:
         """Uniform factor applied to place cells (``1.0`` = no conversion).
@@ -820,29 +885,77 @@ class WalkthroughSession:
             return self.scale_factor
         return 1.0
 
+    @property
+    def name_matcher(self) -> Callable[[str, str], bool]:
+        """The predicate deciding whether two strings name the same cell type.
+
+        The host's ``BiwtInput.name_matches`` if it supplied one — which
+        overrides ``name_match_cutoff`` along with the default itself — else
+        BIWT's default bound to that cutoff.
+        """
+        bi = self.biwt_input
+        if bi.name_matches is not None:
+            return bi.name_matches
+        cutoff = bi.name_match_cutoff
+        return lambda a, b: default_name_matches(a, b, cutoff=cutoff)
+
+    @property
+    def use_spatial_data(self) -> bool:
+        """Whether cells are placed at their measured coordinates.
+
+        Derived, never stored, so it is always a real ``bool``:
+
+        * spot deconvolution is on  → True (deconvolution *is* spatial)
+        * the data has no coordinates → False (nothing to ask about)
+        * otherwise → the user's SpatialQuery answer, False until they answer
+
+        The last case is safe because the SpatialQuery step runs before any
+        consumer of this property is reachable.
+        """
+        if self.perform_spot_deconvolution:
+            return True
+        if self.data is not None and not self.data.has_spatial:
+            return False
+        return bool(self.spatial_query_answer)
+
     # ------------------------------------------------------------------
     # Data-logic helpers (pure Python, no Qt)
     # ------------------------------------------------------------------
 
     def collect_cell_type_data(self) -> None:
         """Extract unique cell types from the selected obs column."""
+        if self.current_column is None:
+            raise ValueError(
+                "collect_cell_type_data() needs current_column to be set by the "
+                "cluster-column step; the spot-deconvolution path derives cell "
+                "types from probability columns instead (see "
+                "setup_spot_deconvolution_data)."
+            )
         col_data = self.data.obs[self.current_column]
-        self.cell_types_original = col_data.tolist()
-        self.cell_types_list_original = sorted(set(str(ct) for ct in self.cell_types_original))
+        # Stringified per cell as well as in the unique list: the rename mapping
+        # is keyed by the unique (string) labels, so a numeric column — integer
+        # Leiden/Louvain cluster ids, say — would otherwise match nothing and
+        # silently drop every cell in apply_rename.
+        self.cell_types_original = [str(ct) for ct in col_data.tolist()]
+        self.cell_types_list_original = sorted(set(self.cell_types_original), key=alpha_key)
 
     def setup_spot_deconvolution_data(self) -> None:
         """Build per-spot probability dicts from probability columns."""
         prob_cols = self.data.probability_columns
-        self.cell_types_list_original = sorted(set(
-            c.replace("_probability", "") for c in prob_cols
-        ))
-        prob_matrix = self.data.obs[prob_cols].values
+        self.cell_types_list_original = sorted((
+            {c.replace("_probability", "") for c in prob_cols}
+        ), key=alpha_key)
+        # Clamped before use, not just when the columns were selected: a raw NaN
+        # wins argmax outright, so one bad spot picked its own cell type as the
+        # spot's maximum and carried the NaN into the per-spot weights.
+        prob_matrix = np.column_stack(
+            [data_loader.clamp_probabilities(self.data.obs[c]) for c in prob_cols]
+        )
         max_indices = prob_matrix.argmax(axis=1)
         cell_types = [c.replace("_probability", "") for c in prob_cols]
         self.cell_types_max = [cell_types[i] for i in max_indices]
         self.cell_prob_feature_dicts = [
-            {c.replace("_probability", ""): self.data.obs[c].iloc[i]
-             for c in prob_cols}
+            dict(zip(cell_types, prob_matrix[i]))
             for i in range(len(self.data.obs))
         ]
 
@@ -867,11 +980,68 @@ class WalkthroughSession:
                 xy = np.column_stack([xy, np.zeros(len(xy))])
             self.spatial_data = xy
 
+    def reseed_derived_state(self) -> None:
+        """Re-derive the bulk data that follows from the user's answers.
+
+        ``_STEP_FIELDS`` lists the fields whose values a step's user *chose*;
+        anything **derived** from those choices belongs here instead, so that a
+        downstream invalidation can wipe the choices without destroying what
+        follows from the ones still standing.  Called right after that
+        invalidation and again before every step-predicate evaluation, so it
+        must be idempotent, and it must never overwrite a user decision.
+
+        Not called from ``go_back_to_prev_window``: that path can reuse cached
+        windows, and repairing the session behind a live window would leave the
+        two disagreeing.
+
+        Spot deconvolution dominates the body because it is the only answer in
+        the walkthrough from which *bulk* data follows — three arrays over every
+        spot.  Every other step's answer is its own state.  Implications that are
+        merely logical, such as "deconvolution means spatial coordinates are in
+        use", need no derivation at all: see the ``use_spatial_data`` property.
+        """
+        if self.data is None:
+            return
+
+        if self.perform_spot_deconvolution:
+            # One function produces all three, so a single missing one means
+            # the whole set has to be rebuilt.
+            if (
+                self.cell_types_list_original is None
+                or self.cell_types_max is None
+                or self.cell_prob_feature_dicts is None
+            ):
+                self.setup_spot_deconvolution_data()
+        else:
+            # Declining deconvolution after having accepted it must not leave
+            # its per-spot artifacts behind.
+            self.cell_types_max = None
+            self.cell_prob_feature_dicts = None
+
+        if self.data.has_spatial and self.spatial_data is None:
+            self.setup_spatial_data()
+            if self.spatial_data is None:
+                log.warning(
+                    "Data reports spatial information in %s, but no coordinates "
+                    "could be extracted from it.", self.data.spatial_location,
+                )
+
+    def resolved_cell_type_map(self) -> dict:
+        """Every original data label → its final name, or ``None`` if deleted.
+
+        Reads the two dicts the walkthrough actually fills: an original absent
+        from ``cell_type_dict_on_rename`` was deleted at the edit step, since only
+        surviving types have a pre-image there.  Merged originals all resolve to
+        the one name their group was given.
+        """
+        renamed = self.cell_type_dict_on_rename or {}
+        return {orig: renamed.get(orig) for orig in (self.cell_types_list_original or [])}
+
     def compute_intermediate_types(self) -> None:
         """Derive intermediate_types from cell_type_dict_on_edit."""
         self.intermediate_types = []
         self.intermediate_type_pre_image = {}
-        for orig in sorted(self.cell_type_dict_on_edit):
+        for orig in sorted(self.cell_type_dict_on_edit, key=alpha_key):
             intermed = self.cell_type_dict_on_edit[orig]
             if intermed is None:
                 continue
@@ -898,9 +1068,13 @@ class WalkthroughSession:
                 if sum(new_dict.values()) > 0:
                     updated_dicts.append(new_dict)
                     spatial_rows.append(sp)
-            self.cell_prob_feature_dicts = updated_dicts
+            # Written to a separate field: this method re-runs on every Continue
+            # from the rename step, and consuming its own output would rename
+            # already-renamed keys and re-zip filtered dicts against the full
+            # coordinate array.
+            self.cell_prob_feature_dicts_final = updated_dicts
             self.spatial_data_final = np.vstack(spatial_rows) if spatial_rows else np.empty((0, 3))
-            self.cell_types_final = sorted(final_set)
+            self.cell_types_final = sorted(final_set, key=alpha_key)
         else:
             pairs = [
                 (mapping[ct], pos)
@@ -910,7 +1084,12 @@ class WalkthroughSession:
             ]
             if self.use_spatial_data:
                 self.cell_types_final = [p[0] for p in pairs]
-                self.spatial_data_final = np.vstack([p[1] for p in pairs])
+                # Every type deleted leaves nothing to stack, and np.vstack([])
+                # raises — from a Qt slot, which aborts the host process.
+                self.spatial_data_final = (
+                    np.vstack([p[1] for p in pairs]) if pairs
+                    else np.empty((0, self.spatial_data.shape[1]))
+                )
             else:
                 self.cell_types_final = [mapping[ct] for ct in self.cell_types_original if ct in mapping]
 
@@ -943,6 +1122,9 @@ def _step_predicates(s: "WalkthroughSession") -> list:
     ``BioinformaticsWalkthrough._build_next_window`` maps each label to its
     factory; tests import this function directly so they never duplicate the
     predicate logic.
+
+    Predicates read derived state, so ``s.reseed_derived_state()`` must run
+    first — ``_build_next_window`` does that for every real evaluation.
     """
     return [
         (
@@ -956,7 +1138,9 @@ def _step_predicates(s: "WalkthroughSession") -> list:
             "ClusterColumn",
         ),
         (
-            lambda: s.use_spatial_data is None
+            # Deconvolution implies spatial, so there is nothing left to ask.
+            lambda: s.spatial_query_answer is None
+                    and not s.perform_spot_deconvolution
                     and s.data is not None and s.data.has_spatial,
             "SpatialQuery",
         ),
@@ -987,55 +1171,50 @@ def _step_predicates(s: "WalkthroughSession") -> list:
 # Downstream-invalidation tables (used by advance() to centralize resets)
 # ---------------------------------------------------------------------------
 
-_STEP_ORDER = [
-    "SpotDeconvQuery", "ClusterColumn", "SpatialQuery",
-    "EditCellTypes", "RenameCellTypes", "CellCounts",
-    "Positions", "LoadCellParameters",
-]
+# The labels, in order, from the one place that defines them.  The predicates
+# are closures, and are not called here.
+_STEP_ORDER = [label for _, label in _step_predicates(None)]
 
-# For each step label: (session_field, reset_value) pairs.
-# advance() resets the fields of every step AFTER the current one when
-# stale_futures is True, so predicates are re-evaluated on fresh state.
-_STEP_FIELDS: dict[str, list] = {
-    "SpotDeconvQuery": [
-        ("spot_deconv_asked", False),
-        ("perform_spot_deconvolution", False),
-        ("cell_types_max", None),
-        ("cell_prob_feature_dicts", None),
-    ],
+_SESSION_FIELDS = {f.name: f for f in fields(WalkthroughSession)}
+
+
+def _reset_to_default(session, name: str) -> None:
+    """Put *name* back to its ``WalkthroughSession`` default.
+
+    Read off the dataclass rather than restated beside the field name: a table of
+    reset *values* is a second copy of every default, free to drift from the one
+    the session actually starts with.
+    """
+    spec = _SESSION_FIELDS[name]
+    setattr(session, name,
+            spec.default_factory() if spec.default_factory is not MISSING
+            else spec.default)
+
+
+# For each step label: (session_field, reset_value) pairs — the fields whose
+# values that step's *user* chose.  advance() resets the fields of every step
+# AFTER the current one when stale_futures is True, so predicates are
+# re-evaluated on fresh state.  State that is *derived* from those choices is
+# not listed here; WalkthroughSession.reseed_derived_state owns it and runs
+# immediately after the reset.
+_STEP_FIELDS: dict[str, list[str]] = {
+    "SpotDeconvQuery": ["spot_deconv_asked", "perform_spot_deconvolution"],
     "ClusterColumn": [
-        ("current_column", None),
-        ("cell_types_original", None),
-        ("cell_types_list_original", None),
+        "current_column", "cell_types_original", "cell_types_list_original",
     ],
-    "SpatialQuery": [
-        ("use_spatial_data", None),
-    ],
+    "SpatialQuery": ["spatial_query_answer"],
     "EditCellTypes": [
-        ("cell_type_dict_on_edit", None),
-        ("intermediate_types", None),
-        ("intermediate_type_pre_image", None),
+        "cell_type_dict_on_edit", "intermediate_types",
+        "intermediate_type_pre_image",
     ],
     "RenameCellTypes": [
-        ("cell_types_list_final", None),
-        ("cell_type_dict_on_rename", None),
-        ("cell_types_final", None),
-        ("cell_counts", None),
-        ("cell_volume", None),
+        "cell_types_list_final", "cell_type_dict_on_rename", "cell_types_final",
+        "spatial_data_final", "cell_prob_feature_dicts_final", "cell_counts",
+        "cell_volume",
     ],
-    "CellCounts": [
-        ("cell_counts_confirmed", False),
-    ],
-    "Positions": [
-        ("positions_set", False),
-        ("coords_by_type", {}),
-        ("plotted_cell_types_per_spot", []),
-    ],
-    "LoadCellParameters": [
-        ("parameters_loaded", False),
-        ("cell_definitions_registry", {}),
-        ("cell_definitions_xml", None),
-    ],
+    "CellCounts": ["cell_counts_confirmed"],
+    "Positions": ["positions_set", "coords_by_type", "plotted_cell_types_per_spot"],
+    "LoadCellParameters": ["parameters_loaded", "cell_templates"],
 }
 
 
@@ -1052,20 +1231,35 @@ class BioinformaticsWalkthrough(QWidget):
         Everything the host supplies at launch (domain, cell-type names, etc.)
     on_complete:
         Callback receiving a ``BiwtResult`` when the user finishes.
-        Called with ``None`` if the user cancels.
+        Called once, when the user finishes. There is no cancel callback: closing
+        the widget is the host's own event to handle.
     """
 
     def __init__(
         self,
-        biwt_input: BiwtInput,
-        on_complete: Optional[Callable[[Optional[BiwtResult]], None]] = None,
+        biwt_input: BiwtInputSource,
+        on_complete: Optional[Callable[[BiwtResult], None]] = None,
     ):
         super().__init__()
-        self.setWindowTitle("BioInformatics WalkThrough (BIWT)")
+        self.setWindowTitle(f"BioInformatics WalkThrough (BIWT) v{__version__}")
         self.setWindowFlags(Qt.Window)
+        self.setAcceptDrops(True)
+
+        if not isinstance(biwt_input, BiwtInput) and not callable(biwt_input):
+            raise TypeError(
+                "biwt_input must be a BiwtInput or a callable returning one, "
+                f"not {type(biwt_input).__name__}"
+            )
+        self._host_input_source = biwt_input
+        self._host_input_error = ""
 
         self.on_complete = on_complete or (lambda result: None)
-        self.session = WalkthroughSession(biwt_input=biwt_input)
+        # This first resolution only seeds the home screen (the domain-check
+        # checkbox) and stands in until the first import; nothing derived,
+        # placed, or handed back to the host comes out of it.
+        self.session = WalkthroughSession(
+            biwt_input=self._resolve_host_input() or BiwtInput()
+        )
 
         # Window stack management.
         # Two-list model mirrors the original biwt_tab.py design:
@@ -1088,6 +1282,45 @@ class BioinformaticsWalkthrough(QWidget):
         self._build_home_ui()
 
     # ------------------------------------------------------------------
+    # Host context
+    # ------------------------------------------------------------------
+
+    def _resolve_host_input(self) -> Optional[BiwtInput]:
+        """Ask the host what its context is now, and freeze the answer.
+
+        Called at exactly two points: widget construction, and the start of every
+        run (a successful import).  Nowhere else — not on step-window build, not on
+        back/forward, not when the domain editor opens.  That is the whole stability
+        guarantee: one snapshot serves a run, so the domain the mismatch warning is
+        computed against, the one cells are placed into, and the one reported as
+        ``BiwtResult.domain_used`` cannot drift apart.
+
+        A host that supplies a plain ``BiwtInput`` is snapshotted too, so mutating
+        the instance it handed over mid-run cannot reach the run either.
+
+        ``None`` if the host could not supply one, which the import path treats as
+        "do not start a run" — a walkthrough configured from a previous run's
+        settings would be worse than no walkthrough.
+
+        Nothing a host gets wrong here may raise: this is reached from the import
+        slot, and PyQt5 turns an exception in a slot into a fatal abort.  Failures are
+        logged, and the reason kept for the import path to show; construction is silent.
+        """
+        source = self._host_input_source
+        try:
+            resolved = source() if callable(source) else source
+            if not isinstance(resolved, BiwtInput):
+                raise TypeError(
+                    f"host input resolved to {type(resolved).__name__}, not a BiwtInput"
+                )
+            snapshot = resolved.snapshot()
+        except Exception as exc:               # noqa: BLE001 — host code, any failure
+            log.error("Could not resolve the host's input.", exc_info=True)
+            self._host_input_error = f"{type(exc).__name__}: {exc}"
+            return None
+        return snapshot
+
+    # ------------------------------------------------------------------
     # Home screen
     # ------------------------------------------------------------------
 
@@ -1102,39 +1335,150 @@ class BioinformaticsWalkthrough(QWidget):
         )
         title.setAlignment(Qt.AlignCenter)
         vbox.addWidget(title)
-        vbox.addStretch(1)
 
-        # Import section
+        # The home screen is where the version has to live: an embedded host tab
+        # never shows a window title, and the step windows come and go.
+        version = QLabel(f"version {__version__}")
+        version.setAlignment(Qt.AlignCenter)
+        version.setStyleSheet("color: #777; font-size: 11px;")
+        vbox.addWidget(version)
+
+        # --- Import -----------------------------------------------------------
         vbox.addWidget(SectionHeader("Import"))
-        hbox_import = QHBoxLayout()
 
         self.import_button = QPushButton("Import file…")
-        self.import_button.setStyleSheet("QPushButton {background-color: lightgreen; color: black;}")
+        self.import_button.setStyleSheet(
+            "QPushButton {background-color: lightgreen; color: black; padding: 6px 18px;}"
+            "QPushButton:disabled {background-color: #d9d9d9; color: #999;}"
+        )
         self.import_button.clicked.connect(self._import_cb)
-        hbox_import.addWidget(self.import_button)
 
-        hbox_import.addWidget(QLabel("Default cell-type column:"))
+        drop_hint = QLabel("Drop a data file here")
+        drop_hint.setAlignment(Qt.AlignCenter)
+        drop_hint.setStyleSheet("color: #777; font-size: 13px; border: none;")
+
+        drop_inner = QVBoxLayout()
+        drop_inner.addStretch(1)
+        drop_inner.addWidget(drop_hint)
+        drop_inner.addWidget(self.import_button, alignment=Qt.AlignCenter)
+        drop_inner.addStretch(1)
+
+        # The band this fills used to be two empty stretches.  Making it the drop
+        # target puts the space to work and gives the button an obvious home.
+        self._drop_frame = QFrame()
+        self._drop_frame.setLayout(drop_inner)
+        self._drop_frame.setMinimumHeight(120)
+        self._set_drop_active(False)
+        vbox.addWidget(self._drop_frame, 1)
+
+        vbox.addLayout(self._build_format_chips())
+
+        # --- Shortcuts --------------------------------------------------------
+        # Both of these pre-answer a question the wizard would otherwise ask.
+        # Grouped and captioned, because as loose controls they read as stray
+        # settings and their effect is invisible.
+        vbox.addWidget(SectionHeader("Shortcuts"))
+
+        hbox_col = QHBoxLayout()
+        hbox_col.addWidget(QLabel("Cell-type column:"))
         self.column_line_edit = QLineEdit("type")
         self.column_line_edit.setStyleSheet(_LE_STYLE)
-        hbox_import.addWidget(self.column_line_edit)
-        vbox.addLayout(hbox_import)
-
-        vbox.addWidget(QLabel(
-            "Supported formats: .h5ad (AnnData), .rds / .rda / .rdata (Seurat / SCE), .csv"
+        self.column_line_edit.setToolTip(
+            "If the imported file has a column with this name, it is used as the "
+            "cell-type column and that step is skipped."
+        )
+        hbox_col.addWidget(self.column_line_edit, 1)
+        vbox.addLayout(hbox_col)
+        vbox.addWidget(self._caption(
+            "Skips the cluster-column step when the imported file has this column."
         ))
 
-        self._domain_accepted_cb = QCheckBox("Skip domain validation on import")
+        self._domain_accepted_cb = QCheckBox("Skip domain validation")
         self._domain_accepted_cb.setToolTip(
-            "When checked, the domain editor will not appear automatically at the positions step."
+            "When checked, the domain editor will not open by itself at the "
+            "positions step. You can still open it from there."
         )
         # The host sets the *default* for this box, not the outcome — the user
         # stays able to turn domain validation back on.
         self._domain_accepted_cb.setChecked(self.session.biwt_input.domain_accepted)
         vbox.addWidget(self._domain_accepted_cb)
-
-        vbox.addWidget(QHLine())
+        vbox.addWidget(self._caption(
+            "Suppresses the domain-mismatch dialog at the positions step."
+        ))
 
         vbox.addStretch(1)
+
+    @staticmethod
+    def _caption(text: str) -> QLabel:
+        label = QLabel(text)
+        label.setStyleSheet("color: #777; font-size: 11px; margin-bottom: 4px;")
+        label.setWordWrap(True)
+        return label
+
+    def _build_format_chips(self) -> QHBoxLayout:
+        """A chip per importable format, showing whether this environment has it.
+
+        The alternative is what BIWT did before: the user clicks Import, picks an
+        `.rds`, and learns from an error dialog that the R stack is missing.
+        """
+        hbox = QHBoxLayout()
+        hbox.addWidget(QLabel("Supported:"))
+        for fmt in supported_formats():
+            ok = fmt.available
+            chip = QLabel(f"{fmt.label}  {'✓' if ok else '✗'}")
+            chip.setStyleSheet(
+                "QLabel { border: 1px solid %s; border-radius: 9px;"
+                " padding: 2px 8px; color: %s; }"
+                % (("#bbb", "#333") if ok else ("#e0b4b4", "#9c4a4a"))
+            )
+            chip.setToolTip(
+                f"{fmt.description}\n\n{fmt.hint}\n\n{INSTALL_DOCS_URL}"
+                if not ok else fmt.description
+            )
+            hbox.addWidget(chip)
+        hbox.addStretch(1)
+        return hbox
+
+    def _set_drop_active(self, active: bool) -> None:
+        """Style the drop frame for its idle or drag-over state."""
+        color = "#4c9a4c" if active else "#bbb"
+        background = "#f0f7f0" if active else "transparent"
+        self._drop_frame.setStyleSheet(
+            "QFrame { border: 2px dashed %s; border-radius: 8px;"
+            " background-color: %s; }" % (color, background)
+        )
+
+    # ------------------------------------------------------------------
+    # Drag and drop
+    # ------------------------------------------------------------------
+
+    def _dropped_path(self, event) -> Optional[str]:
+        """The single local file being dragged, if it is one BIWT can read.
+
+        One file only: importing replaces the whole session, so there is no
+        sensible reading of two at once.
+        """
+        if len(event.mimeData().urls() if event.mimeData().hasUrls() else []) != 1:
+            return None
+        suffixes = {ext for fmt in supported_formats() for ext in fmt.extensions}
+        paths = dropped_local_paths(event, suffixes)
+        return paths[0] if paths else None
+
+    def dragEnterEvent(self, event) -> None:      # noqa: N802
+        if self.import_button.isEnabled() and self._dropped_path(event) is not None:
+            self._set_drop_active(True)
+            event.acceptProposedAction()
+
+    def dragLeaveEvent(self, event) -> None:      # noqa: N802
+        self._set_drop_active(False)
+
+    def dropEvent(self, event) -> None:           # noqa: N802
+        self._set_drop_active(False)
+        path = self._dropped_path(event)
+        if path is None:
+            return
+        event.acceptProposedAction()
+        self._import_file(path)
 
     # ------------------------------------------------------------------
     # File import
@@ -1168,6 +1512,23 @@ class BioinformaticsWalkthrough(QWidget):
             box.setText(str(err))
         box.exec_()
 
+    def closeEvent(self, event):  # noqa: N802
+        """Take the current step window with us; it is parentless by design."""
+        if self.window is not None:
+            self.window.close()
+        super().closeEvent(event)
+
+    def _allow_import(self, allowed: bool) -> None:
+        """Importing resets the session, so a run in progress refuses it.
+
+        Ends when the result is emitted, or when the user closes a step window —
+        that abandons the run, and the landing screen is then all there is.
+        """
+        self.import_button.setEnabled(allowed)
+        self.import_button.setToolTip(
+            "" if allowed else "Finish or close the walkthrough first."
+        )
+
     def _import_cb(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
             self,
@@ -1177,23 +1538,51 @@ class BioinformaticsWalkthrough(QWidget):
         )
         if not path:
             return
+        self._import_file(path)
+
+    def _import_file(self, path: str) -> None:
+        """Load *path* and start the walkthrough. Shared by the button and drops.
+
+        Refused mid-run: importing resets the session, so a stray click or drop
+        would discard the walkthrough in progress.  The button's own enabled state
+        is the flag, and it also blocks the drop, which has no button to grey out.
+        """
+        if not self.import_button.isEnabled():
+            return
         try:
             bdata = data_loader.load(path)
         except LoadError as e:
             self._show_import_error(e)
             return
+        except Exception as exc:               # noqa: BLE001 — any reader, any file
+            # Readers raise their own types on a corrupt file, and this runs in a
+            # slot, where an escape aborts the host process.
+            log.exception("Import of %s failed.", path)
+            self._show_import_error(
+                LoadError(f"Could not read '{path}'.\n\n{type(exc).__name__}: {exc}")
+            )
+            return
 
+        # A run starts here, so this is where the host is asked what its domain
+        # and cell types are *now* — the widget may have been built at startup.
+        # If it cannot answer, no run starts: the alternative is a walkthrough
+        # configured from settings the host has since disowned.
+        self._host_input_error = ""
+        biwt_input = self._resolve_host_input()
+        if biwt_input is None:
+            QMessageBox.warning(
+                self, "Import cancelled",
+                f"{self.session.biwt_input.host_name} could not supply its settings, "
+                f"so nothing was imported.\n\n{self._host_input_error}",
+            )
+            return
         # Reset session so stale state from a previous run doesn't survive reimport.
-        self.session = WalkthroughSession(biwt_input=self.session.biwt_input)
+        self.session = WalkthroughSession(biwt_input=biwt_input)
         self.session.data = bdata
-        # If the input has no spatial coordinates, force non-spatial mode so that
-        # downstream Qt widgets never receive a None for a boolean.
-        self.session.use_spatial_data = None if bdata.has_spatial else False
-
 
         # Seed the scale factor (host-units per data unit) from what the file
         # supplied (currently only Visium µm/pixel); None → user enters one.
-        self.session.scale_factor = bdata.microns_per_data_unit
+        self.session.scale_factor = bdata.host_units_per_data_unit
 
         # data_domain = raw coordinate range (data units), used by the editor.
         data_domain = domain_module.infer_domain(
@@ -1203,17 +1592,13 @@ class BioinformaticsWalkthrough(QWidget):
         )
         self.session.data_domain = data_domain
 
-        # Default effective domain (host units): the host's preferred domain,
-        # which always exists — BiwtInput defaults it to DomainSpec.default().
-        self.session.inferred_domain = self.session.biwt_input.preferred_domain
-
         # The checkbox is the single source of truth; BiwtInput.domain_accepted
         # only seeded its initial state (see _build_home_ui).
         self.session.domain_accepted = self._domain_accepted_cb.isChecked()
 
         log.info(
             "Loaded %d cells from '%s'. Domain source: %s.",
-            bdata.n_cells, path, self.session.inferred_domain.source,
+            bdata.n_cells, path, self.session.preferred_domain.source,
         )
         self._start_walkthrough()
 
@@ -1223,6 +1608,14 @@ class BioinformaticsWalkthrough(QWidget):
 
     def _start_walkthrough(self) -> None:
         """Begin the step-window sequence after successful file import."""
+        self._allow_import(False)
+        # Drop any window from a previous import: its handlers read the session
+        # live, and advance() would otherwise push it onto the fresh history,
+        # where Go back would show a window bound to data that no longer exists.
+        if self.window is not None:
+            self.window.hide()
+            self.window.deleteLater()
+            self.window = None
         self.window_history.clear()
         self.window_future.clear()
         self.current_window_idx = -1
@@ -1235,23 +1628,20 @@ class BioinformaticsWalkthrough(QWidget):
         Called by ``advance()`` when ``stale_futures`` is True so that
         step predicates are re-evaluated against a clean state.  Individual
         window classes no longer need to maintain their own invalidation lists.
+
+        Resetting and re-deriving is one operation: the reset clears the user's
+        downstream *choices*, then ``reseed_derived_state`` puts back everything
+        that follows from the choices still standing upstream.
         """
-        import copy as _copy
         try:
             idx = _STEP_ORDER.index(label)
         except ValueError:
             return
         s = self.session
         for step in _STEP_ORDER[idx + 1:]:
-            if (
-                step == "SpatialQuery"
-                and s.data is not None
-                and not s.data.has_spatial
-            ):
-                continue
-
-            for field_name, default in _STEP_FIELDS.get(step, []):
-                setattr(s, field_name, _copy.copy(default))
+            for field_name in _STEP_FIELDS.get(step, []):
+                _reset_to_default(s, field_name)
+        s.reseed_derived_state()
 
     def advance(self) -> None:
         """Move forward one step.
@@ -1298,12 +1688,19 @@ class BioinformaticsWalkthrough(QWidget):
         if self.window is not None:
             self.window.hide()
             if self.stale_futures:
+                # Invalidate here, against the step being returned to, rather than
+                # leaving the flag set for the next advance(): carried upstream it
+                # would fire again from an earlier step and wipe the committed
+                # answers of the ones in between.
                 self.window_future.clear()
+                label = getattr(self.window_history[-1], "_step_label", None)
+                if label:
+                    self._invalidate_downstream_of(label)
+                self.stale_futures = False
             else:
                 # Current window is still valid — preserve as next future
                 self.window_future.insert(0, self.window)
 
-        self.stale_futures = False   # future list (if any) is now clean
         self.current_window_idx -= 1
         self.window = self.window_history.pop()
         self.window.show()
@@ -1332,12 +1729,12 @@ class BioinformaticsWalkthrough(QWidget):
         from biwt.gui.windows.load_cell_parameters import LoadCellParametersWindow
 
         s = self.session
-
-        def _make_spatial_query():
-            s.setup_spatial_data()
-            return SpatialQueryWindow(self)
+        # Predicates read derived state, so repair it before evaluating them.
+        s.reseed_derived_state()
 
         def _make_edit_cell_types():
+            # Only reachable with a chosen column: the deconvolution path always
+            # has its cell types derived by reseed_derived_state() already.
             if s.cell_types_list_original is None:
                 s.collect_cell_type_data()
             return EditCellTypesWindow(self)
@@ -1345,7 +1742,7 @@ class BioinformaticsWalkthrough(QWidget):
         _factories = {
             "SpotDeconvQuery":    lambda: SpotDeconvolutionQueryWindow(self),
             "ClusterColumn":      lambda: ClusterColumnWindow(self),
-            "SpatialQuery":       _make_spatial_query,
+            "SpatialQuery":       lambda: SpatialQueryWindow(self),
             "EditCellTypes":      _make_edit_cell_types,
             "RenameCellTypes":    lambda: RenameCellTypesWindow(self),
             "CellCounts":         lambda: CellCountsWindow(self),
@@ -1367,36 +1764,15 @@ class BioinformaticsWalkthrough(QWidget):
 
     def _finish(self) -> None:
         """Assemble BiwtResult and call on_complete. The host writes all output."""
-        import copy
-        import xml.etree.ElementTree as ET
-        from biwt.core.parameters.xml_defaults import xml_defaults
-
-        coords_df = build_ic_dataframe(self.session.coords_by_type)
-        mapping = self.session.cell_type_config.resolve()
         s = self.session
-
-        # Build cell-definitions XML if the parameters step populated the registry.
-        if s.cell_definitions_registry:
-            root = ET.Element("PhysiCell_settings", version="devel-version")
-            for key, xml_str in xml_defaults.items():
-                wrapped = f"<{key}>{xml_str.strip()}</{key}>"
-                root.append(ET.fromstring(wrapped))
-            _patch_domain_xml(root, s.effective_domain)
-            cell_defs = ET.SubElement(root, "cell_definitions")
-            for template_elem in s.cell_definitions_registry.values():
-                cell_defs.append(copy.deepcopy(template_elem))
-            s.cell_definitions_xml = ET.tostring(
-                root, encoding="unicode", xml_declaration=False
-            )
-
         result = BiwtResult(
-            coordinates=coords_df,
-            cell_type_map=mapping,
+            coordinates=build_ic_dataframe(s.coords_by_type),
+            cell_type_map=s.resolved_cell_type_map(),
             domain_used=s.effective_domain,
-            cell_definitions_xml=s.cell_definitions_xml,
+            cell_templates=s.cell_templates,
         )
-
         self.on_complete(result)
+        self._allow_import(True)
 
 
 # ---------------------------------------------------------------------------
@@ -1404,8 +1780,8 @@ class BioinformaticsWalkthrough(QWidget):
 # ---------------------------------------------------------------------------
 
 def create_biwt_widget(
-    biwt_input: BiwtInput,
-    on_complete: Optional[Callable[[Optional[BiwtResult]], None]] = None,
+    biwt_input: BiwtInputSource,
+    on_complete: Optional[Callable[[BiwtResult], None]] = None,
 ) -> BioinformaticsWalkthrough:
     """Create and return a BIWT walkthrough widget, suitable for embedding or use as a popup.
 
@@ -1415,10 +1791,15 @@ def create_biwt_widget(
     Parameters
     ----------
     biwt_input:
-        Constructed by the host with domain and optional cell-type hints.
+        A ``BiwtInput``, or a zero-argument callable returning one.  Pass the
+        callable when the host outlives one run — BIWT calls it at the start of
+        each run, so a domain or cell-type list the user changed after the widget
+        was built is picked up without the host having to push an update.  The
+        resolved value is snapshotted for the run: nothing the host does mid-run
+        can move the domain the cells are being placed into.
     on_complete:
-        Callback called with ``BiwtResult`` (or ``None`` on cancel) when the
-        user finishes the workflow.
+        Callback called with the ``BiwtResult`` when the user finishes the
+        workflow.  Not called if the user never finishes.
 
     Example
     -------
@@ -1438,7 +1819,17 @@ def create_biwt_widget(
         )
         widget.show()
 
+    An embedded, long-lived host passes a callable instead, and BIWT reads it
+    at the start of every run::
+
+        def host_input():
+            return BiwtInput(preferred_domain=my_app.current_domain(),
+                             host_cell_type_names=my_app.cell_type_names(),
+                             host_name="My App")
+
+        widget = create_biwt_widget(host_input, on_complete=save)
+
     BIWT never writes to disk.  To persist the result, do it in
-    ``on_complete`` — e.g. ``result.to_csv("./config/cells.csv")``.
+    ``on_complete`` — e.g. ``result.to_csv("cells.csv")``.
     """
     return BioinformaticsWalkthrough(biwt_input=biwt_input, on_complete=on_complete)

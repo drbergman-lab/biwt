@@ -5,10 +5,10 @@ import numpy as np
 from PyQt5 import QtGui
 from PyQt5.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel, QScrollArea, QWidget,
-    QButtonGroup, QRadioButton,
+    QButtonGroup, QRadioButton, QMessageBox,
 )
 from biwt.gui.windows.base import BiwinformaticsWalkthroughWindow
-from biwt.gui.widgets import QVLine, QLineEdit_custom
+from biwt.gui.widgets import QVLine, QLineEdit_custom, row_label
 
 
 class CellCountsWindow(BiwinformaticsWalkthroughWindow):
@@ -28,7 +28,9 @@ class CellCountsWindow(BiwinformaticsWalkthroughWindow):
         d = walkthrough.session.effective_domain
 
         self._cell_types = s.cell_types_list_final
-        n_cells_total = sum(s.cell_counts.values()) or 1
+        n_cells = sum(s.cell_counts.values())
+        # `or 1` only guards the divisions below; the Total shown is the real one.
+        n_cells_total = n_cells or 1
 
         # Per-type original proportions  (fraction of total)
         self._orig_props = {
@@ -86,7 +88,7 @@ class CellCountsWindow(BiwinformaticsWalkthroughWindow):
         self._w_manual:     dict[str, QLineEdit_custom] = {}
 
         for idx, ct in enumerate(self._cell_types):
-            cols[0].addWidget(QLabel(ct))
+            cols[0].addWidget(row_label(ct))
 
             wc = QLineEdit_custom(enabled=False)
             wc.setText(str(s.cell_counts[ct]))
@@ -123,7 +125,7 @@ class CellCountsWindow(BiwinformaticsWalkthroughWindow):
         # Total row
         cols[0].addWidget(QLabel("Total"))
         wc_total = QLineEdit_custom(enabled=False)
-        wc_total.setText(str(n_cells_total))
+        wc_total.setText(str(n_cells))
         wc_total.setFixedWidth(self._COL_W["count"])
         cols[1].addWidget(wc_total)
 
@@ -307,7 +309,7 @@ class CellCountsWindow(BiwinformaticsWalkthroughWindow):
         for ct in self._cell_types:
             try:
                 conf_pct = float(self._w_confluence[ct].get_full_value())
-            except (ValueError, AttributeError):
+            except (TypeError, ValueError, AttributeError):   # blank field -> None
                 conf_pct = 0.0
             n = round((conf_pct / 100) / (self._area_per_cell[ct] or 1))
             counts[ct] = n
@@ -337,6 +339,14 @@ class CellCountsWindow(BiwinformaticsWalkthroughWindow):
     def process_window(self) -> None:
         s = self.walkthrough.session
         mode = self._mode_group.checkedId()
+        # The Total row already excludes fields the validator rejects, so a
+        # rejected value would be committed without ever being shown in a total.
+        editable = {1: self._w_prop, 3: self._w_manual}.get(mode)
+        if editable and any(w.text() and not w.hasAcceptableInput()
+                            for w in editable.values()):
+            QMessageBox.warning(self, "Invalid cell count",
+                                "Fix the highlighted count fields before continuing.")
+            return
         if mode == 1:   # proportion
             for ct in self._cell_types:
                 s.cell_counts[ct] = int(self._w_prop[ct].text() or 0)
@@ -345,10 +355,14 @@ class CellCountsWindow(BiwinformaticsWalkthroughWindow):
         elif mode == 3:  # manual
             for ct in self._cell_types:
                 s.cell_counts[ct] = int(self._w_manual[ct].text() or 0)
-        # mode == 0: use data counts as-is (already set in session.cell_counts)
+        else:            # mode 0: the data's own counts, as the Count column shows
+            # Written rather than left alone: after Go back through another mode,
+            # session.cell_counts holds that mode's numbers, not these.
+            for ct in self._cell_types:
+                s.cell_counts[ct] = int(self._w_count[ct].text() or 0)
 
-        # A count of zero is allowed: the type still gets a <cell_definition> in
-        # the output config, it just places no cells.  Deleting the type at the
-        # edit step is the way to remove it from the config entirely.
+        # A count of zero is allowed: the type still reaches the host in
+        # cell_type_map and cell_templates, it just places no cells.  Deleting it
+        # at the edit step is how to take it out of the result entirely.
         s.cell_counts_confirmed = True
         self.walkthrough.advance()

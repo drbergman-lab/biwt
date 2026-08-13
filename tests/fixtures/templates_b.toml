@@ -1,0 +1,7 @@
+# A second template file, for the cross-file cases.
+#
+# "Tumor" collides with templates_a.toml — same name, different source and
+# content — and "t_cell" differs from the fixtures' "T_cell" only by case.
+
+"Tumor" = "OPAQUE-B-TUMOR"
+"t_cell" = "OPAQUE-B-T-CELL"

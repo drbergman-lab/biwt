@@ -1,146 +1,111 @@
 """
-Cell-type configuration logic — purely data, no Qt.
+Deciding whether two strings name the same cell type — purely data, no Qt.
 
-The walkthrough gathers user decisions (keep / merge / delete / rename) and
-stores them as ``CellTypeAction`` objects inside a ``CellTypeConfig``.
-``CellTypeConfig.resolve()`` collapses those decisions into a flat
-original_label → final_name mapping that ``positioning.py`` can consume.
-
-``suggest_name_mappings`` provides lightweight heuristic hints to the GUI
-so it can pre-populate rename fields when host cell-type names are available.
-Future: replace / augment with a cell-type registry / ontology lookup.
+The decision is the host's: it can supply a predicate via
+``BiwtInput.name_matches``.  ``default_name_matches`` is the fallback BIWT ships,
+and ``best_match`` is the one selection routine used by both rename hints
+(``suggest_name_mappings``) and the cell-parameters step.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Optional
-
-
-# ---------------------------------------------------------------------------
-# Data classes
-# ---------------------------------------------------------------------------
-
-@dataclass
-class CellTypeAction:
-    """Decision for one cell-type label discovered in the imported data.
-
-    Parameters
-    ----------
-    original_name:
-        The raw label as it appears in the data (e.g. ``"CD8+LAG3= T cell"``).
-    action:
-        One of ``"keep"``, ``"merge"``, ``"delete"``.
-    merge_target:
-        Required when ``action == "merge"``.  The ``original_name`` of the
-        cell type to merge into.  Transitively resolved by ``CellTypeConfig``.
-    final_name:
-        Override the displayed name.  ``None`` means keep ``original_name``.
-    """
-    original_name: str
-    action: str = "keep"                    # "keep" | "merge" | "delete"
-    merge_target: Optional[str] = None      # only when action == "merge"
-    final_name: Optional[str] = None        # None → use original_name
-
-
-@dataclass
-class CellTypeConfig:
-    """Complete cell-type decision set for one BIWT walkthrough session.
-
-    Usage
-    -----
-    config = CellTypeConfig()
-    config.add(CellTypeAction("T cell", action="keep", final_name="tcell"))
-    config.add(CellTypeAction("CD8 T cell", action="merge", merge_target="T cell"))
-    config.add(CellTypeAction("Unknown", action="delete"))
-
-    mapping = config.resolve()
-    # → {"T cell": "tcell", "CD8 T cell": "tcell", "Unknown": None}
-    """
-    actions: dict = field(default_factory=dict)   # original_name → CellTypeAction
-
-    def add(self, action: CellTypeAction) -> None:
-        self.actions[action.original_name] = action
-
-    def resolve_name(self, original: str, _seen: Optional[set] = None) -> Optional[str]:
-        """Return the final cell-type name for *original*, or ``None`` if deleted.
-
-        Handles transitive merges (A→B→C) and detects cycles defensively.
-        """
-        if _seen is None:
-            _seen = set()
-        if original in _seen:
-            # Cycle guard — fall back to original
-            return original
-        _seen.add(original)
-
-        a = self.actions.get(original)
-        if a is None:
-            return original
-        if a.action == "delete":
-            return None
-        if a.action == "merge":
-            if a.merge_target is None:
-                return original
-            return self.resolve_name(a.merge_target, _seen)
-        # action == "keep"
-        return a.final_name if a.final_name else original
-
-    def resolve(self) -> dict[str, Optional[str]]:
-        """Build a flat ``{original_label: final_name | None}`` mapping."""
-        return {name: self.resolve_name(name) for name in self.actions}
-
-    @property
-    def kept_names(self) -> list[str]:
-        """Unique final names that are not deleted."""
-        seen, result = set(), []
-        for final in self.resolve().values():
-            if final is not None and final not in seen:
-                seen.add(final)
-                result.append(final)
-        return result
+import re
+from difflib import SequenceMatcher
+from typing import Callable, Optional
 
 
 # ---------------------------------------------------------------------------
 # Name-suggestion heuristics
 # ---------------------------------------------------------------------------
 
+def alpha_key(name: str):
+    """Sort key for names shown to a user: ``AaBbCc``, not ``ABCabc``.
+
+    Exact name as tie-break, so case-only variants keep a stable order.
+    """
+    return (name.casefold(), name)
+
+
+DEFAULT_NAME_MATCH_CUTOFF = 0.85
+
+_DIGIT_RUN = re.compile(r"\d+")
+
+
+def default_name_matches(a: str, b: str, cutoff: float = DEFAULT_NAME_MATCH_CUTOFF) -> bool:
+    """Whether *a* and *b* plausibly name the same cell type.
+
+    Digit runs must be equal, then ``SequenceMatcher`` ratio on the casefolded
+    strings must reach *cutoff*.  Digits distinguish types rather than spell them
+    (``M1``/``M2 Macrophage`` scores 0.92), so they gate similarity instead of
+    feeding it.  A *non-numeric* qualifier is not caught (``PD-1hi …``/``PD-1lo
+    …``); a host curating such names supplies its own predicate.
+
+    Hosts replace this wholesale — and the cutoff with it — via
+    ``BiwtInput.name_matches``.  Rationale and the rejection table:
+    docs/integration/templates-and-matching.md.
+    """
+    a_folded, b_folded = a.casefold(), b.casefold()
+    if _DIGIT_RUN.findall(a_folded) != _DIGIT_RUN.findall(b_folded):
+        return False
+    return SequenceMatcher(None, a_folded, b_folded).ratio() >= cutoff
+
+
+def names_match(a: str, b: str,
+                matches: Optional[Callable[[str, str], bool]] = None) -> bool:
+    """Whether *a* and *b* name the same cell type: exact, else the predicate.
+
+    The one definition, so anything that reports a match scores it the same way
+    ``best_match`` selects one.
+    """
+    return a.casefold() == b.casefold() or (matches or default_name_matches)(a, b)
+
+
+def best_match(
+    name: str,
+    candidates,
+    matches: Optional[Callable[[str, str], bool]] = None,
+    sort_key=alpha_key,
+) -> Optional[str]:
+    """Return the candidate that names the same cell type as *name*, or None.
+
+    A case-insensitive exact match always wins — every candidate is tried at that
+    tier before any is accepted on similarity alone.  Within a tier the first in
+    *sort_key* order wins: a predicate offers no way to rank, and sorting keeps
+    the result independent of how the candidates were collected.
+
+    Pass *sort_key* to express a preference among candidates, e.g. one source
+    before another.  *matches* defaults to :func:`default_name_matches`.
+    """
+    matches = matches or default_name_matches
+    ordered = sorted(candidates, key=sort_key)
+
+    folded = name.casefold()
+    for candidate in ordered:
+        if candidate.casefold() == folded:
+            return candidate
+    for candidate in ordered:
+        if matches(name, candidate):
+            return candidate
+    return None
+
+
 def suggest_name_mappings(
     data_labels: list[str],
     host_names: list[str],
+    matches: Optional[Callable[[str, str], bool]] = None,
 ) -> dict[str, Optional[str]]:
     """Suggest a host cell-type name for each data label.
 
-    Strategy (in priority order):
-      1. Exact match (case-insensitive).
-      2. Host name is a substring of the data label (or vice-versa).
-
-    There is no ranking: for (2) the first host name that matches by
-    containment wins, in the order the host supplied them.
+    Delegates to :func:`best_match`, so the notion of "same cell type" is the
+    one the host chose — see ``BiwtInput.name_matches``.
 
     Returns a dict ``{data_label: host_name | None}``.
     ``None`` means no suggestion was found.
 
-    This is deliberately simple — good enough for pre-populating the GUI.
-    A future version will query a cell-type ontology / registry.
+    These are only hints for pre-populating the GUI; the user can overwrite any
+    of them.  A future version will query a cell-type ontology / registry.
     """
-    host_lower = {n.lower(): n for n in host_names}
-    suggestions: dict[str, Optional[str]] = {}
-
-    for label in data_labels:
-        label_lower = label.lower()
-        match: Optional[str] = None
-
-        # 1. Exact
-        if label_lower in host_lower:
-            match = host_lower[label_lower]
-        else:
-            # 2. Substring
-            for sl, sn in host_lower.items():
-                if sl in label_lower or label_lower in sl:
-                    match = sn
-                    break
-
-        suggestions[label] = match
-
-    return suggestions
+    return {
+        label: best_match(label, host_names, matches=matches)
+        for label in data_labels
+    }

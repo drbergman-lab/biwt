@@ -35,13 +35,12 @@ src/biwt/
     data_loader.py      — Unified loader (.h5ad, .rds, .csv) → BiwtData
     domain.py           — Domain inference + coordinate column detection
     positioning.py      — Coordinate scaling + build_ic_dataframe
-    cell_types.py       — Name-matching heuristics (suggest_name_mappings)
-    parameters/
-      cell_templates.py — 29 PhysiCell cell-type XML templates
-      xml_defaults.py   — Default PhysiCell XML scaffold sections
+    cell_types.py       — Name matching (default_name_matches, best_match,
+                          suggest_name_mappings) + keep/merge/delete
+    templates.py        — Reading host/user cell-parameter template files
   gui/
     walkthrough.py      — WalkthroughSession (pure-Python state machine),
-                          BiwtWalkthrough (Qt widget), create_biwt_widget,
+                          BioinformaticsWalkthrough (Qt widget), create_biwt_widget,
                           _step_predicates (importable by tests)
     widgets.py          — QLineEdit_custom, QHLine, SectionHeader, etc.
     windows/
@@ -65,14 +64,14 @@ BIWT integrates with PhysiCell Studio as an optional installed dependency:
 
 - Studio detects the package via `try: from biwt.gui.walkthrough import create_biwt_widget`.
 - Studio constructs a `BiwtInput` (domain bounds, host name) and passes it to `create_biwt_widget`.
-- BIWT returns a `BiwtResult` (coordinates DataFrame, cell type map, XML) via the `on_complete` callback.
+- BIWT returns a `BiwtResult` (coordinates DataFrame, cell type map, chosen cell templates) via the `on_complete` callback.
 - Studio owns all file I/O — BIWT never writes to disk.
 - The integration bridge is in `bin/ics_tab.py` of the PhysiCell-Studio repo (`_create_biwt_package_tab` and `_biwt_complete`).
 - A legacy fallback (`bin/biwt_tab.py`) is used when the package is not installed.
 
 ## Naming Conventions
 - **Python files**: `snake_case.py`
-- **Classes**: `PascalCase` (e.g. `BiwtWalkthrough`, `WalkthroughSession`)
+- **Classes**: `PascalCase` (e.g. `BioinformaticsWalkthrough`, `WalkthroughSession`)
 - **Session fields**: `snake_case` — all state lives on `WalkthroughSession`
 - **Step window classes**: named `<Step>Window` (e.g. `EditCellTypesWindow`)
 - **Step labels**: PascalCase strings matching the window class prefix (e.g. `"EditCellTypes"`)
@@ -115,8 +114,10 @@ A feature or fix is complete when ALL of the following are satisfied:
 ## Common Pitfalls
 - BIWT never writes to disk — the host is responsible for all file I/O.
 - `_step_predicates` is the single source of truth for step ordering; `_build_next_window` and tests both use it.
-- `WalkthroughSession` is pure Python (no Qt); all Qt logic lives in window classes and `BiwtWalkthrough`.
+- `WalkthroughSession` is pure Python (no Qt); all Qt logic lives in window classes and `BioinformaticsWalkthrough`.
 - `_STEP_ORDER` + `_STEP_FIELDS` + `_invalidate_downstream_of(label)` in `walkthrough.py` centralize downstream session invalidation when the user navigates back and changes an earlier step. Individual window `process_window` callbacks should set `stale_futures = True` when their choice changes something downstream.
+- Host context (`BiwtInput`) is resolved in `_resolve_host_input` at two points only — widget construction and each import — and snapshotted, so a run cannot see the host change under it. `create_biwt_widget` accepts a provider callable for exactly this reason. Do not add a third read point.
+- `session.preferred_domain` is the only name for the host's domain; `effective_domain` falls back to it directly. Do not reintroduce a latched copy.
 - `QLineEdit_custom.focusInEvent` restores the full unformatted value via `QLineEdit.setText(self, self.full_value)` — bypassing the overridden `setText` to avoid re-triggering `format_text` on focus.
 
 ## Suggested Reading Order For New Work

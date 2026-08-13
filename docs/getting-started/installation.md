@@ -1,8 +1,6 @@
 # Installation
 
-BIWT's core install reads `.csv` and nothing else. Every other format is an optional extra,
-because each pulls in a substantially larger dependency stack — there is no reason to make
-someone install R to read a spreadsheet.
+BIWT's core install reads `.csv` and nothing else. Every other format is an optional extra.
 
 Python 3.9 or newer is required.
 
@@ -14,7 +12,7 @@ Python 3.9 or newer is required.
 | `pip install "biwt[gui]"` | The PyQt5 walkthrough UI |
 | `pip install "biwt[all]"` | Everything above |
 
-Extras combine, so the common case is one command:
+Extras combine:
 
 ```bash
 pip install "biwt[anndata,gui]"
@@ -56,8 +54,8 @@ Reading `.rds` / `.rda` / `.rdata` needs more than a pip extra: it needs a worki
 `Seurat` and `SingleCellExperiment` R packages, reached through `rpy2`.
 
 The whole R stack — the interpreter, both R packages, and `rpy2` — installs from conda as
-**prebuilt binaries**, so it is fast (no source compile) and lands in the environment's own
-R, with no dependency on a system-wide R install.
+**prebuilt binaries** into the environment's own R, with no dependency on a system-wide R
+install.
 
 Replace `<env>` with the name of the conda environment you are installing into.
 
@@ -89,8 +87,8 @@ conda deactivate && conda activate <env>
     unset. On macOS a different R installation may sit earlier on `PATH` (for example, one
     reachable by a symlink in `/usr/local/bin`), so without `R_HOME` set `rpy2` can load that
     other R — which lacks Seurat — and segfault. Setting `R_HOME` via `conda env config vars`
-    pins it to this environment's own R: scoped to the environment, re-applied on every
-    activation, with no global PATH changes.
+    pins it to this environment's own R, re-applied on every activation, with no global PATH
+    changes.
 
     The double quotes are load-bearing. Your shell expands `$CONDA_PREFIX` before conda
     stores the value, so conda records an absolute path. That means the value does **not**

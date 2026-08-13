@@ -1,0 +1,14 @@
+# Cell-parameter templates for tests.
+#
+# The values are deliberately NOT XML: BIWT must never parse, validate or wrap
+# a template's content, so anything that survives round-trip proves the point
+# better than a well-formed <phenotype> block would.
+#
+# "default" keeps leading whitespace and a trailing newline on purpose — the
+# contract says content reaches the host verbatim.
+
+"default" = """
+    OPAQUE-A-DEFAULT
+"""
+"Tumor" = "OPAQUE-A-TUMOR"
+"Macrophage" = "OPAQUE-A-MACROPHAGE"

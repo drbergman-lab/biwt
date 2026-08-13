@@ -4,9 +4,6 @@ Not a step — a dialog. It opens automatically the first time the
 [positions](positions.md) screen appears if BIWT detects a mismatch, and you can open it any
 time from that screen with **Domain Settings…**.
 
-This is the most conceptually dense part of BIWT, because it is where two coordinate systems
-meet.
-
 <figure markdown>
   ![The domain editor, opened on an "outside" mismatch](../assets/screenshots/domain.png)
   <figcaption>Opened automatically because the data extends past the host domain. The scale
@@ -35,26 +32,22 @@ as a ratio using the host's own unit — `micron/data unit` for PhysiCell.
 - For **everything else** — CSV, Seurat objects, non-Visium — there is no factor in the file.
   The field shows a `none found in file` placeholder and you supply one if you need it.
 
-**Emptying the field means no factor.** It does not quietly fall back to the file's value — if
-it did, a factor read from a file could never be cleared. The parenthesized mirrors clear and
-grey out, and placement uses your data's raw extent centered in the domain. The placeholder
-tells you how to get the file's number back (`none — ↺ restores 0.5`), and ↺ becomes available
-the moment the field stops matching the file.
+**Emptying the field means no factor.** It does not quietly fall back to the file's value. The
+parenthesized mirrors clear and grey out, and placement uses your data's raw extent centered in
+the domain. The placeholder tells you how to get the file's number back
+(`none — ↺ restores 0.5`), and ↺ becomes available the moment the field stops matching the file.
 
 A zero, negative, or unparseable factor is treated the same way: there is no usable conversion,
-so the mirrors clear rather than showing numbers derived from a factor that is no longer in
-effect.
+so the mirrors clear.
 
 ## Reading the grid
 
 The grid has **one row per axis** and three columns — **min**, **max**, and **size**. So the
 X row carries `X min`, `X max`, and the width; the Y row carries the height; the Z row the
-depth. An axis' size sits beside the two bounds it spans, which is the whole point of the
-layout: width belongs to x, and you should not have to hunt for it.
+depth.
 
 Every value appears twice. The plain field is in **host units**; the field in parentheses
-beside it is the same value in **data units**. Host units lead because that is what the domain
-is stored in and what your simulation consumes — the parenthesized number is the mirror.
+beside it is the same value in **data units**.
 
 The two stay in sync through the factor: edit either and the other updates (×F or ÷F). With no
 factor set, every parenthesized field greys out and you work purely in host units.
@@ -69,8 +62,7 @@ Two buttons fill the grid for you:
 
 Z carries the same cells as x and y, but its parenthesized fields are inert. The factor
 converts a *measurement* in data units, and z is not one — it is a slab depth BIWT supplies
-(±10 µm by default) for data that is really two-dimensional. There is nothing to convert, so
-rather than leave a hole in the grid, the cells are shown switched off.
+(±10 µm by default) for data that is really two-dimensional.
 
 ### Size is editable
 
@@ -79,16 +71,15 @@ size moves that axis' **maximum**, leaving the minimum where you put it. Other a
 untouched. It works from either unit column.
 
 Anchoring the minimum means exactly one bound moves, so the two are independently settable —
-set `X min` to `-300`, then set the X size to `1000`, and you get `-300 … 700`. The size does
-not drag the left edge back.
+set `X min` to `-300`, then set the X size to `1000`, and you get `-300 … 700`.
 
 ### The OK button is gated
 
 **OK** stays disabled until every bound is a number and each minimum is below its maximum;
 the offending fields are highlighted so you can see which ones are blocking. Equal bounds
-count as invalid too — a zero-width axis has no area to place cells into.
+count as invalid too.
 
-**Cancel** is never gated, so a domain you cannot fix is always escapable.
+**Cancel** is never gated.
 
 ## Apply scale factor to data
 
@@ -112,11 +103,7 @@ BIWT compares the data extent to the domain, in host units, and classifies the f
 | **small** | Data fits, but covers less than 50% of an axis or less than 50% of the 2D area — cells would be a small island in a large box |
 | *(none)* | Close enough; no dialog |
 
-The 50% threshold is a sensible default, chosen so that a dataset comfortably filling most of
-the domain does not trigger the dialog.
-
-No dialog appears when the domain came from the fallback default, since there is nothing
-meaningful to compare against.
+No dialog appears when the domain came from the fallback default.
 
 ## Suppressing it
 
