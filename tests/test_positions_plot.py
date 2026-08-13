@@ -453,3 +453,67 @@ class TestPlottingIntoA3DDomain:
             signal.setitimer(signal.ITIMER_REAL, 0)
             signal.signal(signal.SIGALRM, old)
         assert out.shape == (0, 3)
+
+
+class TestBuildingOnAnAsymmetricDomain:
+    """The window must construct whatever the domain's bounds happen to be.
+
+    Reported from a real run: merge, rename, plot, go back, change the merges —
+    and the rebuilt window raised ``AttributeError: no attribute 'par_text'``
+    from its own constructor, which PyQt5 turns into a fatal abort.
+
+    ``_default_wh`` branched on which side of the centre was farther and, on the
+    longer one, wrote the shifted centre into a parameter field. The centre is the
+    midpoint, so the two sides are equal and that branch is only reachable when
+    halving the bounds rounds one side up. It also ran from
+    ``_create_patch_history``, before any parameter field existed.
+    """
+
+    # y is the axis that actually trips it for the documentation fixture: the
+    # midpoint of (-32.41, 2160.68) is 2.3e-13 nearer the top.
+    TIPPING = DomainSpec(xmin=-102.36, xmax=2441.1, ymin=-32.41, ymax=2160.68)
+
+    @staticmethod
+    def _positions_window(domain):
+        from helpers import window_at_rename
+
+        w = window_at_rename()
+        w.session.user_domain = domain
+        return PositionsWindow(w)
+
+    def test_the_tie_break_is_real_and_not_hypothetical(self):
+        """Guard the premise: if this stops being true the test proves nothing."""
+        mn, mx = self.TIPPING.ymin, self.TIPPING.ymax
+        c = 0.5 * (mn + mx)
+        assert abs(mn - c) > abs(mx - c)
+        assert abs(mn - c) - abs(mx - c) < 1e-9      # a rounding artefact, not real
+
+    def test_the_window_builds(self, qapp):
+        win = self._positions_window(self.TIPPING)
+        assert win.par_text != []                    # the fields it used to precede
+
+    @pytest.mark.parametrize("domain", [
+        DomainSpec(xmin=-500, xmax=500, ymin=-500, ymax=500),   # symmetric
+        DomainSpec(xmin=0, xmax=300, ymin=0, ymax=300),         # offset, exact
+        DomainSpec(xmin=100, xmax=400, ymin=-750, ymax=750),    # mixed
+    ])
+    def test_other_domains_still_build(self, qapp, domain):
+        assert self._positions_window(domain).par_text != []
+
+    def test_the_default_rectangle_is_unchanged(self, qapp):
+        """The rewrite must be numerically identical, not merely non-crashing.
+
+        With the centre at the midpoint, ``max(dL, dR)`` is the same number the
+        old ``else`` branch produced, so a symmetric domain keeps its exact
+        parameters: centre 0,0 and a quarter-domain half-extent.
+        """
+        win = self._positions_window(
+            DomainSpec(xmin=-500, xmax=500, ymin=-500, ymax=500))
+        assert win._default_rectangle_pars() == [0.0, 0.0, 250.0, 250.0]
+
+    def test_the_centre_agrees_with_the_extents(self, qapp):
+        """The old branch wrote a centre the returned parameters contradicted."""
+        win = self._positions_window(self.TIPPING)
+        x0, y0, w, h = win._default_rectangle_pars()
+        assert (x0, y0) == win._default_center()
+        assert (w, h) == win._default_wh(win._default_center())[:2]

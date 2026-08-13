@@ -699,26 +699,31 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
         return (x0, y0) if self.plot_is_2d else (x0, y0, 0.5 * (self.plot_zmin + self.plot_zmax))
 
     def _default_wh(self, x0y0=None, factor=0.5):
+        """Half-extents for a shape centred at *x0y0*, per axis.
+
+        Its only caller passes the domain midpoint, so the distance to either
+        bound is the same number and *factor* applies to it directly.
+
+        This used to branch on which side was farther and, on the longer one,
+        shift the centre and write it into a parameter field. Both halves of that
+        were wrong. The branch can only be taken when halving the bounds rounds
+        one side up — the screenshot fixture's y range is such a case, off by
+        2e-13 — and ``_create_patch_history`` runs before the parameter fields
+        exist, so taking it raised ``AttributeError`` from the constructor and
+        PyQt5 turned that into a fatal abort. It also wrote a centre the returned
+        parameters did not agree with.
+        """
         if x0y0 is None:
             x0y0 = self._default_center()
-        dim_lengths = []
         bounds = [
             (self.plot_xmin, self.plot_xmax),
             (self.plot_ymin, self.plot_ymax),
             (self.plot_zmin, self.plot_zmax),
         ]
-        for i, c in enumerate(x0y0):
-            mn, mx = bounds[i]
-            dL = abs(mn - c)
-            dR = abs(mx - c)
-            if dL > dR:
-                dl = factor * dL
-                c -= dl
-                self._assign_par(c, i)
-            else:
-                dl = factor * dR
-            dim_lengths.append(dl)
-        return tuple(dim_lengths)
+        return tuple(
+            factor * max(abs(mn - c), abs(mx - c))
+            for (mn, mx), c in zip(bounds, x0y0)
+        )
 
     def _default_radius(self, x0y0=None, factor=0.9):
         if x0y0 is None:
