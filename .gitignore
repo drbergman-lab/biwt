@@ -29,3 +29,4 @@ screenshot_deconv.h5ad
 # Handoff note for the PhysiCell Studio session — an artifact of the 0.5 API
 # change, not documentation. See docs/integration/ for the durable host guide.
 /host-migration-v0.5.md
+/manual-test-plan.md
