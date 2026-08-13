@@ -1917,3 +1917,63 @@ mid-review; the skeptic checked the current tree, found it already resolved *in 
 direction*, and explicitly warned that applying the suggested patch would recreate the disagreement
 in mirror image. That is the check earning its place — a stale finding applied faithfully is a new
 bug.
+
+### A simplification pass, run as seven reviews
+
+With the branch committed, seven agents read the whole diff at once — reuse, simplification,
+altitude, efficiency, prose, tests, docs structure. Net **−300 lines** with nothing lost, and four
+findings that were defects rather than debt.
+
+**A CI break I had shipped.** I renamed `default_template_choices` to `matched_candidates` mid-branch
+and never updated `docs/reference/core.md`. `mkdocs build --strict` runs in CI and mkdocs is not
+installed locally, so nothing here could catch it. Fixed, and `test_static_checks.py` now resolves
+every `:::` target and every `members:` entry in the docs against the real module — verified to fail
+on exactly that stale name.
+
+**The autouse widget reaper had made every test Qt-dependent.** It requested the `qapp` fixture,
+whose `importorskip` therefore ran ahead of every test in the suite — so with PyQt5 absent the 64
+Qt-free tests reported as *skipped* rather than run, and a Qt-less CI leg would have gone green
+while testing nothing. It now reaches for `QApplication.instance()` directly and returns if there is
+none. Confirmed by running the two pure-Python modules with PyQt5 blocked at the import hook: 64
+passed.
+
+**A pixel-test class that passed with the feature deleted.** `TestDisabledLooksDisabledUnderAHostPalette`
+compared grabs of enabled vs disabled widgets; deleting *both* of BIWT's `:disabled` stylesheet
+rules left all three tests green, because the difference it measured was Qt's own disabled-icon
+rendering. 76 lines, replaced by nothing: `isEnabled()` assertions elsewhere already cover the
+behavior.
+
+**41 redundant refresh passes per window build.** `__init__` populated the model without the
+`_rebuilding` guard the rest of the file uses, so each of the shared model's `appendRow` calls
+signalled every combo, and each signal re-derived the whole tie relation — 2n+1 passes, 42% of
+construction, quadratic in cell types × templates. Construction now routes through the same
+`_rebuild_and_restore` everything else uses: **41 calls → 1**.
+
+**What got simpler.** `CellTypeConfig`/`CellTypeAction` were dead — 84 lines still exported and
+documented, superseded by `resolved_cell_type_map()`. The four-call host-first tiering in
+`matched_candidates` became one `best_match` with a rank comparator, which also deleted the
+`exact_only` parameter it needed; the deferred third source tier is now a change to one lambda.
+`_STEP_ORDER` is derived from `_step_predicates` instead of restating its eight labels, and
+`_STEP_FIELDS` holds names only — its 22 reset *values* were a second copy of the dataclass
+defaults, free to drift, and `_reset_to_default` reads them off the dataclass instead. I checked
+both derivations against the committed tables: identical, including every reset value.
+
+Four host-input guards became one: `__post_init__` normalizes lists, host name and domain, and
+`snapshot()` is a copy again rather than also being the sanitizer — which fixed a real seam, since
+the caller had been reaching back into the object `snapshot()` had just produced to finish
+validating it. `host_label` went with it: a property guarding a field nobody should read, replaced
+by normalizing the field.
+
+The two yes/no query steps became one base class. They had ~35 identical lines, and this branch had
+already fixed the same `idToggled` arity bug in both — independently, with the same comment, which
+is the evidence you want before merging. 121 lines → 44 across the two, one copy of the guard.
+
+In the cell-parameters window: the label rule was implemented twice, once on the paint path;
+computing it with the model deleted a method and took the allocation out of `paintEvent`. Nine
+action wrappers for three actions at two scopes became three methods taking the cell types they
+apply to. `_first_key_for_name` stored the key it was keyed by. 901 lines → 806.
+
+**Prose.** The docs said the same thing in up to six places — the "unassigned types are absent"
+rule in four, the `HOST_SOURCE` example verbatim in both a docstring and a page, the digit-gate
+derivation in six. Each now has one owner and the rest link. A comment block stated its point twice
+and then described the icon as a gear, which it has not been since the house replaced it.

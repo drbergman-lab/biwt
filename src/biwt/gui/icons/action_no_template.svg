@@ -1,10 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
-<!-- This file exists in two places, and they cannot drift while the tests pass:
-       src/biwt/gui/icons/  ships with the package and is what the app draws
-       docs/assets/icons/   is the copy mkdocs serves, since it only serves docs/
-     test_the_docs_ship_the_same_action_icons_as_the_package asserts they are
-     byte-identical. After editing either one:
-       cp src/biwt/gui/icons/action_*.svg docs/assets/icons/ -->
+<!-- Mirrored byte-for-byte in src/biwt/gui/icons/ and docs/assets/icons/ (a test
+     asserts it). After editing: cp src/biwt/gui/icons/action_*.svg docs/assets/icons/ -->
   <!-- No template: the empty set, a circle struck through. -->
   <g fill="none" stroke="#333333" stroke-width="2.2" stroke-linecap="round">
     <circle cx="12" cy="12" r="8"/>

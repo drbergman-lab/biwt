@@ -63,11 +63,6 @@ If your host outlives one walkthrough, pass a **callable returning a `BiwtInput`
 instance: BIWT calls it at each import, so these fields do not freeze at build time. See
 [when BIWT reads its input](api-contract.md#when-biwt-reads-it).
 
-Both drop targets — the data file on the landing screen, the `.toml` libraries at the
-cell-parameters step — hand over a path **on the machine running BIWT**. If your host streams the
-GUI from elsewhere, no drop ever arrives and the file dialogs browse the server's filesystem, so
-supply what you can through `BiwtInput` and expect the buttons to be the only route users have.
-
 ## Degrading gracefully when BIWT is absent
 
 BIWT is an optional dependency for most hosts. The conventional pattern:

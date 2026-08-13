@@ -1,7 +1,7 @@
 # `biwt.types`
 
-The public API boundary. Everything that crosses between a host application and BIWT is one
-of these three dataclasses.
+The public API boundary — the types and constants that cross between a host application and
+BIWT.
 
 For prose on how to use them well — including which fields are worth wiring up and which are
 reserved — see [the API contract](../integration/api-contract.md).
@@ -12,6 +12,7 @@ reserved — see [the API contract](../integration/api-contract.md).
       show_root_toc_entry: false
       members:
         - DomainSpec
+        - DomainSource
         - BiwtInput
         - BiwtInputSource
         - BiwtResult

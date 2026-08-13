@@ -56,10 +56,9 @@ Where you picked one of the host's own cell types, `path` is
 [`HOST_SOURCE`][biwt.types.HOST_SOURCE] and the content is empty — the host already holds that
 definition.
 
-Types you left unassigned are **absent** from the mapping, so `{}` is a normal result — that
-is what Skip produces. Check membership per type rather than assuming full coverage. Note that
-two types may carry the same template `name` from different files: `path` and `name` together
-identify a template, `name` alone does not.
+Types you left unassigned are **absent** from the mapping, so `{}` is a normal result — that is
+what Skip produces. Hosts have two more rules to follow here; see
+[the API contract](../integration/api-contract.md#biwtresult--biwt-to-host).
 
 ## What the host does with it
 

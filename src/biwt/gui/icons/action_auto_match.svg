@@ -1,10 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
-<!-- This file exists in two places, and they cannot drift while the tests pass:
-       src/biwt/gui/icons/  ships with the package and is what the app draws
-       docs/assets/icons/   is the copy mkdocs serves, since it only serves docs/
-     test_the_docs_ship_the_same_action_icons_as_the_package asserts they are
-     byte-identical. After editing either one:
-       cp src/biwt/gui/icons/action_*.svg docs/assets/icons/ -->
+<!-- Mirrored byte-for-byte in src/biwt/gui/icons/ and docs/assets/icons/ (a test
+     asserts it). After editing: cp src/biwt/gui/icons/action_*.svg docs/assets/icons/ -->
   <!-- Auto-match: recompute. A circular arrow, drawn as an arc plus a head, so
        its weight matches the other two action icons rather than whatever font
        fallback a host happens to pick for a glyph. -->

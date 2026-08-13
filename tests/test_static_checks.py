@@ -16,7 +16,9 @@ are reachable.
 from __future__ import annotations
 
 import ast
+import importlib
 import pathlib
+import re
 
 import pytest
 
@@ -62,3 +64,46 @@ def test_no_undefined_or_shadowed_names(path):
         if isinstance(msg, FATAL)
     ]
     assert not problems, "\n".join(problems)
+
+
+# ---------------------------------------------------------------------------
+# Documentation targets
+# ---------------------------------------------------------------------------
+
+DOCS = ROOT / "docs"
+
+
+def _mkdocstrings_targets():
+    """``(page, target, member)`` for every name a reference page asks to render."""
+    out = []
+    for page in sorted(DOCS.rglob("*.md")):
+        text = page.read_text()
+        for block in re.finditer(r"^::: (\S+)\n(.*?)(?=^::: |\Z)", text, re.S | re.M):
+            target, body = block.group(1), block.group(2)
+            members = re.findall(r"^\s+- (\S+)\s*$", body, re.M)
+            out.append((page.relative_to(ROOT), target, members or [None]))
+    return out
+
+
+@pytest.mark.parametrize(
+    "page,target,members",
+    _mkdocstrings_targets(),
+    ids=lambda v: str(v) if not isinstance(v, list) else "",
+)
+def test_every_documented_name_exists(page, target, members):
+    """A renamed symbol must not survive in a `:::` block.
+
+    CI builds the site with ``mkdocs --strict``, and mkdocs is not installed
+    here — so a stale member is a red CI run nobody can reproduce locally. It has
+    happened once already, to a function renamed mid-branch.
+    """
+    module_path, _, attr = target.rpartition(".")
+    try:
+        obj = importlib.import_module(target)
+    except ImportError:
+        obj = importlib.import_module(module_path)
+        assert hasattr(obj, attr), f"{page}: no {attr!r} in {module_path}"
+        obj = getattr(obj, attr)
+    for member in members:
+        if member is not None:
+            assert hasattr(obj, member), f"{page}: {target} has no {member!r}"

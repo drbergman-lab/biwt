@@ -62,8 +62,6 @@ back to.
       show_root_heading: false
       show_root_toc_entry: false
       members:
-        - CellTypeConfig
-        - CellTypeAction
         - default_name_matches
         - best_match
         - suggest_name_mappings
@@ -79,4 +77,4 @@ ships no templates of its own and never parses their content.
       show_root_toc_entry: false
       members:
         - load_templates_from_file
-        - default_template_choices
+        - matched_candidates

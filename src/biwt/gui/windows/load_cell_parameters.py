@@ -19,7 +19,7 @@ from biwt.gui.widgets import (
     action_icon, dropped_local_paths, row_arrow, row_label,
 )
 from biwt.core import templates as core_templates
-from biwt.core.cell_types import alpha_key
+from biwt.core.cell_types import alpha_key, names_match
 from biwt.types import HOST_SOURCE
 
 # Model payload for the "(none)" row.  Deliberately not ``None``: that already
@@ -33,18 +33,8 @@ class _NoTemplate:
 _NO_TEMPLATE = _NoTemplate()
 _NO_TEMPLATE_LABEL = "(none)"
 
-# Each action exists twice — once per cell type, once for all of them — and the
-# glyph is what ties the two together, so it is defined in one place.
-#
-# Each action exists at two scopes and carries the same icon at both, so the
-# pairing between a row button and its "Set all" counterpart is visible.
-#
-# Icons rather than text glyphs: a glyph is drawn by whatever font the host's
-# fallback chain provides, which made the three marks different sizes and weights
-# on the same screen — a gear at 14x15 next to a reload arrow at 13x11 — and
-# unpredictable inside an embedding application.  The gear itself survives that
-# change: a template *is* a parameter set.  (A star was rejected for meaning, a
-# house for legibility.)
+# One icon per action, shared by its per-row and "Set all" buttons so the pairing
+# reads.  Icons, not text glyphs — see biwt.gui.widgets.action_icon.
 _ICON_AUTO    = "auto_match"
 _ICON_DEFAULT = "default_template"
 _ICON_NONE    = "no_template"
@@ -88,47 +78,21 @@ def _minimal_unique_suffixes(filepaths: list[str]) -> dict[str, str]:
 class LoadCellParametersWindow(BiwinformaticsWalkthroughWindow):
     """Let the user assign each final cell type a parameter template, or none.
 
-    BIWT ships no templates: they come from ``BiwtInput.cell_template_paths``
-    and from files the user loads here.  Template contents are opaque — read as
-    text, handed back to the host untouched.
+    BIWT ships no templates: they come from ``BiwtInput.cell_template_paths`` and
+    from files the user loads here.  Contents are opaque — read as text, handed
+    back to the host untouched.  Behavioral spec: PRD F10.
 
-    The host's own cell types (``BiwtInput.host_cell_type_names``) are candidates
-    too, under the reserved source ``types.HOST_SOURCE``.  They match on equal
-    footing with file templates and carry no content: assigning one says "the host
-    already defines this type", and the host decides what that means.  They are
-    labelled with the host's name, cannot be removed, and supply the ``default``
-    baseline when they define one — see ``_baseline_key``.
+    Invariants this class maintains:
 
-    The set of files in play lives on the session (``template_library_paths``),
-    so it survives this window being rebuilt after the user goes back and changes
-    an earlier step.  Only **Remove templates from file…** takes a file out.
-
-    The template database is keyed by ``(name, path)`` so identically named
-    templates from different files coexist without overwriting each other.
-    Radio buttons switch between two display modes:
-
-    * **By Name** — all templates alphabetically.  Once two or more files are
-      loaded, each entry is tagged with the shortest path suffix that names its
-      source, since with several files even a unique name leaves you guessing
-      which file supplied it.
-    * **By Source** — templates grouped under bold section headers per file.
-
-    Every run reaches this step, and every run can leave it empty: **Skip**
-    unassigns everything, and each dropdown offers ``(none)``.  Unassigned types
-    are simply absent from ``BiwtResult.cell_templates``.
-
-    Three actions exist at both scopes, sharing a glyph so the pairing reads at a
-    glance: **⟳** auto-match (by name, then ``default``, then none), **⚙** the
-    ``default`` template, **∅** none.  The ``Set all`` row applies them to every
-    cell type; the compact buttons beside each dropdown apply them to that type
-    alone.
-
-    Template files can be added and removed here.  Either way the types the user
-    has not picked for themselves, tracked in ``_touched``, re-auto-match against
-    whatever the library now holds; a row whose template was removed loses its
-    pick and rejoins them.  Auto-match — at either
-    scope — takes a row *out* of that set, since it then holds exactly what
-    auto-matching computes.
+    * The database is keyed ``(name, path)``, so same-named templates from two
+      files coexist.  ``HOST_SOURCE`` is a reserved path for the host's own cell
+      types: no content, not removable, ranked first, and the ``default``
+      baseline where it has one (``_baseline_key``).
+    * The file list lives on the session (``template_library_paths``), so it
+      survives this window being rebuilt from an earlier step.
+    * ``_touched`` holds the types the user picked for themselves; everything
+      else re-auto-matches when the library changes.  Auto-match, at either
+      scope, takes a row back *out* of ``_touched``.
     """
 
     def __init__(self, walkthrough):
@@ -154,13 +118,10 @@ class LoadCellParametersWindow(BiwinformaticsWalkthroughWindow):
             loaded for loaded in (self._load_template_file(p) for p in seed) if loaded
         ))
         # The host's own cell types are candidates too, under a reserved source
-        # that is not a path.  They carry no content: assigning one says "this is
-        # a type you already define", and what to do about that is the host's
-        # call — see biwt.types.HOST_SOURCE.  Deduped and order-independent,
-        # since a host may pass anything.
+        # that is not a path and carries no content — see biwt.types.HOST_SOURCE.
+        # BiwtInput.snapshot has already dropped anything unusable.
         for name in dict.fromkeys(s.biwt_input.host_cell_type_names):
-            if isinstance(name, str) and name.strip():
-                self._template_db[(name, HOST_SOURCE)] = ""
+            self._template_db[(name, HOST_SOURCE)] = ""
 
         # Sort mode: True = by name, False = by source
         self._sort_by_name: bool = True
@@ -170,6 +131,7 @@ class LoadCellParametersWindow(BiwinformaticsWalkthroughWindow):
 
         # Shared model and dropdowns
         self._model = QStandardItemModel(self)
+        self._parts: dict = {}          # key -> (name, qualifier); see _build_parts
         self._dropdowns: list[tuple[str, QComboBox]] = []
         # Cell types whose dropdown the user has picked from, i.e. those that
         # deliberately diverge from what auto-matching would choose.  Loading a
@@ -202,16 +164,16 @@ class LoadCellParametersWindow(BiwinformaticsWalkthroughWindow):
             "Assign each cell type the template whose name matches it, falling "
             "back to 'default' and then to (none). Overrides your picks."
         )
-        self._auto_btn.clicked.connect(self._auto_match_cb)
+        self._auto_btn.clicked.connect(lambda _c=False: self._auto_match())
         self._default_btn = QPushButton(action_icon(_ICON_DEFAULT), "All to default")
         self._default_btn.setIconSize(_ACTION_ICON_SIZE)
         self._default_tooltip = "Assign the template named 'default' to every cell type."
         self._default_btn.setToolTip(self._default_tooltip)
-        self._default_btn.clicked.connect(self._all_default_cb)
+        self._default_btn.clicked.connect(lambda _c=False: self._assign_baseline())
         self._none_btn = QPushButton(action_icon(_ICON_NONE), f"All to {_NO_TEMPLATE_LABEL}")
         self._none_btn.setIconSize(_ACTION_ICON_SIZE)
         self._none_btn.setToolTip("Leave every cell type without a template.")
-        self._none_btn.clicked.connect(self._all_none_cb)
+        self._none_btn.clicked.connect(lambda _c=False: self._assign(_NO_TEMPLATE))
         hbox_bulk = QHBoxLayout()
         hbox_bulk.addWidget(QLabel("Set all:"))
         hbox_bulk.addWidget(self._auto_btn)
@@ -249,7 +211,7 @@ class LoadCellParametersWindow(BiwinformaticsWalkthroughWindow):
             # box always names the source.  See RelabelledComboBox.
             dd.display_for_index = self._closed_label
             dd.setModel(self._model)
-            dd.currentIndexChanged.connect(self._handle_dropdown_change)
+            dd.currentIndexChanged.connect(lambda _i: self._sync_session())
             # activated fires only for a real user pick, unlike
             # currentIndexChanged, which also fires for every programmatic one.
             dd.activated.connect(lambda _i, ct=cell_type: self._touched.add(ct))
@@ -261,17 +223,17 @@ class LoadCellParametersWindow(BiwinformaticsWalkthroughWindow):
             row_height = dd.sizeHint().height()
             self._row_auto[cell_type] = self._row_action(
                 inner, row, 4, _ICON_AUTO, _TIP_AUTO,
-                lambda _c=False, ct=cell_type: self._auto_match_one(ct),
+                lambda _c=False, ct=cell_type: self._auto_match([ct]),
                 height=row_height,
             )
             self._row_default[cell_type] = self._row_action(
                 inner, row, 5, _ICON_DEFAULT, _TIP_DEFAULT,
-                lambda _c=False, ct=cell_type: self._default_one(ct),
+                lambda _c=False, ct=cell_type: self._assign_baseline([ct]),
                 height=row_height,
             )
             self._row_action(
                 inner, row, 6, _ICON_NONE, _TIP_NONE,
-                lambda _c=False, ct=cell_type: self._none_one(ct),
+                lambda _c=False, ct=cell_type: self._assign(_NO_TEMPLATE, [ct]),
                 height=row_height,
             )
 
@@ -286,9 +248,8 @@ class LoadCellParametersWindow(BiwinformaticsWalkthroughWindow):
         scroll_area.setWidgetResizable(True)
         vbox.addWidget(scroll_area)
 
-        # Library files: add / remove.  Dropping files anywhere in this window
-        # does the same as Add — an accelerator, never the only route, since a
-        # streamed remote session never receives a drop at all.
+        # Library files: add / remove.  Dropping .toml files anywhere in this
+        # window does the same as Add.
         self.setAcceptDrops(True)
         add_btn = QPushButton("Add templates from file…")
         add_btn.clicked.connect(self._add_templates_cb)
@@ -316,11 +277,11 @@ class LoadCellParametersWindow(BiwinformaticsWalkthroughWindow):
 
         self.setLayout(vbox)
 
-        # Populate model, pre-select, publish to the session, then size to fit
-        self._rebuild_model()
-        self._restore_selections(self._default_keys())
-        self._sync_session()
-        self._refresh_action_buttons()
+        # Populate, pre-select, publish, then size to fit.  Through the shared
+        # path so the _rebuilding guard applies: the dropdowns share one model, so
+        # filling it makes every combo signal, and each signal would otherwise
+        # re-derive the whole tie relation.
+        self._rebuild_and_restore(self._default_keys())
         self._fit_width(s)
 
     # ------------------------------------------------------------------
@@ -468,16 +429,18 @@ class LoadCellParametersWindow(BiwinformaticsWalkthroughWindow):
     # Model construction
     # ------------------------------------------------------------------
 
-    def _source_paths(self) -> list[str]:
-        """Every source in the database, the host's reserved one first.
+    @staticmethod
+    def _source_rank(path: str):
+        """Sort key placing the preferred source first. The host outranks files.
 
-        Ordering matches the matching preference, so the group that wins a tie is
-        also the group listed first.
+        The one place source preference is expressed; a further tier goes here.
         """
-        return sorted(
-            {fp for _, fp in self._template_db},
-            key=lambda fp: (fp != HOST_SOURCE, alpha_key(fp)),
-        )
+        return (path != HOST_SOURCE, alpha_key(path))
+
+    def _source_paths(self) -> list[str]:
+        """Every source in the database, best-ranked first — so the group that
+        wins a tie is also the group listed first."""
+        return sorted({fp for _, fp in self._template_db}, key=self._source_rank)
 
     def _library_paths(self) -> list[str]:
         """Only the real files — what *Remove templates from file…* can act on."""
@@ -492,42 +455,33 @@ class LoadCellParametersWindow(BiwinformaticsWalkthroughWindow):
         """
         labels = _minimal_unique_suffixes(self._library_paths())
         if any(fp == HOST_SOURCE for _, fp in self._template_db):
-            labels[HOST_SOURCE] = self.walkthrough.session.biwt_input.host_label
+            labels[HOST_SOURCE] = self.walkthrough.session.biwt_input.host_name
         return labels
 
-    def _build_by_name_labels(self) -> dict[tuple[str, str], str]:
-        """Display label for every db entry in By Name mode.
+    def _build_parts(self) -> dict:
+        """``key -> (name, qualifier)`` for every entry, the qualifier possibly "".
 
-        With a single file loaded the source is never in question, so the label is
-        the bare template name.  A host entry is always qualified regardless: the
-        qualifier is what says this is a cell type the host already has rather
-        than a template, which is information at any count.
+        With one file loaded its name is never in question, so it is dropped.  A
+        host entry keeps its qualifier at any count: that is what says the entry is
+        a cell type the host already has rather than a template.
         """
         labels = self._source_display_names()
         qualify_files = len(self._source_paths()) > 1
         return {
-            (name, fp): f"{name} ({labels[fp]})"
-            if fp == HOST_SOURCE or qualify_files else name
+            (name, fp): (name, labels[fp] if fp == HOST_SOURCE or qualify_files else "")
             for name, fp in self._template_db
         }
 
     def _closed_label(self, index: int):
-        """What a closed dropdown should read at *index*, or None for its own text.
+        """What a closed dropdown reads at *index*, or None for its own text.
 
-        The template name, plus its source file as a right-aligned qualifier once
-        more than one library is loaded.  Whichever sort mode built the list: the
-        popup can lean on a group header for context, a closed box cannot.
+        A closed box always shows the qualifier, even under By Source where the
+        popup leans on a group header for it.  Precomputed with the model: this
+        runs inside ``paintEvent``.
         """
-        if index < 0:
-            return None
-        item = self._model.item(index)
+        item = self._model.item(index) if index >= 0 else None
         key = None if item is None else item.data(Qt.UserRole)
-        if not isinstance(key, tuple):
-            return None                       # the (none) row, or a header
-        name, path = key
-        if path != HOST_SOURCE and len(self._source_paths()) < 2:
-            return name
-        return name, self._source_display_names()[path]
+        return self._parts.get(key) if isinstance(key, tuple) else None
 
     def _rebuild_and_restore(self, saved: dict) -> None:
         """Rebuild the shared model, restore *saved*, and publish the result."""
@@ -622,6 +576,7 @@ class LoadCellParametersWindow(BiwinformaticsWalkthroughWindow):
 
     def _rebuild_model(self) -> None:
         self._model.clear()
+        self._parts = self._build_parts()
         # Row 0 in both modes: a stable restore target, a guaranteed selectable
         # row when no templates are loaded at all, and it keeps a bold section
         # header out of row 0 in By Source mode (Qt would auto-select it).
@@ -635,9 +590,9 @@ class LoadCellParametersWindow(BiwinformaticsWalkthroughWindow):
             self._build_by_source_model()
 
     def _build_by_name_model(self) -> None:
-        labels = self._build_by_name_labels()
-        for key in sorted(labels, key=lambda k: (alpha_key(k[0]), alpha_key(k[1]))):
-            item = QStandardItem(labels[key])
+        for key in sorted(self._parts, key=self._preference_key):
+            name, source = self._parts[key]
+            item = QStandardItem(f"{name} ({source})" if source else name)
             item.setData(key, Qt.UserRole)
             self._model.appendRow(item)
 
@@ -694,52 +649,42 @@ class LoadCellParametersWindow(BiwinformaticsWalkthroughWindow):
                     dd.setCurrentIndex(row)
                     break
 
-    def _first_key_for_name(self) -> dict[str, tuple[str, str]]:
-        """Name → the key that wins it, so a shared name resolves the same way
-        regardless of load order or display mode.
-
-        The host's own cell type wins outright; among files, the path-sorted first
-        does.  Preferring the host needs no scoring: a name is either the host's or
-        it is not, so where two sources offer the same name there is exactly one
-        candidate to put at the front of the list — and "your model already has
-        this type" is the better answer than "here is a template for one".
-        """
-        out: dict[str, tuple[str, str]] = {}
-        for name, path in sorted(self._template_db, key=self._preference_key):
-            out.setdefault(name, (name, path))
-        return out
-
-    @staticmethod
-    def _preference_key(key: tuple[str, str]):
-        """Sort key ordering the database by name, then by source preference."""
+    def _preference_key(self, key: tuple[str, str]):
+        """Order the database by name, then by which source is preferred."""
         name, path = key
-        return (alpha_key(name), path != HOST_SOURCE, alpha_key(path))
+        return (alpha_key(name), self._source_rank(path))
 
-    def _default_keys(self) -> dict:
+    def _default_keys(self, cell_types=None) -> dict:
         """The auto-matched selection per cell type, resolved to model keys.
 
-        A name that matched resolves through ``_first_key_for_name``, which prefers
-        the host where both offer that name.  A cell type nothing matched takes the
-        baseline — the same one the ``default`` actions assign, so the two controls
+        A matched name resolves to its best-ranked source, so where the host and a
+        file both offer it the host wins.  A cell type nothing matched takes the
+        baseline — the same key the ``default`` actions assign, so the two controls
         cannot disagree about what ``default`` means.
         """
         s = self.walkthrough.session
         matched = core_templates.matched_candidates(
-            s.cell_types_list_final or [],
+            s.cell_types_list_final if cell_types is None else cell_types,
             [name for name, fp in self._template_db if fp != HOST_SOURCE],
             matches=s.name_matcher,
             host_names=[name for name, fp in self._template_db if fp == HOST_SOURCE],
         )
-        first_key_for = self._first_key_for_name()
+        best_source: dict[str, str] = {}
+        for name, path in sorted(self._template_db, key=self._preference_key):
+            best_source.setdefault(name, path)
         baseline = self._baseline_key() or _NO_TEMPLATE
         return {
-            ct: first_key_for.get(name, _NO_TEMPLATE) if name else baseline
+            ct: (name, best_source[name]) if name else baseline
             for ct, name in matched.items()
         }
 
     # ------------------------------------------------------------------
-    # Bulk actions
+    # Actions — each takes the cell types it applies to, defaulting to all of
+    # them, so the "Set all" row and the per-row buttons are one code path.
     # ------------------------------------------------------------------
+
+    def _all_types(self) -> list[str]:
+        return [ct for ct, _ in self._dropdowns]
 
     def _apply_selections(self, keys: dict) -> None:
         self._restore_selections(keys)
@@ -747,55 +692,31 @@ class LoadCellParametersWindow(BiwinformaticsWalkthroughWindow):
         # when the index is already right, so publish explicitly.
         self._sync_session()
 
-    def _set_all(self, key) -> None:
-        """Assign *key* to every cell type as a deliberate choice."""
-        self._touched.update(ct for ct, _ in self._dropdowns)
-        self._apply_selections({ct: key for ct, _ in self._dropdowns})
+    def _assign(self, key, cell_types=None) -> None:
+        """Assign *key* to *cell_types* as a deliberate choice."""
+        cell_types = self._all_types() if cell_types is None else cell_types
+        self._touched.update(cell_types)
+        self._apply_selections({ct: key for ct in cell_types})
 
-    def _auto_match_cb(self) -> None:
-        # Every row now holds what auto-matching computes, so none of them
-        # diverges any more: a later file load may refresh them all.
-        self._touched.clear()
-        self._apply_selections(self._default_keys())
-
-    def _all_default_cb(self) -> None:
+    def _assign_baseline(self, cell_types=None) -> None:
         key = self._baseline_key()
         if key is not None:
-            self._set_all(key)
+            self._assign(key, cell_types)
 
-    def _all_none_cb(self) -> None:
-        self._set_all(_NO_TEMPLATE)
+    def _auto_match(self, cell_types=None) -> None:
+        """Re-derive *cell_types* from the library.
 
-    # --- the same three, scoped to one cell type ----------------------------
-
-    def _set_one(self, cell_type: str, key) -> None:
-        """Assign *key* to *cell_type* as a deliberate choice."""
-        self._touched.add(cell_type)
-        self._apply_selections({cell_type: key})
-
-    def _auto_match_one(self, cell_type: str) -> None:
-        # Mirrors the bulk version: this row now holds the computed value, so it
-        # no longer diverges and a later file load may refresh it.
-        self._touched.discard(cell_type)
-        key = self._default_keys().get(cell_type, _NO_TEMPLATE)
-        self._apply_selections({cell_type: key})
-
-    def _default_one(self, cell_type: str) -> None:
-        key = self._baseline_key()
-        if key is not None:
-            self._set_one(cell_type, key)
-
-    def _none_one(self, cell_type: str) -> None:
-        self._set_one(cell_type, _NO_TEMPLATE)
+        They then hold exactly what auto-matching computes, so they no longer
+        diverge and a later file load may refresh them — which is also how a user
+        retracts a pick.
+        """
+        cell_types = self._all_types() if cell_types is None else cell_types
+        self._touched.difference_update(cell_types)
+        self._apply_selections(self._default_keys(cell_types))
 
     # ------------------------------------------------------------------
     # Session
     # ------------------------------------------------------------------
-
-    def _entry(self, key: tuple[str, str]) -> tuple[str, str, str]:
-        """The ``BiwtResult`` triple for *key*: ``(path, name, content)``."""
-        name, path = key
-        return (path, name, self._template_db[key])
 
     def _sync_session(self) -> None:
         """Rebuild ``session.cell_templates`` from the dropdowns.
@@ -812,7 +733,8 @@ class LoadCellParametersWindow(BiwinformaticsWalkthroughWindow):
             key = self._current_key(dd)
             # A tuple key is a real template; None and _NO_TEMPLATE are not.
             if isinstance(key, tuple):
-                entries[ct] = self._entry(key)
+                name, path = key
+                entries[ct] = (path, name, self._template_db[key])
         self.walkthrough.session.cell_templates = entries
         self._refresh_row_flags()
 
@@ -823,11 +745,8 @@ class LoadCellParametersWindow(BiwinformaticsWalkthroughWindow):
         carries the text.  The dropdown deliberately has no tooltip of its own —
         two copies of one sentence is one too many.
 
-        Two libraries can both define ``Tumor``.  Matching then has two equally
-        good candidates and resolves the tie by path order, which is arbitrary
-        from the user's side — so say so rather than let the choice look
-        considered.  A tooltip because it costs no layout: the dropdown already
-        shows *which* file won, so this only has to add that there was a contest.
+        A tooltip because it costs no layout: the dropdown already names the
+        source that won, so this only adds that there was a contest.
         """
         labels = self._source_display_names()
         ordered = sorted(self._template_db, key=self._preference_key)
@@ -859,14 +778,8 @@ class LoadCellParametersWindow(BiwinformaticsWalkthroughWindow):
         library and ``Tumor`` in another count as the one contest they are.
         """
         name, path = key
-        folded = name.casefold()
-        return [
-            k for k in ordered
-            if k[1] != path and (k[0].casefold() == folded or matcher(name, k[0]))
-        ]
-
-    def _handle_dropdown_change(self) -> None:
-        self._sync_session()
+        return [k for k in ordered
+                if k[1] != path and names_match(name, k[0], matcher)]
 
     def _skip_cb(self) -> None:
         """Leave every type unassigned and move on.
@@ -875,7 +788,7 @@ class LoadCellParametersWindow(BiwinformaticsWalkthroughWindow):
         last step, so Back-then-forward can bring this very window back, and it
         must not show selections that contradict what was returned.
         """
-        self._all_none_cb()
+        self._assign(_NO_TEMPLATE)
         self.process_window()
 
     def process_window(self) -> None:
@@ -890,7 +803,8 @@ class LoadCellParametersWindow(BiwinformaticsWalkthroughWindow):
     def _fit_width(self, s) -> None:
         """Resize so the longest label + longest cell-type name fit without truncation."""
         fm = self.fontMetrics()
-        labels = list(self._build_by_name_labels().values()) + [_NO_TEMPLATE_LABEL]
+        labels = [f"{n} ({s})" if s else n for n, s in self._parts.values()]
+        labels.append(_NO_TEMPLATE_LABEL)
         max_dd  = max((fm.horizontalAdvance(v) for v in labels), default=200)
         max_lbl = min(ROW_LABEL_MAX_WIDTH, max(
             (fm.horizontalAdvance(ct) for ct in s.cell_types_list_final),

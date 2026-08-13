@@ -71,7 +71,7 @@ BIWT integrates with PhysiCell Studio as an optional installed dependency:
 
 ## Naming Conventions
 - **Python files**: `snake_case.py`
-- **Classes**: `PascalCase` (e.g. `BiwtWalkthrough`, `WalkthroughSession`)
+- **Classes**: `PascalCase` (e.g. `BioinformaticsWalkthrough`, `WalkthroughSession`)
 - **Session fields**: `snake_case` — all state lives on `WalkthroughSession`
 - **Step window classes**: named `<Step>Window` (e.g. `EditCellTypesWindow`)
 - **Step labels**: PascalCase strings matching the window class prefix (e.g. `"EditCellTypes"`)
@@ -114,7 +114,7 @@ A feature or fix is complete when ALL of the following are satisfied:
 ## Common Pitfalls
 - BIWT never writes to disk — the host is responsible for all file I/O.
 - `_step_predicates` is the single source of truth for step ordering; `_build_next_window` and tests both use it.
-- `WalkthroughSession` is pure Python (no Qt); all Qt logic lives in window classes and `BiwtWalkthrough`.
+- `WalkthroughSession` is pure Python (no Qt); all Qt logic lives in window classes and `BioinformaticsWalkthrough`.
 - `_STEP_ORDER` + `_STEP_FIELDS` + `_invalidate_downstream_of(label)` in `walkthrough.py` centralize downstream session invalidation when the user navigates back and changes an earlier step. Individual window `process_window` callbacks should set `stale_futures = True` when their choice changes something downstream.
 - Host context (`BiwtInput`) is resolved in `_resolve_host_input` at two points only — widget construction and each import — and snapshotted, so a run cannot see the host change under it. `create_biwt_widget` accepts a provider callable for exactly this reason. Do not add a third read point.
 - `session.preferred_domain` is the only name for the host's domain; `effective_domain` falls back to it directly. Do not reintroduce a latched copy.

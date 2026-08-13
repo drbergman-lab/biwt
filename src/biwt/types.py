@@ -12,9 +12,13 @@ Keeping these in one file makes the host ↔ package interface easy to audit.
 
 from __future__ import annotations
 
+import logging
+import math
 from dataclasses import dataclass, field, replace
 from typing import Callable, Optional, Union
 import pandas as pd
+
+log = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -84,6 +88,36 @@ class DomainSpec:
                    zmin=-10.0, zmax=10.0, source=DomainSource.DEFAULT)
 
 
+def _usable_domain(domain: DomainSpec) -> DomainSpec:
+    """*domain*, or a repaired one, so placement cannot divide by zero.
+
+    The domain editor gates OK on the user's numbers; a host's arrive unchecked,
+    and a degenerate box fails several steps later inside the counts or plot code
+    rather than at the boundary.
+
+    Inverted x or y is swapped — the intent is unambiguous, and left alone it
+    stacks every cell on one line.  A non-finite or flat extent has no intent to
+    recover, so BIWT's own box stands in, reported as ``DEFAULT``.  Flat *z* is
+    left alone: a 2-D host domain is legitimate, and only x and y divide.
+    """
+    bounds = (domain.xmin, domain.xmax, domain.ymin, domain.ymax,
+              domain.zmin, domain.zmax)
+    if not all(isinstance(v, (int, float)) and math.isfinite(v) for v in bounds):
+        log.warning("Host domain has non-finite bounds; using BIWT's default box.")
+        return DomainSpec.default()
+
+    fixed = replace(domain)
+    for lo, hi in (("xmin", "xmax"), ("ymin", "ymax"), ("zmin", "zmax")):
+        if getattr(fixed, lo) > getattr(fixed, hi):
+            log.warning("Host domain has %s > %s; swapping them.", lo, hi)
+            setattr(fixed, lo, getattr(domain, hi))
+            setattr(fixed, hi, getattr(domain, lo))
+    if fixed.width == 0 or fixed.height == 0:
+        log.warning("Host domain has zero width or height; using BIWT's default box.")
+        return DomainSpec.default()
+    return fixed
+
+
 # ---------------------------------------------------------------------------
 # Host → BIWT
 # ---------------------------------------------------------------------------
@@ -119,8 +153,7 @@ class BiwtInput:
     host_name:
         Your application's name, shown in BIWT's UI — the domain editor's
         "Use <host_name> Domain" button, and the tag on your own cell types at the
-        cell-parameters step.  Read through :attr:`host_label`, which substitutes
-        ``"Host"`` for a blank.
+        cell-parameters step.  Blank is replaced with ``"Host"``.
     cell_template_paths:
         Paths to ``.toml`` files of cell-parameter templates, each mapping a
         template name to an opaque content string (for a PhysiCell host, an XML
@@ -151,14 +184,16 @@ class BiwtInput:
     name_match_cutoff: float = 0.85
 
     def __post_init__(self):
-        """Reject a single string where a list belongs, and materialize iterables.
+        """Normalize the host's input, or refuse it.
 
-        ``cell_template_paths="/path/x.toml"`` is the common shape of this mistake,
-        and it is silent without a check: the string is iterated into characters, so
-        the cell-parameters step opens one "could not load" dialog per character.
-        Raising here fails at the host's own construction site instead.  A generator
-        is materialized for the same reason — it would be empty the second time BIWT
-        read it.
+        Runs again on every ``dataclasses.replace``, so :meth:`snapshot` inherits
+        it and a field the host mutated after construction is normalized too.
+
+        A single string where a list belongs is refused rather than repaired: it
+        iterates into characters, which becomes one failed template load per
+        character.  Everything else is repaired, because a walkthrough on a
+        substituted domain beats none — and because raising later would abort the
+        host's process, this being reached from a Qt slot.
         """
         for field_name in ("host_cell_type_names", "cell_template_paths"):
             value = getattr(self, field_name)
@@ -169,43 +204,27 @@ class BiwtInput:
                 )
             setattr(self, field_name, list(value))
 
-    @property
-    def host_label(self) -> str:
-        """``host_name``, never blank — what BIWT puts on screen for the host.
-
-        A host that passes ``""`` would otherwise produce "Use  Domain" and a
-        cell type tagged ``Tumor ()``.
-        """
-        return self.host_name.strip() or "Host"
+        # Dropped, not coerced: str(None) would become a cell type named "None".
+        self.host_cell_type_names = [
+            n for n in self.host_cell_type_names if isinstance(n, str) and n.strip()
+        ]
+        # host_name reaches the screen — the domain editor's "Use <host_name>
+        # Domain", and the tag on the host's own cell types — so it cannot be blank.
+        self.host_name = self.host_name.strip() or "Host"
+        self.preferred_domain = _usable_domain(self.preferred_domain)
 
     def snapshot(self) -> "BiwtInput":
-        """Return a copy BIWT can hold for a whole run without it moving underneath.
+        """A copy BIWT can hold for a whole run without it moving underneath.
 
-        Freezing only means anything if the copy is independent, and two of these
-        fields are mutable containers: a host that edits its own ``DomainSpec`` in
-        place would otherwise rewrite ``BiwtResult.domain_used`` *after* the cells
-        were placed against the old numbers, so the result would claim coordinates
-        and domain agree when they do not.
+        ``replace`` re-runs ``__post_init__``, which copies both lists; the domain
+        is copied here because it is a mutable dataclass of its own.  A host that
+        edits its own objects would otherwise rewrite ``BiwtResult.domain_used``
+        after the cells were placed against the old numbers.
 
-        Anything in ``host_cell_type_names`` that cannot be a cell-type name is
-        dropped here — the one place both entry paths pass through.  Dropped rather
-        than coerced, matching what the cell-parameters step already did: ``str()``
-        would turn a stray ``None`` into a cell type called "None".  Without this a
-        host list holding an integer id reached ``casefold()`` in the rename step,
-        and an exception in a Qt slot takes the host process down with it.
-
-        ``name_matches`` passes through unchanged — behavior cannot be copied, which
-        is why its contract asks for determinism and no side effects.
+        ``name_matches`` passes through unchanged: behavior cannot be copied, which
+        is why its contract asks for determinism.
         """
-        return replace(
-            self,
-            preferred_domain=replace(self.preferred_domain),
-            host_cell_type_names=[
-                n for n in self.host_cell_type_names
-                if isinstance(n, str) and n.strip()
-            ],
-            cell_template_paths=list(self.cell_template_paths),
-        )
+        return replace(self, preferred_domain=replace(self.preferred_domain))
 
 
 HOST_SOURCE = "<host>"

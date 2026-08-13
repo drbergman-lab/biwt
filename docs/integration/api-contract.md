@@ -118,16 +118,7 @@ can untick it and get the dialog back.
 default `"Host"` reads like a placeholder because it is one.
 
 **`cell_template_paths`** — paths to TOML files, each mapping a template name to its content.
-The content is opaque to BIWT: read as text, never parsed, handed back verbatim. For a
-PhysiCell host it is a phenotype block:
-
-```toml
-"My Cell Type" = """
-<phenotype>
-  ...
-</phenotype>
-"""
-```
+The content is opaque to BIWT: read as text, never parsed, handed back verbatim.
 
 **BIWT ships no templates**, so these files are the parameter library — pass them if you want
 the [cell parameters step](../guide/cell-parameters.md) to offer anything. The user can also
@@ -150,11 +141,8 @@ template file is loaded or an auto-match button is pressed. Two requirements fol
   the session, showing UI, or doing I/O from it fires at moments you did not choose.
 
 **`name_match_cutoff`** — similarity threshold for BIWT's default matcher only; ignored when
-`name_matches` is given. That default first requires the two names to hold the same digit runs
-(so `M1 Macrophage` never matches `M2 Macrophage`, nor `CD4 T Cell` a `CD8` one), then requires
-`difflib.SequenceMatcher(...).ratio()` on the casefolded strings to reach the cutoff.
-[Templates and name matching](templates-and-matching.md) spells it out, with the cases the
-digit rule exists to reject and the one gap it does not cover.
+`name_matches` is given. [Templates and name matching](templates-and-matching.md) spells that
+default out, with the cases it rejects and the one gap it does not cover.
 
 ## `BiwtResult` — BIWT to host
 
@@ -183,18 +171,9 @@ included.
 
 One value of `path` is not a path: [`HOST_SOURCE`][biwt.types.HOST_SOURCE] (`"<host>"`) means the
 user picked one of the names you passed in `host_cell_type_names`, i.e. *a cell type you already
-define*. `content` is then `""`, so check the marker before using it — what to do about the match
-is yours to decide.
-
-```python
-from biwt.types import HOST_SOURCE
-
-for cell_type, (path, name, content) in result.cell_templates.items():
-    if path == HOST_SOURCE:
-        reuse_existing_definition(cell_type, name)   # `name` is one of yours
-    else:
-        build_definition_from(cell_type, content)
-```
+define*. `content` is then `""`, so check the marker before using it — see
+[`HOST_SOURCE`][biwt.types.HOST_SOURCE] for the check to write. What to do about the match is
+yours to decide.
 
 Assembling anything out of that is yours to do — BIWT generates no XML; see
 [templates and name matching](templates-and-matching.md) for a worked example. Types the user left

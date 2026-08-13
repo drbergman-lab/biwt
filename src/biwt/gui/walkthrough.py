@@ -40,7 +40,7 @@ than chosen belongs in ``WalkthroughSession.reseed_derived_state`` instead.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field, replace
+from dataclasses import MISSING, dataclass, field, fields
 from html import escape
 from typing import Optional, Callable, NamedTuple
 import logging
@@ -111,43 +111,6 @@ class _Axis(NamedTuple):
 # measurement in data units, so the factor has nothing to convert.  Its
 # data-units cells are still built, so the Z row matches the others and wiring
 # them up later is a matter of flipping this flag.
-_DOMAIN_AXES = (
-    _Axis("X", "width",  "xmin", "xmax", True),
-    _Axis("Y", "height", "ymin", "ymax", True),
-    _Axis("Z", "depth",  "zmin", "zmax", False),
-)
-
-
-def _usable_domain(domain: DomainSpec) -> DomainSpec:
-    """Return *domain*, or a repaired one, so placement cannot divide by zero.
-
-    The domain editor gates OK on the user's numbers; the host's arrived unchecked,
-    and a degenerate box does not fail at the boundary — it fails several steps later
-    inside the counts or plot code, from a Qt slot, which is fatal.
-
-    Inverted x or y is repaired by swapping: the intent is unambiguous, and left
-    alone it silently stacks every cell on one line.  A non-finite or flat extent has
-    no intent to recover, so BIWT's own box stands in, reported as ``DEFAULT`` —
-    nobody supplied a usable one, which is also what stops the positions step raising
-    a mismatch against a box that was never real.  Flat *z* is left alone: a 2-D host
-    domain is legitimate, and only x and y feed the divisor.
-    """
-    bounds = (domain.xmin, domain.xmax, domain.ymin, domain.ymax,
-              domain.zmin, domain.zmax)
-    if not all(isinstance(v, (int, float)) and math.isfinite(v) for v in bounds):
-        log.warning("Host domain has non-finite bounds; using BIWT's default box.")
-        return DomainSpec.default()
-
-    fixed = replace(domain)
-    for lo, hi in (("xmin", "xmax"), ("ymin", "ymax"), ("zmin", "zmax")):
-        if getattr(fixed, lo) > getattr(fixed, hi):
-            log.warning("Host domain has %s > %s; swapping them.", lo, hi)
-            setattr(fixed, lo, getattr(domain, hi))
-            setattr(fixed, hi, getattr(domain, lo))
-    if fixed.width == 0 or fixed.height == 0:
-        log.warning("Host domain has zero width or height; using BIWT's default box.")
-        return DomainSpec.default()
-    return fixed
 
 
 def _scale_domain(d: DomainSpec, factor: float,
@@ -183,10 +146,14 @@ class DomainEditorDialog(QDialog):
     # **maximum** and anchors the minimum, so exactly one bound changes: set the
     # left edge, then set the width, and the width does not shift the left edge
     # back.
-    _AXES = _DOMAIN_AXES
+    _AXES = (
+        _Axis("X", "width",  "xmin", "xmax", True),
+        _Axis("Y", "height", "ymin", "ymax", True),
+        _Axis("Z", "depth",  "zmin", "zmax", False),
+    )
     # Bound attrs the factor applies to, in grid order.  Derived rather than
     # spelled out so it cannot drift from _AXES.
-    _XY = tuple(a for ax in _DOMAIN_AXES if ax.factor_scaled
+    _XY = tuple(a for ax in _AXES if ax.factor_scaled
                 for a in (ax.lo, ax.hi))
 
     def __init__(
@@ -1166,11 +1133,25 @@ def _step_predicates(s: "WalkthroughSession") -> list:
 # Downstream-invalidation tables (used by advance() to centralize resets)
 # ---------------------------------------------------------------------------
 
-_STEP_ORDER = [
-    "SpotDeconvQuery", "ClusterColumn", "SpatialQuery",
-    "EditCellTypes", "RenameCellTypes", "CellCounts",
-    "Positions", "LoadCellParameters",
-]
+# The labels, in order, from the one place that defines them.  The predicates
+# are closures, and are not called here.
+_STEP_ORDER = [label for _, label in _step_predicates(None)]
+
+_SESSION_FIELDS = {f.name: f for f in fields(WalkthroughSession)}
+
+
+def _reset_to_default(session, name: str) -> None:
+    """Put *name* back to its ``WalkthroughSession`` default.
+
+    Read off the dataclass rather than restated beside the field name: a table of
+    reset *values* is a second copy of every default, free to drift from the one
+    the session actually starts with.
+    """
+    spec = _SESSION_FIELDS[name]
+    setattr(session, name,
+            spec.default_factory() if spec.default_factory is not MISSING
+            else spec.default)
+
 
 # For each step label: (session_field, reset_value) pairs — the fields whose
 # values that step's *user* chose.  advance() resets the fields of every step
@@ -1178,45 +1159,24 @@ _STEP_ORDER = [
 # re-evaluated on fresh state.  State that is *derived* from those choices is
 # not listed here; WalkthroughSession.reseed_derived_state owns it and runs
 # immediately after the reset.
-_STEP_FIELDS: dict[str, list] = {
-    "SpotDeconvQuery": [
-        ("spot_deconv_asked", False),
-        ("perform_spot_deconvolution", False),
-    ],
+_STEP_FIELDS: dict[str, list[str]] = {
+    "SpotDeconvQuery": ["spot_deconv_asked", "perform_spot_deconvolution"],
     "ClusterColumn": [
-        ("current_column", None),
-        ("cell_types_original", None),
-        ("cell_types_list_original", None),
+        "current_column", "cell_types_original", "cell_types_list_original",
     ],
-    "SpatialQuery": [
-        ("spatial_query_answer", None),
-    ],
+    "SpatialQuery": ["spatial_query_answer"],
     "EditCellTypes": [
-        ("cell_type_dict_on_edit", None),
-        ("intermediate_types", None),
-        ("intermediate_type_pre_image", None),
+        "cell_type_dict_on_edit", "intermediate_types",
+        "intermediate_type_pre_image",
     ],
     "RenameCellTypes": [
-        ("cell_types_list_final", None),
-        ("cell_type_dict_on_rename", None),
-        ("cell_types_final", None),
-        ("spatial_data_final", None),
-        ("cell_prob_feature_dicts_final", None),
-        ("cell_counts", None),
-        ("cell_volume", None),
+        "cell_types_list_final", "cell_type_dict_on_rename", "cell_types_final",
+        "spatial_data_final", "cell_prob_feature_dicts_final", "cell_counts",
+        "cell_volume",
     ],
-    "CellCounts": [
-        ("cell_counts_confirmed", False),
-    ],
-    "Positions": [
-        ("positions_set", False),
-        ("coords_by_type", {}),
-        ("plotted_cell_types_per_spot", []),
-    ],
-    "LoadCellParameters": [
-        ("parameters_loaded", False),
-        ("cell_templates", {}),
-    ],
+    "CellCounts": ["cell_counts_confirmed"],
+    "Positions": ["positions_set", "coords_by_type", "plotted_cell_types_per_spot"],
+    "LoadCellParameters": ["parameters_loaded", "cell_templates"],
 }
 
 
@@ -1318,7 +1278,6 @@ class BioinformaticsWalkthrough(QWidget):
             level("Could not resolve the host's input; "
                   "keeping the previous context.", exc_info=True)
             return previous if previous is not None else BiwtInput()
-        snapshot.preferred_domain = _usable_domain(snapshot.preferred_domain)
         return snapshot
 
     # ------------------------------------------------------------------
@@ -1591,15 +1550,14 @@ class BioinformaticsWalkthrough(QWidget):
         downstream *choices*, then ``reseed_derived_state`` puts back everything
         that follows from the choices still standing upstream.
         """
-        import copy as _copy
         try:
             idx = _STEP_ORDER.index(label)
         except ValueError:
             return
         s = self.session
         for step in _STEP_ORDER[idx + 1:]:
-            for field_name, default in _STEP_FIELDS.get(step, []):
-                setattr(s, field_name, _copy.copy(default))
+            for field_name in _STEP_FIELDS.get(step, []):
+                _reset_to_default(s, field_name)
         s.reseed_derived_state()
 
     def advance(self) -> None:

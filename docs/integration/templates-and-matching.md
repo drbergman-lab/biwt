@@ -81,18 +81,10 @@ result.cell_templates == {
 }
 ```
 
-Three properties to code against:
-
-**Content is opaque and complete.** You get exactly what your template file holds. Do not
-resolve `name` against your own library to recover the content — you already have the content,
-and the user may have loaded a file you do not know about.
-
-**Unassigned types are absent.** `{}` is a normal, expected result: the step has a Skip button
-and a per-type `(none)` option. Check membership per type; never assume full coverage, and
-never treat an empty mapping as an error.
-
-**`name` is not unique.** Two cell types can carry the same `name` from different `path`s. Key
-anything you build by cell type, or by `(path, name)` — never by `name` alone.
+Content is opaque and complete: you get exactly what your template file holds, so never resolve
+`name` against your own library to recover it — the user may have loaded a file you do not know
+about. Two more rules bind a host here, on the field's own page:
+[`BiwtResult.cell_templates`](api-contract.md#biwtresult--biwt-to-host).
 
 Assembly is yours. For a PhysiCell-style host, that is one `<cell_definition>` per type
 wrapping the content:

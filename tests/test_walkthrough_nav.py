@@ -184,6 +184,9 @@ class TestNonDeconvolutionPaths:
                 break
             _continue(w)
             qapp.processEvents()
+        # Assert the walk happened: a loop that never advanced would collect
+        # [False, False, ...] and pass without exercising the invalidation.
+        assert len(seen) > 1
         assert seen == [False] * len(seen)
 
 
@@ -526,7 +529,7 @@ _UNOWNED_FIELDS = {
 _FIELD_OWNER = {
     field: step
     for step, fields in _STEP_FIELDS.items()
-    for field, _ in fields
+    for field in fields
 }
 
 

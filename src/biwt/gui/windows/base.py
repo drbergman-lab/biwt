@@ -17,7 +17,10 @@ from __future__ import annotations
 from abc import abstractmethod, ABCMeta
 from typing import Optional, Callable
 
-from PyQt5.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout
+from PyQt5.QtWidgets import (
+    QWidget, QHBoxLayout, QVBoxLayout, QLabel, QButtonGroup, QRadioButton,
+)
+from PyQt5.QtCore import Qt
 
 from biwt.gui.widgets import GoBackButton, ContinueButton
 
@@ -127,3 +130,57 @@ class BiwinformaticsWalkthroughWindow(QWidget, metaclass=_WidgetABCMeta):
     @abstractmethod
     def process_window(self) -> None:
         """Read UI state, commit decisions, and advance the walkthrough."""
+
+
+class YesNoQueryWindow(BiwinformaticsWalkthroughWindow):
+    """A step that asks one yes/no question and writes one session field.
+
+    Two steps are exactly this, and the shape is fiddly enough to get subtly
+    wrong twice: ``idToggled`` fires for the button being *unchecked* as well, and
+    the default has to be set explicitly rather than left to the toggle that
+    ``setChecked`` emits, or it depends on statement order.
+
+    Subclasses give ``title``, ``field``, and a ``message(session)``.
+    """
+
+    title: str = ""
+    field: str = ""
+    include_back: bool = True
+
+    def message(self, session) -> str:
+        raise NotImplementedError
+
+    def __init__(self, walkthrough):
+        super().__init__(walkthrough)
+        header = QLabel(self.title)
+        header.setAlignment(Qt.AlignCenter)
+        header.setStyleSheet("font-size: 18pt; font-weight: bold; margin-bottom: 10px;")
+
+        self.yes_no_group = QButtonGroup()
+        self.yes_rb = QRadioButton("Yes")
+        self.no_rb = QRadioButton("No")
+        self.yes_no_group.addButton(self.yes_rb, 0)
+        self.yes_no_group.addButton(self.no_rb, 1)
+        self.yes_no_group.idToggled.connect(self._toggled)
+        self.yes_rb.setChecked(True)
+        setattr(walkthrough.session, self.field, True)
+
+        hbox_yn = QHBoxLayout()
+        hbox_yn.addWidget(self.yes_rb)
+        hbox_yn.addWidget(self.no_rb)
+
+        vbox = QVBoxLayout()
+        vbox.addWidget(header)
+        vbox.addWidget(QLabel(self.message(walkthrough.session)))
+        vbox.addLayout(hbox_yn)
+        vbox.addLayout(self.create_nav_bar(include_back=self.include_back))
+        self.setLayout(vbox)
+
+    def _toggled(self, btn_id: int, checked: bool) -> None:
+        if not checked:
+            return                    # the button being unchecked; not an answer
+        self.walkthrough.stale_futures = True
+        setattr(self.walkthrough.session, self.field, btn_id == 0)
+
+    def process_window(self) -> None:
+        self.walkthrough.advance()

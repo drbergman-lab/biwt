@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from typing import Callable, Optional
 
-from biwt.core.cell_types import best_match
+from biwt.core.cell_types import alpha_key, best_match
 
 # A candidate with this name is the baseline for a cell type whose name matches
 # nothing.  Purely a convention: BIWT never creates one.  Which source's
@@ -63,27 +63,19 @@ def matched_candidates(
     """Per cell type, the candidate that names it, or ``None``.
 
     *host_names* are the cell types the host already defines
-    (``BiwtInput.host_cell_type_names``).  They are tried **before** templates at
-    each match tier, so where the host and a library name a type equally well the
-    host wins: an existing definition beats a template for building one.  Tiers
-    still come first — an exact template match beats a merely similar host name.
+    (``BiwtInput.host_cell_type_names``).  They rank ahead of the templates, so
+    the host wins where both name a type equally well — but only within a match
+    tier, so an exact template match still beats a merely similar host name.
 
     ``None`` means nothing named this cell type.  What to do then — fall back to a
-    ``default``, leave the type unassigned — is the caller's, because it depends on
-    which source supplies the baseline and only the caller knows sources.
+    ``default``, leave the type unassigned — is the caller's: it depends on which
+    source supplies the baseline, and only the caller knows sources.
     """
-    hosts = list(host_names or [])
-    names = list(template_names)
+    hosts = set(host_names or [])
+    pool = list(hosts) + list(template_names)
 
-    def pick(cell_type: str) -> Optional[str]:
-        for pool in (hosts, names):                     # host first, per tier
-            hit = best_match(cell_type, pool, matches=matches, exact_only=True)
-            if hit is not None:
-                return hit
-        for pool in (hosts, names):
-            hit = best_match(cell_type, pool, matches=matches)
-            if hit is not None:
-                return hit
-        return None
+    def rank(name: str):
+        return (name not in hosts, alpha_key(name))
 
-    return {ct: pick(ct) for ct in cell_types}
+    return {ct: best_match(ct, pool, matches=matches, sort_key=rank)
+            for ct in cell_types}

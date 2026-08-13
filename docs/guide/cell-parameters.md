@@ -22,7 +22,7 @@ particular simulation framework. Templates reach the dropdowns two ways:
 
 **From the host.** An application embedding BIWT passes template files at launch through
 [`BiwtInput.cell_template_paths`][biwt.types.BiwtInput], so they are present before you
-arrive. PhysiCell Studio ships the 29 PhysiCell templates and passes them this way.
+arrive.
 
 **From the wizard.** The **Add templates from file…** button at the bottom of the screen loads
 template files on the spot, whether or not the host supplied any — pick several at once, or drop

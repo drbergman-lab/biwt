@@ -36,28 +36,32 @@ def qapp():
 
 
 @pytest.fixture(autouse=True)
-def _reap_widgets(qapp):
+def _reap_widgets():
     """Destroy any widget a test left behind.
 
-    Qt keeps every top-level widget alive until something explicitly destroys it,
-    so a suite that builds walkthrough windows per test accumulates hundreds of
-    them — each step window, each matplotlib canvas. Past a few hundred the
-    offscreen platform segfaults, and it does so in whichever module happens to
-    run next rather than the one that leaked, which makes it look unrelated.
+    Qt keeps top-level widgets alive until something destroys them; past a few
+    hundred the offscreen platform segfaults, in whichever module runs next rather
+    than the one that leaked.
 
-    Autouse so no test module has to remember, and so adding one cannot
-    reintroduce the problem.
+    Autouse, so it must not depend on ``qapp`` — requesting that fixture would put
+    its ``importorskip`` in front of every test in the suite, and the Qt-free
+    modules would silently skip rather than run.
     """
     yield
-    from PyQt5.QtWidgets import QApplication
-
+    try:
+        from PyQt5.QtWidgets import QApplication
+    except ImportError:
+        return
+    app = QApplication.instance()
+    if app is None:
+        return
     for widget in QApplication.topLevelWidgets():
         try:
             widget.hide()
             widget.deleteLater()
         except RuntimeError:
             pass                    # already destroyed by a narrower fixture
-    qapp.processEvents()
+    app.processEvents()
 
 
 @pytest.fixture

@@ -102,7 +102,7 @@ docs/                   — MkDocs Material site (published to GitHub Pages)
   getting-started/      — Install matrix, first walkthrough, R/Seurat troubleshooting
   guide/                — One page per wizard step, plus the domain editor
   recipes/              — Visium, non-spatial scRNA-seq, spot deconvolution
-  integration/          — Host embedding: API contract + Studio bridge
+  integration/          — Host embedding: API contract, templates/matching, Studio bridge
   reference/            — mkdocstrings API reference
 mkdocs.yml
 ```

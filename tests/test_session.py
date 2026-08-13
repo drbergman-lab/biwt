@@ -1464,3 +1464,54 @@ class TestSupportedFormats:
     def test_label_lists_the_extensions(self):
         r = next(f for f in supported_formats() if ".rds" in f.extensions)
         assert r.label == ".rds .rda .rdata"
+
+
+class TestUsableDomain:
+    """A host's domain arrives unchecked, and a degenerate one is fatal later.
+
+    Zero width divides by zero at the counts step; NaN/inf reaches matplotlib.
+    Both are raised from a Qt slot, which PyQt5 turns into a process abort — so
+    they are repaired at the boundary instead.
+    """
+
+    @staticmethod
+    def _domain(**kwargs):
+        bounds = dict(xmin=-500, xmax=500, ymin=-500, ymax=500)
+        bounds.update(kwargs)
+        return BiwtInput(preferred_domain=DomainSpec(**bounds)).preferred_domain
+
+    def test_a_usable_domain_is_left_alone(self):
+        d = self._domain()
+        assert (d.xmin, d.xmax, d.source) == (-500, 500, DomainSource.HOST)
+
+    @pytest.mark.parametrize("bad", [
+        {"xmin": 0, "xmax": 0},                     # flat x
+        {"ymin": 7, "ymax": 7},                     # flat y
+        {"xmax": float("nan")},
+        {"ymin": float("-inf")},
+    ])
+    def test_an_unusable_domain_is_replaced_and_says_so(self, bad):
+        d = self._domain(**bad)
+        assert (d.xmin, d.xmax) == (-500.0, 500.0)
+        # DEFAULT, not HOST: nobody supplied a usable one, and that is also what
+        # stops the positions step raising a mismatch against a box never real.
+        assert d.source == DomainSource.DEFAULT
+
+    def test_inverted_bounds_are_swapped_rather_than_discarded(self):
+        # The intent is unambiguous, and left alone it stacks every cell on one line.
+        d = self._domain(xmin=500, xmax=-500)
+        assert (d.xmin, d.xmax) == (-500.0, 500.0)
+        assert d.source == DomainSource.HOST
+
+    def test_a_flat_z_is_legitimate(self):
+        # A 2-D host domain; only x and y feed the divisor.
+        d = self._domain(zmin=0, zmax=0)
+        assert (d.zmin, d.zmax) == (0, 0)
+        assert d.source == DomainSource.HOST
+
+    def test_the_repair_survives_a_snapshot(self):
+        # replace() re-runs __post_init__, so a host mutating its own input after
+        # construction is normalized too.
+        bi = BiwtInput()
+        bi.preferred_domain = DomainSpec(xmin=0, xmax=0, ymin=-1, ymax=1)
+        assert bi.snapshot().preferred_domain.source == DomainSource.DEFAULT

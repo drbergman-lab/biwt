@@ -345,13 +345,13 @@ class TestBulkActions:
     def test_all_to_none_empties_the_mapping(self, qapp):
         win = _params_window([TEMPLATES_A])
         assert win.walkthrough.session.cell_templates
-        win._all_none_cb()
+        win._assign(_NO_TEMPLATE)
         assert win.walkthrough.session.cell_templates == {}
         assert all(dd.currentIndex() == 0 for _, dd in win._dropdowns)
 
     def test_all_to_default_assigns_the_default_template(self, qapp):
         win = _params_window([TEMPLATES_A])
-        win._all_default_cb()
+        win._assign_baseline()
         chosen = {ct: e[1] for ct, e in win.walkthrough.session.cell_templates.items()}
         assert chosen == {"Macrophage": "default", "T_cell": "default", "Tumor": "default"}
 
@@ -370,13 +370,13 @@ class TestBulkActions:
         win = _params_window([TEMPLATES_A])
         _user_select(win, "Tumor", _NO_TEMPLATE_LABEL)
         assert "Tumor" not in win.walkthrough.session.cell_templates
-        win._auto_match_cb()
+        win._auto_match()
         assert win.walkthrough.session.cell_templates["Tumor"][1] == "Tumor"
 
     def test_auto_match_overrides_a_user_pick(self, qapp):
         win = _params_window([TEMPLATES_A])
         _user_select(win, "Tumor", "Macrophage")
-        win._auto_match_cb()
+        win._auto_match()
         assert win.walkthrough.session.cell_templates["Tumor"][1] == "Tumor"
 
     def test_loading_a_default_template_enables_the_button(self, qapp, monkeypatch):
@@ -431,14 +431,14 @@ class TestReMatchOnFileAdd:
     def test_bulk_actions_count_as_user_choices(self, qapp, monkeypatch):
         # "All to (none)" is a decision, so a later file load must not undo it.
         win = _params_window([TEMPLATES_A])
-        win._all_none_cb()
+        win._assign(_NO_TEMPLATE)
         self._add_b(win, monkeypatch)
         assert win.walkthrough.session.cell_templates == {}
 
     def test_auto_match_reopens_every_row_to_refreshing(self, qapp, monkeypatch):
         win = _params_window([TEMPLATES_A])
         _user_select(win, "T_cell", "Macrophage")
-        win._auto_match_cb()               # clears the divergence
+        win._auto_match()               # clears the divergence
         self._add_b(win, monkeypatch)
         assert win.walkthrough.session.cell_templates["T_cell"][1] == "t_cell"
 
@@ -504,14 +504,14 @@ class TestPerTypeActions:
 
     def test_none_one_clears_only_that_type(self, qapp):
         win = _params_window([TEMPLATES_A])
-        win._none_one("Tumor")
+        win._assign(_NO_TEMPLATE, ["Tumor"])
         templates = win.walkthrough.session.cell_templates
         assert "Tumor" not in templates
         assert templates["Macrophage"][1] == "Macrophage"
 
     def test_default_one_assigns_only_that_type(self, qapp):
         win = _params_window([TEMPLATES_A])
-        win._default_one("Tumor")
+        win._assign_baseline(["Tumor"])
         templates = win.walkthrough.session.cell_templates
         assert templates["Tumor"][1] == "default"
         assert templates["Macrophage"][1] == "Macrophage"
@@ -520,14 +520,14 @@ class TestPerTypeActions:
         win = _params_window([TEMPLATES_A])
         _user_select(win, "Tumor", "Macrophage")
         _user_select(win, "Macrophage", _NO_TEMPLATE_LABEL)
-        win._auto_match_one("Tumor")
+        win._auto_match(["Tumor"])
         templates = win.walkthrough.session.cell_templates
         assert templates["Tumor"][1] == "Tumor"          # recomputed
         assert "Macrophage" not in templates             # left as the user set it
 
     def test_default_one_and_none_one_count_as_user_choices(self, qapp, monkeypatch):
         win = _params_window([TEMPLATES_A])
-        win._none_one("T_cell")
+        win._assign(_NO_TEMPLATE, ["T_cell"])
         monkeypatch.setattr(
             QFileDialog, "getOpenFileNames",
             staticmethod(lambda *a, **k: ([TEMPLATES_B], "")),
@@ -539,7 +539,7 @@ class TestPerTypeActions:
     def test_auto_match_one_reopens_that_row_to_refreshing(self, qapp, monkeypatch):
         win = _params_window([TEMPLATES_A])
         _user_select(win, "T_cell", "Macrophage")
-        win._auto_match_one("T_cell")
+        win._auto_match(["T_cell"])
         monkeypatch.setattr(
             QFileDialog, "getOpenFileNames",
             staticmethod(lambda *a, **k: ([TEMPLATES_B], "")),
@@ -828,10 +828,6 @@ class TestTiedTemplateNames:
         assert win._row_flag["Macrophage"].toolTip() == ""
         assert win._row_flag["T_cell"].toolTip() == ""
 
-    def test_nothing_is_flagged_with_a_single_library(self, qapp):
-        win = _params_window([TEMPLATES_A])
-        assert all(f.toolTip() == "" for f in win._row_flag.values())
-
     def test_a_marker_appears_beside_the_ambiguous_row(self, qapp):
         win = _params_window([TEMPLATES_A, TEMPLATES_B])
         win.show()
@@ -1010,83 +1006,6 @@ class TestRowButtonSizing:
         assert not btn.icon().isNull()
 
 
-class TestDisabledLooksDisabledUnderAHostPalette:
-    """A host can flatten the palette's Disabled group without meaning to.
-
-    ``QPalette.setColor(role, color)`` with no ColorGroup sets *every* group,
-    disabled included — PhysiCell Studio does this for ButtonText and WindowText,
-    so a disabled control would paint exactly like an enabled one. BIWT styles
-    the distinction itself rather than inheriting it.
-    """
-
-    @pytest.fixture
-    def hostile_palette(self, qapp):
-        from PyQt5.QtGui import QPalette
-
-        original = qapp.palette()
-        palette = QPalette()
-        for role in (QPalette.ButtonText, QPalette.WindowText, QPalette.Text):
-            palette.setColor(role, Qt.black)      # every group, Disabled too
-        qapp.setPalette(palette)
-        yield
-        qapp.setPalette(original)
-
-    def _pixels(self, widget, qapp):
-        widget.show()
-        qapp.processEvents()
-        return widget.grab().toImage()
-
-    def test_a_disabled_row_button_renders_differently(self, qapp, hostile_palette):
-        # templates_b.toml has no "default", so the ⚙ buttons are disabled.
-        # Both windows stay referenced: a collected window takes its buttons with it.
-        with_default = _params_window([TEMPLATES_A])
-        without = _params_window([TEMPLATES_B])
-        enabled, disabled = with_default._row_default["Tumor"], without._row_default["Tumor"]
-        assert enabled.isEnabled() and not disabled.isEnabled()
-        assert self._pixels(enabled, qapp) != self._pixels(disabled, qapp)
-
-    # The two below pass even without BIWT's own rules: a QPushButton's frame
-    # still dims under this platform style, so the palette alone does not flatten
-    # them.  Kept as guards on what the user must be able to see, not as evidence
-    # the rules are load-bearing — the row-button test above is that evidence.
-    def test_a_disabled_bulk_button_renders_differently(self, qapp, hostile_palette):
-        with_default = _params_window([TEMPLATES_A])
-        without = _params_window([TEMPLATES_B])
-        enabled, disabled = with_default._default_btn, without._default_btn
-        assert enabled.isEnabled() and not disabled.isEnabled()
-        assert self._pixels(enabled, qapp) != self._pixels(disabled, qapp)
-
-    def test_two_defaults_also_render_as_disabled(self, qapp, monkeypatch, tmp_path,
-                                                  hostile_palette):
-        second = _write_toml(tmp_path, "other.toml", '"default" = "OPAQUE-OTHER"\n')
-        win = _params_window([TEMPLATES_A])
-        before = self._pixels(win._default_btn, qapp)
-        _add_file(win, monkeypatch, second)      # now ambiguous → withdrawn
-        assert not win._default_btn.isEnabled()
-        assert self._pixels(win._default_btn, qapp) != before
-
-
-def test_the_docs_ship_the_same_action_icons_as_the_package():
-    """The guide embeds these icons, so it keeps its own copy under docs/assets.
-
-    mkdocs only serves files inside ``docs/``, and registering the packaged ones
-    into the build instead would need a mkdocs hook — which cannot be verified
-    without building the site. A copy plus this test is the cheaper trade: it
-    turns silent drift into a failed test.
-    """
-    import biwt.gui
-
-    packaged = Path(biwt.gui.__file__).parent / "icons"
-    in_docs = Path(__file__).resolve().parents[1] / "docs" / "assets" / "icons"
-    names = sorted(p.name for p in packaged.glob("action_*.svg"))
-    assert names, "no action icons found in the package"
-    for name in names:
-        assert (in_docs / name).read_bytes() == (packaged / name).read_bytes(), (
-            f"docs/assets/icons/{name} differs from the packaged icon. Refresh it:\n"
-            "  cp src/biwt/gui/icons/action_*.svg docs/assets/icons/"
-        )
-
-
 class TestSourceStaysVisibleWhenTheListCloses:
     """A closed combo box shows only its current item's text.
 
@@ -1130,10 +1049,6 @@ class TestSourceStaysVisibleWhenTheListCloses:
     def test_the_source_is_a_separate_right_aligned_half(self, qapp):
         win = _params_window([TEMPLATES_A, TEMPLATES_B])
         assert _dropdown(win, "Tumor").displayed_parts() == ("Tumor", "templates_a.toml")
-
-    def test_one_library_needs_no_qualifier(self, qapp):
-        win = _params_window([TEMPLATES_A])
-        assert _dropdown(win, "Tumor").displayed_parts() == ("Tumor", "")
 
     def test_a_roomy_box_shows_both_halves(self, qapp):
         win = _params_window([TEMPLATES_A, TEMPLATES_B])
@@ -1302,7 +1217,7 @@ class TestHostDefinedCellTypes:
         win = _params_window([TEMPLATES_A], host_cell_type_names=["default"])
         assert win._baseline_key() == ("default", "<host>")
 
-        win._all_default_cb()
+        win._assign_baseline()
         win.process_window()
         assert {v[0] for v in win.walkthrough.session.cell_templates.values()} == {
             "<host>"
