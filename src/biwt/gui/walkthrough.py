@@ -1225,6 +1225,7 @@ class BioinformaticsWalkthrough(QWidget):
                 f"not {type(biwt_input).__name__}"
             )
         self._host_input_source = biwt_input
+        self._host_input_error = ""
 
         self.on_complete = on_complete or (lambda result: None)
         # This first resolution only seeds the home screen (the domain-check
@@ -1287,8 +1288,9 @@ class BioinformaticsWalkthrough(QWidget):
                     f"host input resolved to {type(resolved).__name__}, not a BiwtInput"
                 )
             snapshot = resolved.snapshot()
-        except Exception:                      # noqa: BLE001 — host code, any failure
+        except Exception as exc:               # noqa: BLE001 — host code, any failure
             log.error("Could not resolve the host's input.", exc_info=True)
+            self._host_input_error = f"{type(exc).__name__}: {exc}"
             return None
         return snapshot
 
@@ -1525,8 +1527,14 @@ class BioinformaticsWalkthrough(QWidget):
         # and cell types are *now* — the widget may have been built at startup.
         # If it cannot answer, no run starts: the alternative is a walkthrough
         # configured from settings the host has since disowned.
+        self._host_input_error = ""
         biwt_input = self._resolve_host_input()
         if biwt_input is None:
+            QMessageBox.warning(
+                self, "Import cancelled",
+                f"{self.session.biwt_input.host_name} could not supply its settings, "
+                f"so nothing was imported.\n\n{self._host_input_error}",
+            )
             return
         # Reset session so stale state from a previous run doesn't survive reimport.
         self.session = WalkthroughSession(biwt_input=biwt_input)

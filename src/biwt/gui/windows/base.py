@@ -80,9 +80,6 @@ class BiwinformaticsWalkthroughWindow(QWidget, metaclass=_WidgetABCMeta):
     def __init__(self, walkthrough):
         super().__init__()
         self.walkthrough = walkthrough
-        # Marking futures stale ensures later windows are re-built when a
-        # user revisits this step and changes something.
-        self.walkthrough.stale_futures = True
         # current_window_idx is pre-increment at build time; +2 gives the
         # correct 1-based step number that will be shown to the user.
         self._step_number = walkthrough.current_window_idx + 2

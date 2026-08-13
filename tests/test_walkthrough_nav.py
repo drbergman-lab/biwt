@@ -281,7 +281,7 @@ class TestHostInputResolution:
         assert w.session.effective_domain.xmax == 500.0
 
     def test_a_host_that_cannot_answer_starts_no_run(
-        self, make_widget, drive_import
+        self, make_widget, drive_import, monkeypatch
     ):
         """Better than a walkthrough configured from a previous run's settings."""
         from biwt.types import BiwtInput, DomainSpec
@@ -295,6 +295,9 @@ class TestHostInputResolution:
                 preferred_domain=DomainSpec(xmin=-700, xmax=700, ymin=-700, ymax=700)
             )
 
+        from PyQt5.QtWidgets import QMessageBox
+        monkeypatch.setattr(QMessageBox, "warning", staticmethod(lambda *a, **k: None))
+
         w, _ = make_widget(_source=flaky)
         state["fail"] = True
         drive_import(w, "spatial.csv")        # must not raise
@@ -304,8 +307,11 @@ class TestHostInputResolution:
         assert w.import_button.isEnabled()    # and the user can try again
 
     def test_a_host_that_answers_with_the_wrong_type_starts_no_run(
-        self, make_widget, drive_import
+        self, make_widget, drive_import, monkeypatch
     ):
+        from PyQt5.QtWidgets import QMessageBox
+        monkeypatch.setattr(QMessageBox, "warning", staticmethod(lambda *a, **k: None))
+
         w, _ = make_widget(_source=lambda: {"preferred_domain": "nope"})
         drive_import(w, "spatial.csv")
         assert w.window is None
@@ -752,3 +758,27 @@ class TestSkipAtTheLastStep:
 
         assert len(completed) == 1
         assert completed[0].cell_templates == {}
+
+
+class TestHostInputFailureIsVisible:
+    def test_the_user_is_told_why_nothing_happened(
+        self, make_widget, drive_import, monkeypatch
+    ):
+        """A console traceback is not a user-facing signal: the import silently
+        does nothing, and the landing screen looks unchanged."""
+        from PyQt5.QtWidgets import QMessageBox
+
+        shown = []
+        monkeypatch.setattr(QMessageBox, "warning",
+                            staticmethod(lambda *a, **k: shown.append(a[2])))
+
+        def boom():
+            raise RuntimeError("the host is mid-teardown")
+
+        w, _ = make_widget(_source=boom)
+        drive_import(w, "spatial.csv")
+
+        assert w.window is None
+        assert len(shown) == 1
+        assert "nothing was imported" in shown[0]
+        assert "the host is mid-teardown" in shown[0]      # the actual reason
