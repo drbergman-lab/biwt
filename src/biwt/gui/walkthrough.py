@@ -1225,7 +1225,9 @@ class BioinformaticsWalkthrough(QWidget):
         # This first resolution only seeds the home screen (the domain-check
         # checkbox) and stands in until the first import; nothing derived,
         # placed, or handed back to the host comes out of it.
-        self.session = WalkthroughSession(biwt_input=self._resolve_host_input())
+        self.session = WalkthroughSession(
+            biwt_input=self._resolve_host_input() or BiwtInput()
+        )
 
         # Window stack management.
         # Two-list model mirrors the original biwt_tab.py design:
@@ -1251,7 +1253,7 @@ class BioinformaticsWalkthrough(QWidget):
     # Host context
     # ------------------------------------------------------------------
 
-    def _resolve_host_input(self, previous: Optional[BiwtInput] = None) -> BiwtInput:
+    def _resolve_host_input(self) -> Optional[BiwtInput]:
         """Ask the host what its context is now, and freeze the answer.
 
         Called at exactly two points: widget construction, and the start of every
@@ -1264,11 +1266,13 @@ class BioinformaticsWalkthrough(QWidget):
         A host that supplies a plain ``BiwtInput`` is snapshotted too, so mutating
         the instance it handed over mid-run cannot reach the run either.
 
-        Nothing a host gets wrong here may abort the run: this is called from the
-        import slot, and PyQt5 turns an exception raised in a slot into a fatal abort
-        — so a malformed ``BiwtInput`` would take the host's whole process down on a
-        file import.  Anything that fails leaves BIWT on the last good context and
-        logs.  No dialog: a host bug is not the user's to resolve.
+        ``None`` if the host could not supply one, which the import path treats as
+        "do not start a run" — a walkthrough configured from a previous run's
+        settings would be worse than no walkthrough.
+
+        Nothing a host gets wrong here may raise: this is reached from the import
+        slot, and PyQt5 turns an exception in a slot into a fatal abort.  Failures
+        are logged, not shown: a host bug is not the user's to resolve.
         """
         source = self._host_input_source
         try:
@@ -1279,12 +1283,8 @@ class BioinformaticsWalkthrough(QWidget):
                 )
             snapshot = resolved.snapshot()
         except Exception:                      # noqa: BLE001 — host code, any failure
-            # No previous context means this is construction, and the run would
-            # silently start on BIWT's fallback domain: worth more than a warning.
-            level = log.warning if previous is not None else log.error
-            level("Could not resolve the host's input; "
-                  "keeping the previous context.", exc_info=True)
-            return previous if previous is not None else BiwtInput()
+            log.error("Could not resolve the host's input.", exc_info=True)
+            return None
         return snapshot
 
     # ------------------------------------------------------------------
@@ -1516,12 +1516,15 @@ class BioinformaticsWalkthrough(QWidget):
             self._show_import_error(e)
             return
 
+        # A run starts here, so this is where the host is asked what its domain
+        # and cell types are *now* — the widget may have been built at startup.
+        # If it cannot answer, no run starts: the alternative is a walkthrough
+        # configured from settings the host has since disowned.
+        biwt_input = self._resolve_host_input()
+        if biwt_input is None:
+            return
         # Reset session so stale state from a previous run doesn't survive reimport.
-        # A run starts here, so this is where the host is asked what its domain and
-        # cell types are *now* — the widget may have been built at host startup.
-        self.session = WalkthroughSession(
-            biwt_input=self._resolve_host_input(previous=self.session.biwt_input)
-        )
+        self.session = WalkthroughSession(biwt_input=biwt_input)
         self.session.data = bdata
 
         # Seed the scale factor (host-units per data unit) from what the file

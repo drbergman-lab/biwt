@@ -280,9 +280,10 @@ class TestHostInputResolution:
         host_domain.xmax = 9999.0
         assert w.session.effective_domain.xmax == 500.0
 
-    def test_a_provider_that_raises_keeps_the_last_good_context(
+    def test_a_host_that_cannot_answer_starts_no_run(
         self, make_widget, drive_import
     ):
+        """Better than a walkthrough configured from a previous run's settings."""
         from biwt.types import BiwtInput, DomainSpec
 
         state = {"fail": False}
@@ -296,39 +297,18 @@ class TestHostInputResolution:
 
         w, _ = make_widget(_source=flaky)
         state["fail"] = True
-        drive_import(w, "spatial.csv")      # must not raise
+        drive_import(w, "spatial.csv")        # must not raise
 
-        assert _name(w) in {"ClusterColumnWindow", "SpatialQueryWindow"}
-        assert w.session.preferred_domain.xmax == 700.0
+        assert w.window is None               # nothing started
+        assert w.session.data is None
+        assert w.import_button.isEnabled()    # and the user can try again
 
-    def test_a_provider_returning_the_wrong_type_keeps_the_last_good_context(
+    def test_a_host_that_answers_with_the_wrong_type_starts_no_run(
         self, make_widget, drive_import
     ):
-        """"Refused" has to mean the previous context survived, not just "no crash".
-
-        A provider that is wrong from the start makes the fallback and a fresh
-        `BiwtInput()` indistinguishable, so the assertion has to be made against a
-        context that differs from the default.
-        """
-        from biwt.types import BiwtInput, DomainSpec
-
-        state = {"good": True}
-
-        def flaky():
-            if not state["good"]:
-                return {"preferred_domain": "nope"}
-            return BiwtInput(
-                preferred_domain=DomainSpec(xmin=-700, xmax=700, ymin=-700, ymax=700),
-                host_cell_type_names=["tumor"],
-            )
-
-        w, _ = make_widget(_source=flaky)
-        state["good"] = False
+        w, _ = make_widget(_source=lambda: {"preferred_domain": "nope"})
         drive_import(w, "spatial.csv")
-
-        assert _name(w) in {"ClusterColumnWindow", "SpatialQueryWindow"}
-        assert w.session.preferred_domain.xmax == 700.0
-        assert w.session.biwt_input.host_cell_type_names == ["tumor"]
+        assert w.window is None
 
     def test_neither_an_input_nor_a_callable_is_a_TypeError(self, qapp):
         from biwt.gui.walkthrough import create_biwt_widget
