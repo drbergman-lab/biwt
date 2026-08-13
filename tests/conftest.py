@@ -11,6 +11,7 @@ new test module never means editing an existing one.
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 # Must be set before any QApplication is created.
@@ -18,7 +19,10 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
 
-FIXTURES = Path(__file__).parent / "fixtures"
+# tests/ on the path, so the modules can share plain helpers.
+sys.path.insert(0, str(Path(__file__).parent))
+
+from helpers import DOMAIN, FIXTURES        # noqa: F401 — re-exported
 
 
 @pytest.fixture(scope="session")
@@ -77,16 +81,13 @@ def make_widget(qapp):
     """
     pytest.importorskip("PyQt5")
     from biwt.gui.walkthrough import create_biwt_widget
-    from biwt.types import BiwtInput, DomainSpec
+    from biwt.types import BiwtInput
 
     built = []
 
     def _make(_source=None, **biwt_input_kwargs):
         if _source is None:
-            biwt_input_kwargs.setdefault(
-                "preferred_domain",
-                DomainSpec(xmin=-500, xmax=500, ymin=-500, ymax=500),
-            )
+            biwt_input_kwargs.setdefault("preferred_domain", DOMAIN)
             _source = BiwtInput(**biwt_input_kwargs)
         elif biwt_input_kwargs:
             raise TypeError("pass either _source or BiwtInput kwargs, not both")

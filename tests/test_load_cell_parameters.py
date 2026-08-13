@@ -16,8 +16,6 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtTest import QTest
 from PyQt5.QtWidgets import QFileDialog, QInputDialog, QLabel, QMessageBox
 
-from biwt.core import data_loader
-from biwt.gui.walkthrough import BioinformaticsWalkthrough
 from biwt.gui.windows.load_cell_parameters import (
     _ICON_AUTO,
     _ICON_DEFAULT,
@@ -26,12 +24,8 @@ from biwt.gui.windows.load_cell_parameters import (
     _NO_TEMPLATE_LABEL,
     LoadCellParametersWindow,
 )
-from biwt.types import BiwtInput, DomainSpec
+from helpers import FIXTURES, TEMPLATES_A, TEMPLATES_B, window_at_rename
 
-FIXTURES = Path(__file__).parent / "fixtures"
-DOMAIN = DomainSpec(xmin=-500, xmax=500, ymin=-500, ymax=500)
-TEMPLATES_A = str(FIXTURES / "templates_a.toml")
-TEMPLATES_B = str(FIXTURES / "templates_b.toml")
 
 
 def _params_window(paths=(), rename=None, **biwt_input_kwargs):
@@ -40,24 +34,8 @@ def _params_window(paths=(), rename=None, **biwt_input_kwargs):
     That fixture's final cell types are Macrophage, T_cell and Tumor; *rename*
     maps any of them to a different final name.
     """
-    w = BioinformaticsWalkthrough(
-        BiwtInput(
-            preferred_domain=DOMAIN,
-            cell_template_paths=list(paths),
-            **biwt_input_kwargs,
-        )
-    )
-    s = w.session
-    s.data = data_loader.load(str(FIXTURES / "nonspatial.csv"))
-    s.current_column = "type"
-    s.collect_cell_type_data()
-    s.spatial_query_answer = False
-    s.cell_type_dict_on_edit = {ct: ct for ct in s.cell_types_list_original}
-    s.compute_intermediate_types()
-    renamed = {ct: (rename or {}).get(ct, ct) for ct in s.intermediate_types}
-    s.cell_types_list_final = list(renamed.values())
-    s.cell_type_dict_on_rename = renamed
-    s.apply_rename()
+    w = window_at_rename(rename=rename, cell_template_paths=list(paths),
+                         **biwt_input_kwargs)
     return LoadCellParametersWindow(w)
 
 
@@ -88,6 +66,15 @@ def _user_select(win, cell_type, label_startswith):
 
 def _row_labels(win):
     return [win._model.item(r).text() for r in range(win._model.rowCount())]
+
+
+def _add_file(win, monkeypatch, path):
+    """Load *path* through the real Add-templates dialog path."""
+    monkeypatch.setattr(
+        QFileDialog, "getOpenFileNames",
+        staticmethod(lambda *a, **k: ([str(path)], "")),
+    )
+    win._add_templates_cb()
 
 
 class TestDefaultSelections:
@@ -287,16 +274,9 @@ class TestSameNameInTwoFiles:
 
 
 class TestRuntimeFileAdd:
-    def _add(self, win, monkeypatch, path):
-        monkeypatch.setattr(
-            QFileDialog, "getOpenFileNames",
-            staticmethod(lambda *a, **k: ([str(path)], "")),
-        )
-        win._add_templates_cb()
-
     def test_added_templates_appear_in_the_model(self, qapp, monkeypatch):
         win = _params_window([TEMPLATES_A])
-        self._add(win, monkeypatch, TEMPLATES_B)
+        _add_file(win, monkeypatch, TEMPLATES_B)
         assert "Tumor (templates_b.toml)" in _row_labels(win)
 
     def test_types_the_new_file_cannot_improve_are_left_where_they_were(
@@ -304,7 +284,7 @@ class TestRuntimeFileAdd:
     ):
         win = _params_window([TEMPLATES_A])
         before = dict(win.walkthrough.session.cell_templates)
-        self._add(win, monkeypatch, TEMPLATES_B)
+        _add_file(win, monkeypatch, TEMPLATES_B)
         after = win.walkthrough.session.cell_templates
         # templates_b only improves T_cell (it adds "t_cell"); see
         # TestReMatchOnFileAdd for the merge rules themselves.
@@ -317,7 +297,7 @@ class TestRuntimeFileAdd:
         win = _params_window([TEMPLATES_A])
         rows = _row_labels(win)
         monkeypatch.chdir(FIXTURES)
-        self._add(win, monkeypatch, "templates_a.toml")
+        _add_file(win, monkeypatch, "templates_a.toml")
         assert _row_labels(win) == rows
 
     def test_an_unreadable_file_warns_and_changes_nothing(self, qapp, monkeypatch):
@@ -328,7 +308,7 @@ class TestRuntimeFileAdd:
             QMessageBox, "warning",
             staticmethod(lambda *a, **k: warned.append(a)),
         )
-        self._add(win, monkeypatch, str(FIXTURES / "no_such_templates.toml"))
+        _add_file(win, monkeypatch, str(FIXTURES / "no_such_templates.toml"))
         assert warned
         assert _row_labels(win) == rows
 
@@ -382,49 +362,38 @@ class TestBulkActions:
     def test_loading_a_default_template_enables_the_button(self, qapp, monkeypatch):
         win = _params_window([TEMPLATES_B])
         assert not win._default_btn.isEnabled()
-        monkeypatch.setattr(
-            QFileDialog, "getOpenFileNames",
-            staticmethod(lambda *a, **k: ([TEMPLATES_A], "")),
-        )
-        win._add_templates_cb()
+        _add_file(win, monkeypatch, TEMPLATES_A)
         assert win._default_btn.isEnabled()
 
 
 class TestReMatchOnFileAdd:
     """A newly loaded file can name a better match than anything on offer."""
 
-    def _add_b(self, win, monkeypatch):
-        monkeypatch.setattr(
-            QFileDialog, "getOpenFileNames",
-            staticmethod(lambda *a, **k: ([TEMPLATES_B], "")),
-        )
-        win._add_templates_cb()
-
     def test_untouched_type_picks_up_a_match_from_the_new_file(self, qapp, monkeypatch):
         # With templates_a alone, T_cell has no name match and falls back to
         # "default"; templates_b brings "t_cell", which does match.
         win = _params_window([TEMPLATES_A])
         assert win.walkthrough.session.cell_templates["T_cell"][1] == "default"
-        self._add_b(win, monkeypatch)
+        _add_file(win, monkeypatch, TEMPLATES_B)
         assert win.walkthrough.session.cell_templates["T_cell"][1] == "t_cell"
 
     def test_a_user_picked_type_is_left_alone(self, qapp, monkeypatch):
         win = _params_window([TEMPLATES_A])
         _user_select(win, "T_cell", "Macrophage")
-        self._add_b(win, monkeypatch)
+        _add_file(win, monkeypatch, TEMPLATES_B)
         # "t_cell" would have matched, but this row is the user's decision.
         assert win.walkthrough.session.cell_templates["T_cell"][1] == "Macrophage"
 
     def test_an_explicit_none_is_left_alone(self, qapp, monkeypatch):
         win = _params_window([TEMPLATES_A])
         _user_select(win, "T_cell", _NO_TEMPLATE_LABEL)
-        self._add_b(win, monkeypatch)
+        _add_file(win, monkeypatch, TEMPLATES_B)
         assert "T_cell" not in win.walkthrough.session.cell_templates
 
     def test_untouched_neighbours_of_a_touched_type_still_refresh(self, qapp, monkeypatch):
         win = _params_window([TEMPLATES_A])
         _user_select(win, "Tumor", _NO_TEMPLATE_LABEL)
-        self._add_b(win, monkeypatch)
+        _add_file(win, monkeypatch, TEMPLATES_B)
         assert "Tumor" not in win.walkthrough.session.cell_templates
         assert win.walkthrough.session.cell_templates["T_cell"][1] == "t_cell"
 
@@ -432,21 +401,21 @@ class TestReMatchOnFileAdd:
         # "All to (none)" is a decision, so a later file load must not undo it.
         win = _params_window([TEMPLATES_A])
         win._assign(_NO_TEMPLATE)
-        self._add_b(win, monkeypatch)
+        _add_file(win, monkeypatch, TEMPLATES_B)
         assert win.walkthrough.session.cell_templates == {}
 
     def test_auto_match_reopens_every_row_to_refreshing(self, qapp, monkeypatch):
         win = _params_window([TEMPLATES_A])
         _user_select(win, "T_cell", "Macrophage")
         win._auto_match()               # clears the divergence
-        self._add_b(win, monkeypatch)
+        _add_file(win, monkeypatch, TEMPLATES_B)
         assert win.walkthrough.session.cell_templates["T_cell"][1] == "t_cell"
 
     def test_sorting_does_not_count_as_touching(self, qapp, monkeypatch):
         win = _params_window([TEMPLATES_A])
         win._sort_toggled(1, True)         # By Source
         win._sort_toggled(0, True)         # back to By Name
-        self._add_b(win, monkeypatch)
+        _add_file(win, monkeypatch, TEMPLATES_B)
         assert win.walkthrough.session.cell_templates["T_cell"][1] == "t_cell"
 
 
@@ -528,11 +497,7 @@ class TestPerTypeActions:
     def test_default_one_and_none_one_count_as_user_choices(self, qapp, monkeypatch):
         win = _params_window([TEMPLATES_A])
         win._assign(_NO_TEMPLATE, ["T_cell"])
-        monkeypatch.setattr(
-            QFileDialog, "getOpenFileNames",
-            staticmethod(lambda *a, **k: ([TEMPLATES_B], "")),
-        )
-        win._add_templates_cb()
+        _add_file(win, monkeypatch, TEMPLATES_B)
         # templates_b names a match for T_cell, but this row was a decision.
         assert "T_cell" not in win.walkthrough.session.cell_templates
 
@@ -540,11 +505,7 @@ class TestPerTypeActions:
         win = _params_window([TEMPLATES_A])
         _user_select(win, "T_cell", "Macrophage")
         win._auto_match(["T_cell"])
-        monkeypatch.setattr(
-            QFileDialog, "getOpenFileNames",
-            staticmethod(lambda *a, **k: ([TEMPLATES_B], "")),
-        )
-        win._add_templates_cb()
+        _add_file(win, monkeypatch, TEMPLATES_B)
         assert win.walkthrough.session.cell_templates["T_cell"][1] == "t_cell"
 
     def test_row_default_buttons_disabled_without_a_default_template(self, qapp):
@@ -560,11 +521,7 @@ class TestPerTypeActions:
     def test_loading_a_default_template_enables_the_row_buttons(self, qapp, monkeypatch):
         win = _params_window([TEMPLATES_B])
         assert not win._row_default["Tumor"].isEnabled()
-        monkeypatch.setattr(
-            QFileDialog, "getOpenFileNames",
-            staticmethod(lambda *a, **k: ([TEMPLATES_A], "")),
-        )
-        win._add_templates_cb()
+        _add_file(win, monkeypatch, TEMPLATES_A)
         assert win._row_default["Tumor"].isEnabled()
 
     def test_clicking_a_row_button_works_end_to_end(self, qapp):
@@ -578,14 +535,6 @@ def _write_toml(tmp_path, name, body):
     path = tmp_path / name
     path.write_text(body)
     return str(path)
-
-
-def _add_file(win, monkeypatch, path):
-    monkeypatch.setattr(
-        QFileDialog, "getOpenFileNames",
-        staticmethod(lambda *a, **k: ([str(path)], "")),
-    )
-    win._add_templates_cb()
 
 
 def _remove_file(win, monkeypatch, label, ok=True):

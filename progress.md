@@ -1977,3 +1977,25 @@ apply to. `_first_key_for_name` stored the key it was keyed by. 901 lines → 80
 rule in four, the `HOST_SOURCE` example verbatim in both a docstring and a page, the digit-gate
 derivation in six. Each now has one owner and the rest link. A comment block stated its point twice
 and then described the icon as a gear, which it has not been since the house replaced it.
+
+### One copy of "what the windows do to the session"
+
+Four test modules each wrote out the step sequence — pick a column, keep every type, rename,
+`apply_rename` — and `test_session.py` wrote it fifteen more times inline. That is not just
+duplication: a session-field rename has to be chased through every copy, and a missed one builds a
+window against a stale session rather than failing, which is exactly what happened when
+`use_spatial_data` became `spatial_query_answer` mid-branch.
+
+`tests/helpers.py` now holds it once, split at the seams the windows themselves have —
+`pick_column`, `keep_all`, `rename_to`, and `session_through_rename` composing the three — plus
+`walkthrough_with_data` and `window_at_rename`. Plain functions rather than fixtures, because most
+callers need them inside a module-level factory rather than as a test argument. `FIXTURES` and
+`DOMAIN` live there too, deleted from the seven modules that each re-declared them.
+
+`test_gui_smoke` had re-declared `make_widget` and `drive_import`, which conftest already provides —
+and its copies did not register widgets for teardown, which is what the autouse reaper exists for.
+`test_load_cell_parameters` had three copies of the same five-line "add a template file" helper plus
+four inline duplicates of it; one now, hoisted above its first use.
+
+Net −129 lines across the modules against +78 for the shared file. The number is not the point:
+there is now one place to edit when a step's contract changes.

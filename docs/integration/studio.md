@@ -30,11 +30,6 @@ installation instructions.
 Studio's BIWT tab is built once at startup and never rebuilt, so it passes a **provider** rather
 than a value. BIWT calls it at each import:
 
-!!! note "The shape the bridge is moving to"
-    Studio currently builds the input once, inline, and passes the value. The provider below is
-    the pattern any long-lived host wants; see
-    [when BIWT reads its input](api-contract.md#when-biwt-reads-it).
-
 ```python
 def _create_biwt_package_tab(self):
     return create_biwt_widget(self._biwt_input, on_complete=self._biwt_complete)

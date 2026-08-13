@@ -7,26 +7,20 @@ now tracked as state, and this module pins the behavior that depended on it.
 """
 from __future__ import annotations
 
-from pathlib import Path
 
 import pytest
 
 pytest.importorskip("PyQt5")
 
-from biwt.core import data_loader
-from biwt.gui.walkthrough import BioinformaticsWalkthrough
 from biwt.gui.windows.edit_cell_types import EditCellTypesWindow
-from biwt.types import BiwtInput, DomainSpec
+from helpers import walkthrough_with_data
 
-FIXTURES = Path(__file__).parent / "fixtures"
-DOMAIN = DomainSpec(xmin=-500, xmax=500, ymin=-500, ymax=500)
 
 
 def _edit_window(types=None):
     """The edit window over *types* (default: the non-spatial fixture's three)."""
-    w = BioinformaticsWalkthrough(BiwtInput(preferred_domain=DOMAIN))
+    w = walkthrough_with_data()
     s = w.session
-    s.data = data_loader.load(str(FIXTURES / "nonspatial.csv"))
     s.current_column = "type"
     s.collect_cell_type_data()
     if types is not None:

@@ -48,12 +48,12 @@ from biwt.core.domain import classify_domain_mismatch, infer_domain
 from biwt.core.positioning import build_ic_dataframe
 from biwt.gui.walkthrough import WalkthroughSession, _step_predicates, _scale_domain
 from biwt.types import BiwtInput, DomainSource, DomainSpec
+from helpers import DOMAIN, FIXTURES, session_through_rename
 
 # ---------------------------------------------------------------------------
 # Fixture paths
 # ---------------------------------------------------------------------------
 
-FIXTURES = Path(__file__).parent / "fixtures"
 SPATIAL_CSV     = str(FIXTURES / "spatial.csv")
 NONSPATIAL_CSV  = str(FIXTURES / "nonspatial.csv")
 SPOT_DECONV_CSV = str(FIXTURES / "spot_deconv.csv")
@@ -64,7 +64,6 @@ ANN_DATA = str(FIXTURES / "test_AnnData.h5ad")
 # Cells in the toy Seurat fixture (see tests/fixtures/make_fixtures.R).
 TOY_N_CELLS = 10
 
-DOMAIN = DomainSpec(xmin=-500, xmax=500, ymin=-500, ymax=500)
 
 
 def _session(csv_path: str) -> WalkthroughSession:
@@ -601,14 +600,7 @@ class TestFullPipelineNonSpatial:
 
     def test_coordinates_dataframe_columns(self):
         s = _session(NONSPATIAL_CSV)
-        s.current_column = "type"
-        s.collect_cell_type_data()
-        s.spatial_query_answer = False
-        s.cell_type_dict_on_edit = {ct: ct for ct in s.cell_types_list_original}
-        s.compute_intermediate_types()
-        s.cell_types_list_final = list(s.intermediate_types)
-        s.cell_type_dict_on_rename = {ct: ct for ct in s.intermediate_types}
-        s.apply_rename()
+        session_through_rename(s)
 
         # Simulate cell-count override (user keeps defaults)
         # coords_by_type is set by PositionsWindow — simulate minimal placement
@@ -737,14 +729,7 @@ class TestStepSequencing:
         # spatial declined, cell_type_dict_on_edit set, cell_types_list_final set,
         # cell_counts_confirmed=False → CellCounts
         s = _session(NONSPATIAL_CSV)
-        s.current_column = "type"
-        s.collect_cell_type_data()
-        s.spatial_query_answer = False
-        s.cell_type_dict_on_edit = {ct: ct for ct in s.cell_types_list_original}
-        s.compute_intermediate_types()
-        s.cell_types_list_final = list(s.intermediate_types)
-        s.cell_type_dict_on_rename = {ct: ct for ct in s.intermediate_types}
-        s.apply_rename()
+        session_through_rename(s)
         # cell_counts_confirmed defaults to False
         assert not s.cell_counts_confirmed
         assert _next_step(s) == "CellCounts"
@@ -769,14 +754,7 @@ class TestStepSequencing:
 
     def test_after_positions_set_and_parameters_not_loaded_goes_to_load_parameters(self):
         s = _session(NONSPATIAL_CSV)
-        s.current_column = "type"
-        s.collect_cell_type_data()
-        s.spatial_query_answer = False
-        s.cell_type_dict_on_edit = {ct: ct for ct in s.cell_types_list_original}
-        s.compute_intermediate_types()
-        s.cell_types_list_final = list(s.intermediate_types)
-        s.cell_type_dict_on_rename = {ct: ct for ct in s.intermediate_types}
-        s.apply_rename()
+        session_through_rename(s)
         s.cell_counts_confirmed = True
         s.positions_set = True
         assert not s.parameters_loaded
@@ -785,14 +763,7 @@ class TestStepSequencing:
     def test_all_flags_done_returns_none(self):
         # All predicates False → workflow complete → None
         s = _session(NONSPATIAL_CSV)
-        s.current_column = "type"
-        s.collect_cell_type_data()
-        s.spatial_query_answer = False
-        s.cell_type_dict_on_edit = {ct: ct for ct in s.cell_types_list_original}
-        s.compute_intermediate_types()
-        s.cell_types_list_final = list(s.intermediate_types)
-        s.cell_type_dict_on_rename = {ct: ct for ct in s.intermediate_types}
-        s.apply_rename()
+        session_through_rename(s)
         s.cell_counts_confirmed = True
         s.positions_set = True
         s.parameters_loaded = True
@@ -960,14 +931,7 @@ class TestZeroCellCounts:
         config must define. Contrast test_delete_removes_from_counts, where the
         type disappears from cell_counts entirely."""
         s = _session(NONSPATIAL_CSV)
-        s.current_column = "type"
-        s.collect_cell_type_data()
-        s.spatial_query_answer = False
-        s.cell_type_dict_on_edit = {ct: ct for ct in s.cell_types_list_original}
-        s.compute_intermediate_types()
-        s.cell_types_list_final = list(s.intermediate_types)
-        s.cell_type_dict_on_rename = {ct: ct for ct in s.intermediate_types}
-        s.apply_rename()
+        session_through_rename(s)
 
         s.cell_counts["Macrophage"] = 0          # what the counts screen now allows
         assert "Macrophage" in s.cell_types_list_final
@@ -1196,14 +1160,7 @@ class TestCollectCellTypeDataEdgeCases:
 
     def test_numeric_labels_survive_apply_rename(self):
         s = _session(SPOT_DECONV_CSV)
-        s.current_column = "Tumor_probability"
-        s.collect_cell_type_data()
-        s.spatial_query_answer = False
-        s.cell_type_dict_on_edit = {ct: ct for ct in s.cell_types_list_original}
-        s.compute_intermediate_types()
-        s.cell_types_list_final = list(s.intermediate_types)
-        s.cell_type_dict_on_rename = {ct: ct for ct in s.cell_types_list_original}
-        s.apply_rename()
+        session_through_rename(s, column="Tumor_probability")
         assert len(s.cell_types_final) == s.data.n_cells
         assert sum(s.cell_counts.values()) == s.data.n_cells
 
@@ -1356,11 +1313,7 @@ class TestApplyRenameIsIdempotent:
 # ---------------------------------------------------------------------------
 
 class TestResolvedCellTypeMap:
-    """`BiwtResult.cell_type_map` used to come back empty on every run.
-
-    It was read off a `CellTypeConfig` that nothing ever populated, while the
-    real decisions sat in `cell_type_dict_on_rename`.
-    """
+    """The audit trail from every original data label to its final name."""
 
     def _session_with_edits(self):
         s = _session(NONSPATIAL_CSV)          # Macrophage, T_cell, Tumor

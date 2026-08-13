@@ -5,19 +5,14 @@ conftest.py.
 """
 from __future__ import annotations
 
-from pathlib import Path
 
 import pytest
 
 pytest.importorskip("PyQt5")
 
-from biwt.core import data_loader
-from biwt.gui.walkthrough import BioinformaticsWalkthrough
 from biwt.gui.windows.cell_counts import CellCountsWindow
-from biwt.types import BiwtInput, DomainSpec
+from helpers import window_at_rename
 
-FIXTURES = Path(__file__).parent / "fixtures"
-DOMAIN = DomainSpec(xmin=-500, xmax=500, ymin=-500, ymax=500)
 
 
 def _counts_window(zero_type=None):
@@ -25,17 +20,8 @@ def _counts_window(zero_type=None):
 
     The fixture has 6 rows: Tumor 2, T_cell 3, Macrophage 1.
     """
-    w = BioinformaticsWalkthrough(BiwtInput(preferred_domain=DOMAIN))
+    w = window_at_rename()
     s = w.session
-    s.data = data_loader.load(str(FIXTURES / "nonspatial.csv"))
-    s.current_column = "type"
-    s.collect_cell_type_data()
-    s.spatial_query_answer = False
-    s.cell_type_dict_on_edit = {ct: ct for ct in s.cell_types_list_original}
-    s.compute_intermediate_types()
-    s.cell_types_list_final = list(s.intermediate_types)
-    s.cell_type_dict_on_rename = {ct: ct for ct in s.intermediate_types}
-    s.apply_rename()
     if zero_type:
         s.cell_counts[zero_type] = 0
     win = CellCountsWindow(w)
