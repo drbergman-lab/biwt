@@ -252,6 +252,7 @@ class TestHostInputResolution:
 
         drive_import(w, "spatial.csv")
         box[0] = (1500.0, [])
+        w.import_button.setEnabled(True)   # as finishing the run would
         drive_import(w, "spatial.csv")
         assert calls == [500.0, 500.0, 1500.0]
         assert w.session.preferred_domain.xmax == 1500.0
@@ -546,6 +547,27 @@ class TestFinishing:
         assert len(completed) == 1
 
 
+class TestImportIsRefusedMidRun:
+    def test_a_stray_import_cannot_discard_a_walkthrough(
+        self, make_widget, drive_import, qapp
+    ):
+        """Importing resets the session, so mid-run it would throw away progress.
+
+        The button is greyed, and the guard is on `_import_file` rather than the
+        click, because a drop on the landing screen has no button to grey.
+        """
+        w, _ = make_widget()
+        drive_import(w, "nonspatial.csv")
+        qapp.processEvents()
+        first = w.window
+        assert not w.import_button.isEnabled()
+
+        drive_import(w, "spatial.csv")          # a stray click, or a drop
+        qapp.processEvents()
+        assert w.window is first
+        assert w.session.data.n_cells == 6      # still the nonspatial fixture
+
+
 class TestPositionsLegend:
     """The legend is its own top-level window, so it needs telling to follow.
 
@@ -611,6 +633,7 @@ class TestPositionsLegend:
         self, make_widget, drive_import, qapp, monkeypatch
     ):
         w, pos = self._at_positions_with_legend(make_widget, drive_import, qapp, monkeypatch)
+        w.import_button.setEnabled(True)   # as finishing the run would
         drive_import(w, "spatial.csv")
         qapp.processEvents()
         assert not pos.legend_window.isVisible()
@@ -640,6 +663,7 @@ class TestReimport:
         fresh history and Go back would show it reading the new session.
         """
         w, _ = make_widget()
+        w.import_button.setEnabled(True)   # as finishing the run would
         drive_import(w, "spatial.csv")
         qapp.processEvents()
         _continue(w)                              # advance a couple of steps
@@ -648,6 +672,7 @@ class TestReimport:
         # re-import and CPython happily reuses their addresses.
         stale = [*w.window_history, *w.window_future, w.window]
 
+        w.import_button.setEnabled(True)   # as finishing the run would
         drive_import(w, "nonspatial.csv")
         qapp.processEvents()
         live = [*w.window_history, *w.window_future, w.window]
@@ -659,6 +684,7 @@ class TestReimport:
         _answer(w, True)
         _continue(w)
 
+        w.import_button.setEnabled(True)   # as finishing the run would
         drive_import(w, "nonspatial.csv")
         qapp.processEvents()
         assert not w.session.perform_spot_deconvolution

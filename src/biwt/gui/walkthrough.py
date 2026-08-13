@@ -1483,7 +1483,14 @@ class BioinformaticsWalkthrough(QWidget):
         self._import_file(path)
 
     def _import_file(self, path: str) -> None:
-        """Load *path* and start the walkthrough. Shared by the button and drops."""
+        """Load *path* and start the walkthrough. Shared by the button and drops.
+
+        Refused mid-run: importing resets the session, so a stray click or drop
+        would discard the walkthrough in progress.  The button's own enabled state
+        is the flag, and it also blocks the drop, which has no button to grey out.
+        """
+        if not self.import_button.isEnabled():
+            return
         try:
             bdata = data_loader.load(path)
         except LoadError as e:
@@ -1526,6 +1533,8 @@ class BioinformaticsWalkthrough(QWidget):
 
     def _start_walkthrough(self) -> None:
         """Begin the step-window sequence after successful file import."""
+        self.import_button.setEnabled(False)
+        self.import_button.setToolTip("Finish or go back through the walkthrough first.")
         # Drop any window from a previous import: its handlers read the session
         # live, and advance() would otherwise push it onto the fresh history,
         # where Go back would show a window bound to data that no longer exists.
@@ -1689,6 +1698,8 @@ class BioinformaticsWalkthrough(QWidget):
             cell_templates=s.cell_templates,
         )
         self.on_complete(result)
+        self.import_button.setEnabled(True)
+        self.import_button.setToolTip("")
 
 
 # ---------------------------------------------------------------------------
