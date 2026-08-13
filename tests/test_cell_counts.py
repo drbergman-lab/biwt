@@ -101,3 +101,37 @@ class TestEveryTypeDeleted:
         rebuilt = CellCountsWindow(win.walkthrough)
         totals = [f.text() for f in rebuilt.findChildren(QLineEdit)]
         assert totals[0] == "0"
+
+
+class TestInvalidCountIsRefused:
+    def test_a_rejected_manual_count_is_not_committed(self, qapp, monkeypatch):
+        """The Total already excludes what the validator rejects, so committing it
+        would send Positions a number the window never showed anywhere."""
+        from PyQt5.QtWidgets import QMessageBox
+
+        warned = []
+        monkeypatch.setattr(QMessageBox, "warning",
+                            staticmethod(lambda *a, **k: warned.append(a[2])))
+        win = _counts_window()
+        win._mode_group.button(3).setChecked(True)
+        win._mode_changed(3)
+        field = win._w_manual["Tumor"]
+        field.setText("9999999999")
+        assert not field.hasAcceptableInput()
+        before = dict(win.walkthrough.session.cell_counts)
+        advanced = []
+        win.walkthrough.advance = lambda: advanced.append(True)
+
+        win.process_window()
+        assert advanced == []
+        assert win.walkthrough.session.cell_counts == before
+        assert "highlighted" in warned[0]
+
+    def test_a_valid_manual_count_still_commits(self, qapp):
+        win = _counts_window()
+        win._mode_group.button(3).setChecked(True)
+        win._mode_changed(3)
+        win._w_manual["Tumor"].setText("42")
+        win.walkthrough.advance = lambda: None
+        win.process_window()
+        assert win.walkthrough.session.cell_counts["Tumor"] == 42

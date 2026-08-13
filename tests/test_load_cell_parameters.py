@@ -1297,3 +1297,19 @@ class TestBadPathsAreReportedOnce:
         assert len(shown) == 1
         assert "Could not load template file" in shown[0]
         assert "/no/such/file.toml" in shown[0]
+
+
+class TestReAddingAnEditedFile:
+    def test_the_file_replaces_what_it_contributed_before(self, qapp, monkeypatch, tmp_path):
+        """Adding a file must show that file as it is now, not merged with what
+        it held last time — a template deleted from it would otherwise linger."""
+        path = tmp_path / "lib.toml"
+        path.write_text('"Alpha" = "A"\n"Beta" = "B"\n')
+        win = _params_window([str(path)])
+        assert {n for n, _ in win._template_db} == {"Alpha", "Beta"}
+
+        path.write_text('"Beta" = "B2"\n"Gamma" = "G"\n')     # Alpha deleted
+        _add_file(win, monkeypatch, str(path))
+
+        assert {n for n, _ in win._template_db} == {"Beta", "Gamma"}
+        assert win._template_db[("Beta", str(path))] == "B2"

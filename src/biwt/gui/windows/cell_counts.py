@@ -5,7 +5,7 @@ import numpy as np
 from PyQt5 import QtGui
 from PyQt5.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel, QScrollArea, QWidget,
-    QButtonGroup, QRadioButton,
+    QButtonGroup, QRadioButton, QMessageBox,
 )
 from biwt.gui.windows.base import BiwinformaticsWalkthroughWindow
 from biwt.gui.widgets import QVLine, QLineEdit_custom, row_label
@@ -339,6 +339,14 @@ class CellCountsWindow(BiwinformaticsWalkthroughWindow):
     def process_window(self) -> None:
         s = self.walkthrough.session
         mode = self._mode_group.checkedId()
+        # The Total row already excludes fields the validator rejects, so a
+        # rejected value would be committed without ever being shown in a total.
+        editable = {1: self._w_prop, 3: self._w_manual}.get(mode)
+        if editable and any(w.text() and not w.hasAcceptableInput()
+                            for w in editable.values()):
+            QMessageBox.warning(self, "Invalid cell count",
+                                "Fix the highlighted count fields before continuing.")
+            return
         if mode == 1:   # proportion
             for ct in self._cell_types:
                 s.cell_counts[ct] = int(self._w_prop[ct].text() or 0)

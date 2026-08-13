@@ -305,6 +305,11 @@ class LoadCellParametersWindow(BiwinformaticsWalkthroughWindow):
         except Exception as exc:
             self._load_errors.append(f"{path}\n    {exc}")
             return None
+        # Whatever this file contributed before is dropped first: re-adding an
+        # edited file must show the file as it is now, not merged with what it
+        # used to hold — a template deleted from it would otherwise linger.
+        for key in [k for k in self._template_db if k[1] == path]:
+            del self._template_db[key]
         for name, content in data.items():
             self._template_db[(name, path)] = content
         return path
