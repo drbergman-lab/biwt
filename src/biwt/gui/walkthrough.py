@@ -1593,10 +1593,10 @@ class BioinformaticsWalkthrough(QWidget):
         If ``stale_futures`` is False and cached future windows exist, reuse
         the next one so that back→forward without changes preserves state.
 
-        The current window is not put away until there is one to replace it.
-        Hiding first left the last step with nowhere to go: the widget went blank
-        on ``on_complete``, and the step was on the history *and* still current, so
-        Go back would have returned to the window the user was already on.
+        The current window is not put away until there is one to replace it — on
+        the last step it was being pushed onto the history while still being the
+        current window, so Go back would have returned to the step the user was
+        already on.  Finishing then closes it, leaving the landing screen.
         """
         if self.stale_futures or not self.window_future:
             if self.stale_futures:
@@ -1606,8 +1606,12 @@ class BioinformaticsWalkthrough(QWidget):
                 self.window_future.clear()
             next_win = self._build_next_window()
             if next_win is None:
-                # Finished. The last step stays on screen: BIWT does not decide
-                # what happens next — the host does, in on_complete.
+                # Finished: put the last step away and leave the landing screen,
+                # where Import is live again.  BIWT does not close or reset
+                # itself beyond that — the host decides, in on_complete.
+                if self.window is not None:
+                    self.window.hide()
+                    self.window = None
                 self._finish()
                 return
         else:

@@ -476,12 +476,11 @@ class TestManualDomainEditor:
 
 
 class TestFinishing:
-    """Leaving the last step must not leave the user with nothing.
+    """Leaving the last step ends the run and returns to the landing screen.
 
-    ``advance`` used to hide the current window before discovering there was no
-    next one, so ``on_complete`` fired against a blank widget — and the step was
-    pushed onto the history while still being the current window, so Go back
-    would have returned to the window the user was already on.
+    ``advance`` used to hide the current window before knowing whether there was
+    a next one, which also pushed the step onto the history while it was still
+    current — so Go back would have returned to the window the user was on.
     """
 
     @staticmethod
@@ -505,7 +504,7 @@ class TestFinishing:
         return w, completed
 
     @pytest.mark.parametrize("leave", ["skip", "continue"])
-    def test_the_last_step_stays_on_screen(
+    def test_the_last_step_closes_and_the_result_is_emitted(
         self, make_widget, drive_import, qapp, monkeypatch, leave
     ):
         w, completed = self._at_last_step(make_widget, drive_import, qapp, monkeypatch)
@@ -514,37 +513,21 @@ class TestFinishing:
         qapp.processEvents()
 
         assert len(completed) == 1
-        assert w.window is last
-        assert last.isVisible()
+        assert not last.isVisible()
+        assert w.window is None                  # the run is over
 
-    def test_go_back_reaches_the_previous_step_not_this_one(
+    def test_the_landing_screen_can_import_again(
         self, make_widget, drive_import, qapp, monkeypatch
     ):
-        w, completed = self._at_last_step(make_widget, drive_import, qapp, monkeypatch)
-        last = w.window
-        last._skip_cb()
+        w, _ = self._at_last_step(make_widget, drive_import, qapp, monkeypatch)
+        w.window._skip_cb()
         qapp.processEvents()
 
-        w.go_back_to_prev_window()
+        assert w.import_button.isEnabled()
+        drive_import(w, "spatial.csv")
         qapp.processEvents()
-        assert w.window is not last
-        assert _name(w) == "PositionsWindow"
-
-    def test_forward_again_returns_without_re_emitting(
-        self, make_widget, drive_import, qapp, monkeypatch
-    ):
-        """The cached window is reused, so nothing recomputes and nothing re-fires."""
-        w, completed = self._at_last_step(make_widget, drive_import, qapp, monkeypatch)
-        last = w.window
-        last._skip_cb()
-        qapp.processEvents()
-        w.go_back_to_prev_window()
-        qapp.processEvents()
-        _continue(w)
-        qapp.processEvents()
-
-        assert w.window is last
-        assert len(completed) == 1
+        assert w.window is not None
+        assert w.session.data.n_cells != 6        # the new file, not the old one
 
 
 class TestImportIsRefusedMidRun:
