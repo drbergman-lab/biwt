@@ -45,7 +45,7 @@ Three answers matter to you — your domain, the data's, or the user's — so th
 | `HOST` | `"host"` | The domain you passed in |
 | `DATA` | `"data"` | The data's own extent, however it was found |
 | `USER` | `"user"` | Bounds the user typed in the [domain editor](../guide/domain.md) |
-| `DEFAULT` | `"default"` | Nobody supplied one; BIWT's fallback box (±500 µm × ±10 µm) |
+| `DEFAULT` | `"default"` | No usable domain: none was passed, or the one passed was degenerate or non-finite and BIWT substituted its ±500 µm × ±10 µm box |
 
 Check `result.domain_used.source` in your handler. If it is not `HOST`, the domain changed during
 the walkthrough and your application's configured domain no longer matches the initial conditions
@@ -95,9 +95,11 @@ def host_input():
 widget = create_biwt_widget(host_input, on_complete=save)
 ```
 
-Keep it cheap and free of side effects; it runs inside the import path. If it raises, BIWT logs and
-keeps the last good input rather than failing the import. `domain_accepted` is the exception to all
-of this — read once at construction, since the checkbox it seeds is authoritative from then on.
+Keep it cheap and free of side effects; it runs inside the import path. If it raises, or returns
+anything that is not a `BiwtInput`, BIWT logs it and **refuses the import** — nothing is loaded, and
+the user is told your application could not supply its settings. Make it reliable, not merely cheap.
+`domain_accepted` is the exception to all of this — read once at construction, since the checkbox it
+seeds is authoritative from then on.
 
 **`preferred_domain`** is the domain BIWT places into unless the user overrides it in the
 [domain editor](../guide/domain.md). It defaults to `DomainSpec.default()` — the ±500 µm ×

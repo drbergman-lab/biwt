@@ -24,7 +24,7 @@ else in `biwt` is internal and free to change.
 record it alongside output you generate. The widget shows it on its own home screen too, which is
 the only place a user can see it when BIWT is embedded as a tab.
 
-## Three rules
+## Two rules
 
 ### 1. The host owns all file I/O
 
@@ -46,7 +46,7 @@ another dataset.
 
 ## Optional inputs worth wiring up
 
-`BiwtInput` has three fields beyond the domain that meaningfully improve the experience if
+`BiwtInput` has four fields beyond the domain that meaningfully improve the experience if
 your application can supply them:
 
 | Field | Effect |

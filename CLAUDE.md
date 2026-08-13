@@ -40,7 +40,7 @@ src/biwt/
     templates.py        — Reading host/user cell-parameter template files
   gui/
     walkthrough.py      — WalkthroughSession (pure-Python state machine),
-                          BiwtWalkthrough (Qt widget), create_biwt_widget,
+                          BioinformaticsWalkthrough (Qt widget), create_biwt_widget,
                           _step_predicates (importable by tests)
     widgets.py          — QLineEdit_custom, QHLine, SectionHeader, etc.
     windows/

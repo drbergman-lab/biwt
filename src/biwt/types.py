@@ -38,7 +38,7 @@ class DomainSource:
     HOST = "host"          # the domain the host passed in
     DATA = "data"          # the data's own extent, however it was found
     USER = "user"          # bounds the user typed in the domain editor
-    DEFAULT = "default"    # nothing was supplied; BIWT's fallback box
+    DEFAULT = "default"    # none supplied, or the one supplied was unusable
 
 @dataclass
 class DomainSpec:
@@ -46,7 +46,8 @@ class DomainSpec:
 
     The ``units`` field records the coordinate system (default ``"micron"``,
     which is what PhysiCell uses).  When BIWT is embedded in another host the
-    units may differ — comparison logic uses this to flag potential mismatches.
+    units may differ.  BIWT labels the domain editor with it and stamps it onto
+    ``BiwtResult.domain_used``; it neither converts nor compares units.
 
     The ``source`` field records where these bounds came from, so the host can
     tell whether its own domain survived — see :class:`DomainSource`.
@@ -146,7 +147,7 @@ class BiwtInput:
         type", which comes back marked with :data:`HOST_SOURCE` rather than a file
         path.  They match on equal footing with templates from files.
     domain_accepted:
-        Seeds the "Skip domain validation on import" checkbox.  The checkbox,
+        Seeds the "Skip domain validation" checkbox.  The checkbox,
         not this field, decides the outcome — the user stays in control.  Read
         only when the widget is built, since the checkbox is on screen from then
         on: a different value from a later resolution is deliberately ignored.
@@ -189,10 +190,11 @@ class BiwtInput:
         Runs again on every ``dataclasses.replace``, so :meth:`snapshot` inherits
         it and a field the host mutated after construction is normalized too.
 
-        Nothing here raises.  This is reached from a Qt slot, where an exception
-        would abort the host's process, and every case has an unambiguous repair:
+        Repairs rather than refuses, because every case has an unambiguous reading:
         a bare string is one entry rather than a list of its characters, and a
-        walkthrough on a substituted domain beats no walkthrough.
+        walkthrough on a substituted domain beats no walkthrough.  Anything it
+        cannot repair raises, and ``_resolve_host_input`` catches that — this is
+        reached from a Qt slot, which must not let an exception escape.
         """
         for field_name in ("host_cell_type_names", "cell_template_paths"):
             value = getattr(self, field_name)

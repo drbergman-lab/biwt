@@ -15,7 +15,7 @@ otherwise ask, and both say so beneath themselves:
 
 - **Cell-type column** — if the imported file has a column with this name, it is used as the
   cell-type column and [that step](cluster-column.md) is skipped.
-- **Skip the domain check** — suppresses the automatic domain-mismatch dialog at
+- **Skip domain validation** — suppresses the automatic domain-mismatch dialog at
   [the positions step](positions.md). You can still open the domain editor from there.
 
 ## How steps are chosen

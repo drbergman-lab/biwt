@@ -1282,8 +1282,8 @@ class BioinformaticsWalkthrough(QWidget):
         settings would be worse than no walkthrough.
 
         Nothing a host gets wrong here may raise: this is reached from the import
-        slot, and PyQt5 turns an exception in a slot into a fatal abort.  Failures
-        are logged, not shown: a host bug is not the user's to resolve.
+        slot, and PyQt5 turns an exception in a slot into a fatal abort.  Failures are
+        logged, and the reason kept for the import path to show; construction is silent.
         """
         source = self._host_input_source
         try:
@@ -1372,7 +1372,7 @@ class BioinformaticsWalkthrough(QWidget):
             "Skips the cluster-column step when the imported file has this column."
         ))
 
-        self._domain_accepted_cb = QCheckBox("Skip the domain check")
+        self._domain_accepted_cb = QCheckBox("Skip domain validation")
         self._domain_accepted_cb.setToolTip(
             "When checked, the domain editor will not open by itself at the "
             "positions step. You can still open it from there."
@@ -1680,11 +1680,6 @@ class BioinformaticsWalkthrough(QWidget):
                 # Current window is still valid — preserve as next future
                 self.window_future.insert(0, self.window)
 
-        # stale_futures is deliberately not cleared here.  In the branch above it
-        # is already False; in the stale branch it is what makes the next
-        # advance() invalidate downstream state before rebuilding.  Clearing it
-        # discarded the future windows *and* the knowledge that they were stale,
-        # so the next step was built on state its predecessor never produced.
         self.current_window_idx -= 1
         self.window = self.window_history.pop()
         self.window.show()

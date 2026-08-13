@@ -317,8 +317,7 @@ class LoadCellParametersWindow(BiwinformaticsWalkthroughWindow):
     def _report_load_errors(self) -> None:
         """One dialog for a batch, however many files failed.
 
-        A host that passes a bad list — or one bad path per character, which is
-        what ``list("some/path.toml")`` produces — otherwise gets a modal per
+        A host that passes a bad list otherwise gets a modal per
         entry, each of which must be dismissed before the step will open.
         """
         if not self._load_errors:
@@ -360,6 +359,13 @@ class LoadCellParametersWindow(BiwinformaticsWalkthroughWindow):
                 library.append(loaded)
         self._report_load_errors()
         if added:
+            for ct, key in list(saved.items()):
+                if isinstance(key, tuple) and key not in self._template_db:
+                    # Its template went with the reload; the row has no choice left
+                    # to preserve, so it re-matches with the untouched ones instead
+                    # of being stuck on a template that no longer exists.
+                    saved[ct] = None
+                    self._touched.discard(ct)
             self._remerge(saved)
 
     # ------------------------------------------------------------------

@@ -12,7 +12,7 @@ venv/
 env/
 
 # Test scripts (not part of the package)
-test_biwt.py
+/test_biwt.py
 
 # Miscellaneous
 *.DS_Store

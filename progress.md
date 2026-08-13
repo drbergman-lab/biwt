@@ -2039,3 +2039,21 @@ screen after the result is emitted, and Go back reaches the step before it.
 BIWT still does not decide what happens after completion — the docs are explicit that the widget
 does not close or reset itself, because the host owns that. What changed is only that "the host
 decides" no longer means "the user is looking at a blank panel while it does".
+
+### The audit's leftovers
+
+Two published examples assembled a host XML document straight from `cell_templates` values without
+checking for `HOST_SOURCE`. That sentinel is not a path and its content is empty, so a host copying
+either example hit `ParseError` on the ordinary case where a type matched one of the host's own cell
+types. Both now skip it, which is also the correct behavior: the host already has that definition.
+
+`data_loader.py` raised its "no obs columns" `LoadError` from inside the `try` that wraps AnnData
+access, so it came back out re-wrapped as a read failure — a file BIWT understood perfectly well was
+reported as one it could not read. Moved out.
+
+The rest were tests for behavior nothing exercised. The one that mattered: every domain-editor test
+rejected the dialog, so the branch that writes the user's domain to the session — the one deciding
+where cells land and what `domain_used` reports — had never run. Four more cover the invalidation on
+a second Go back, the import lockout's two release paths, library-path deduplication, and Positions
+declining to latch `domain_accepted` on a non-spatial pass. Each was confirmed by breaking the code
+it guards and watching exactly that test fail.

@@ -361,8 +361,8 @@ class CellCountsWindow(BiwinformaticsWalkthroughWindow):
             for ct in self._cell_types:
                 s.cell_counts[ct] = int(self._w_count[ct].text() or 0)
 
-        # A count of zero is allowed: the type still gets a <cell_definition> in
-        # the output config, it just places no cells.  Deleting the type at the
-        # edit step is the way to remove it from the config entirely.
+        # A count of zero is allowed: the type still reaches the host in
+        # cell_type_map and cell_templates, it just places no cells.  Deleting it
+        # at the edit step is how to take it out of the result entirely.
         s.cell_counts_confirmed = True
         self.walkthrough.advance()

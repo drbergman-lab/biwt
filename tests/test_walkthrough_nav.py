@@ -847,3 +847,152 @@ class TestGoingBackTwice:
         qapp.processEvents()
 
         assert w.session.cell_type_dict_on_edit == renamed
+
+
+class TestAcceptedDomainReachesTheResult:
+    """The dialog's Accepted branch was never executed by any test.
+
+    Every other test rejects the dialog, so nothing exercised the path where the
+    user's domain is written to the session — the one that decides where cells
+    are placed and what `domain_used` reports.
+    """
+
+    def test_accepting_the_data_domain_is_what_the_host_receives(
+        self, make_widget, drive_import, qapp, monkeypatch
+    ):
+        from PyQt5.QtWidgets import QDialog
+
+        from biwt.gui.walkthrough import DomainEditorDialog
+        from biwt.types import DomainSource, DomainSpec
+
+        def accept(self):
+            self._fill_data()
+            return QDialog.Accepted
+
+        monkeypatch.setattr(DomainEditorDialog, "exec_", accept)
+        w, completed = make_widget(
+            preferred_domain=DomainSpec(xmin=-50, xmax=50, ymin=-50, ymax=50)
+        )
+        drive_import(w, "spatial.csv")
+        for _ in range(6):
+            qapp.processEvents()
+            if _name(w) == "PositionsWindow":
+                break
+            _continue(w)
+        assert _name(w) == "PositionsWindow"
+
+        win = w.window
+        for box in win.checkbox_dict.values():
+            box.setChecked(True)
+        win.cell_pos_button_group.button(win.spatial_plotter_id).setChecked(True)
+        win.plot_cell_pos()
+        _continue(w)
+        qapp.processEvents()
+        w.window._skip_cb()
+        qapp.processEvents()
+
+        assert len(completed) == 1
+        result = completed[0]
+        assert result.domain_used.source == DomainSource.DATA
+        assert len(result.coordinates) > 0
+        # Placed into the accepted domain, not the ±50 the host asked for.
+        assert result.coordinates["x"].max() > 50
+
+
+class TestImportLockoutLifecycle:
+    def test_finishing_the_run_releases_the_lock(
+        self, make_widget, drive_import, qapp, monkeypatch
+    ):
+        from PyQt5.QtWidgets import QDialog
+
+        from biwt.gui.walkthrough import DomainEditorDialog
+
+        monkeypatch.setattr(DomainEditorDialog, "exec_",
+                            lambda self: QDialog.Rejected)
+        w, _ = make_widget()
+        drive_import(w, "nonspatial.csv")
+        qapp.processEvents()
+        assert not w.import_button.isEnabled()
+
+        for _ in range(8):
+            qapp.processEvents()
+            if _name(w) == "LoadCellParametersWindow":
+                break
+            _continue(w)
+        w.window._skip_cb()
+        qapp.processEvents()
+        assert w.import_button.isEnabled()
+
+    def test_closing_the_step_releases_the_lock(self, make_widget, drive_import, qapp):
+        w, _ = make_widget()
+        drive_import(w, "nonspatial.csv")
+        qapp.processEvents()
+        assert not w.import_button.isEnabled()
+
+        w.window.close()
+        qapp.processEvents()
+        assert w.import_button.isEnabled()
+
+
+class TestGoingBackTwiceKeepsCommittedAnswers:
+    """Back invalidates against the step being returned to, not the next advance.
+
+    Carrying the stale flag upstream let a second Back fire the invalidation from
+    an earlier step, wiping answers the steps in between had already committed.
+    """
+
+    def test_a_second_back_does_not_wipe_the_step_before_it(
+        self, make_widget, drive_import, qapp
+    ):
+        w, _ = make_widget()
+        drive_import(w, "spot_deconv.csv")
+        _answer(w, False)
+        _continue(w)                       # ClusterColumn
+        _continue(w)                       # SpatialQuery
+        _answer(w, True)
+        _continue(w)                       # EditCellTypes
+        qapp.processEvents()
+        assert _name(w) == "EditCellTypesWindow"
+        column = w.session.current_column
+        assert w.session.spatial_query_answer is True
+
+        # Change something here so the futures are stale...
+        victim = next(iter(w.window._checkbox))
+        w.window._checkbox[victim].setChecked(True)
+        w.window._delete_cb()
+        assert w.stale_futures
+
+        w.go_back_to_prev_window()         # → SpatialQuery, invalidates below it
+        assert _name(w) == "SpatialQueryWindow"
+        assert not w.stale_futures
+        w.go_back_to_prev_window()         # → ClusterColumn, nothing stale
+        assert _name(w) == "ClusterColumnWindow"
+
+        # Both steps that were passed on the way back kept their answers.
+        assert w.session.spatial_query_answer is True
+        assert w.session.current_column == column
+
+
+class TestNonSpatialDoesNotLatchTheDomain:
+    def test_the_domain_prompt_survives_a_switch_to_spatial(
+        self, make_widget, drive_import, qapp
+    ):
+        """Positions must not mark the domain resolved on a non-spatial pass.
+
+        Random placement fills the domain, so there is nothing to ask — but
+        latching the flag would suppress the prompt on the rebuild after the user
+        goes back and answers Yes.
+        """
+        w, _ = make_widget()
+        drive_import(w, "spatial.csv")
+        qapp.processEvents()
+        assert _name(w) == "SpatialQueryWindow"
+        _answer(w, False)
+        for _ in range(5):
+            _continue(w)
+            qapp.processEvents()
+            if _name(w) == "PositionsWindow":
+                break
+        assert _name(w) == "PositionsWindow"
+        assert w.session.use_spatial_data is False
+        assert w.session.domain_accepted is False

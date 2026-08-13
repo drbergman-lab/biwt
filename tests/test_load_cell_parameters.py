@@ -1313,3 +1313,23 @@ class TestReAddingAnEditedFile:
 
         assert {n for n, _ in win._template_db} == {"Beta", "Gamma"}
         assert win._template_db[("Beta", str(path))] == "B2"
+
+
+class TestLibraryPathsAreDeduplicated:
+    def test_the_same_file_under_two_spellings_is_one_entry(self, qapp, monkeypatch):
+        """Two entries for one file left Remove taking out only one of them, so the
+        templates came back on the next rebuild."""
+        from PyQt5.QtWidgets import QInputDialog
+
+        twice = [TEMPLATES_A, str(FIXTURES) + "/./templates_a.toml"]
+        win = _params_window(twice)
+        s = win.walkthrough.session
+        assert len(s.template_library_paths) == 1
+
+        label = win._source_display_names()[s.template_library_paths[0]]
+        monkeypatch.setattr(QInputDialog, "getItem",
+                            staticmethod(lambda *a, **k: (label, True)))
+        win._remove_templates_cb()
+
+        assert s.template_library_paths == []
+        assert win._template_db == {}

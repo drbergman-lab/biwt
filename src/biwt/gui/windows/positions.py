@@ -556,8 +556,8 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
     def _is_placeable(self, ct: str) -> bool:
         """False when *ct* has no cells to place, i.e. a count of zero.
 
-        A zero count is legitimate — the type still gets a ``<cell_definition>``
-        in the output config, it just contributes no cells.  Such a type is
+        A zero count is legitimate — the type still reaches the host in
+        ``cell_type_map``, it just contributes no cells.  Such a type is
         treated as already placed: its checkbox stays disabled so it cannot be
         selected and does not hold up ``_refresh_continue_gate``.
         """
@@ -2198,7 +2198,7 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
         """Check if any placed cells fall outside new domain.
 
         Scans s.coords_by_type to find cells that would spawn outside the
-        new domain bounds. Accounts for 2D vs 3D dimensionality.
+        new domain bounds.
 
         Args:
             new_domain: DomainSpec with new bounds (xmin/max, ymin/max, zmin/max, is_2d).

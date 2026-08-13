@@ -92,9 +92,13 @@ wrapping the content:
 ```python
 import xml.etree.ElementTree as ET
 
+from biwt.types import HOST_SOURCE
+
 def on_complete(result):
     cell_defs = ET.Element("cell_definitions")
     for i, (cell_type, (path, name, content)) in enumerate(result.cell_templates.items()):
+        if path == HOST_SOURCE:
+            continue                     # you already define this type; no content to parse
         cd = ET.SubElement(cell_defs, "cell_definition", name=cell_type, ID=str(i))
         cd.append(ET.fromstring(content))
     # ...merge into your config, then write it wherever your app writes things

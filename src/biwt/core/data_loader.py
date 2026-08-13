@@ -352,13 +352,14 @@ def _from_anndata_object(
     """Build a BiwtData from an in-memory AnnData object."""
     try:
         obs = adata.obs
-        if obs.shape[1] == 0:
-            # Nothing to pick a cell-type column from; the step would offer an
-            # empty dropdown and the next one would read None.
-            raise LoadError(f"'{file_path}' has no obs columns to label cell types with.")
         obsm = dict(adata.obsm)
     except Exception as e:
         raise LoadError(f"Could not read obs/obsm from AnnData object: {e}") from e
+
+    if obs.shape[1] == 0:
+        # Nothing to pick a cell-type column from; the step would offer an empty
+        # dropdown and the next one would read None.
+        raise LoadError(f"'{file_path}' has no obs columns to label cell types with.")
 
     obsm_loc = _detect_spatial_location_from_obsm(obsm)
     spatial_loc = obsm_loc or _detect_spatial_location_from_obs(obs)
