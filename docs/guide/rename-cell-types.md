@@ -47,12 +47,11 @@ otherwise near-identical. Pairs distinguished by a non-numeric qualifier — `PD
 `BiwtInput.name_matches`, which replaces BIWT's rule entirely.
 
 Placeholder text only shows in an *empty* field, and every field arrives pre-filled with your
-original name — so in practice the suggestion sits hidden behind it. Clear a field and it
-appears, grayed out, as `Suggestion: <host name>`.
+original name. Clear a field and it appears, grayed out, as `Suggestion: <host name>`.
 
-It is a hint either way: nothing is filled in for you, so if you want the suggested name you
-have to type it. Note that an empty field is accepted as an empty name — only duplicates are
-blocked — so do not leave one cleared just to keep the hint in view.
+Nothing is filled in for you, so if you want the suggested name you have to type it. An empty
+field is accepted as an empty name — only duplicates are blocked — so do not leave one cleared
+just to keep the hint in view.
 
 ## Naming rules
 
@@ -60,8 +59,8 @@ blocked — so do not leave one cleared just to keep the hint in view.
 the screen.
 
 **Case matters.** `CD8` and `cd8` are treated as different names and both are allowed,
-because PhysiCell treats them as distinct. This is easy to do by accident — if you meant them
-to be the same type, merge them at the [previous step](edit-cell-types.md) instead.
+because PhysiCell treats them as distinct. If you meant them to be the same type, merge them
+at the [previous step](edit-cell-types.md) instead.
 
 !!! tip "Pick names your config can live with"
     Avoid spaces and punctuation if your downstream tooling is picky about XML attribute

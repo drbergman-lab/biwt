@@ -15,7 +15,7 @@ Three pages, in order:
 pip install "biwt[anndata,gui]"
 ```
 
-That covers `.csv` and `.h5ad` with the Qt UI, which is what most people need. Seurat `.rds`
+That covers `.csv` and `.h5ad` with the Qt UI. Seurat `.rds`
 support needs a working R alongside the pip extra — see
 [installation](installation.md#seurat-rds-import-optional).
 

@@ -1,7 +1,6 @@
 # Recipes
 
-Three end-to-end walkthroughs for the datasets people actually bring to BIWT. Each one names
-the choices that matter and the traps specific to that data type.
+Three end-to-end walkthroughs for the datasets people actually bring to BIWT.
 
 <div class="grid cards" markdown>
 

@@ -59,6 +59,7 @@ Worth copying:
 - A path field pre-filled from Studio's configured output folder and filename, with a
   **Browse…** button.
 - **Overwrite** / **Append to existing** radio buttons, shown *only* when the chosen path
+- Studio always confirms the save path, even when the file does not exist.
   already exists. Append concatenates BIWT's rows onto the existing CSV; extra columns in the
   existing file are left empty for the appended rows.
 - Save / Cancel.
@@ -69,19 +70,13 @@ itself and passes it in through `cell_template_paths` — BIWT holds no framewor
 parameters of its own. That arrangement is not Studio-specific; [templates and name
 matching](templates-and-matching.md) describes it for any host.
 
-The lesson generalizes: **BIWT hands you data, and the "where does this go" conversation is
-yours to have.** Studio always confirms the path even when the file does not exist, because
-silently writing into a user's project directory is not a good default.
-
 ## What the package path must match
 
-BIWT replaced a built-in Studio tab, and the replacement has to hold the line on what that tab
-already did. From the project's PRD:
+From the project's PRD:
 
 - The `--biwt` flag and the `_biwt_complete` callback must keep working without Studio source
   changes beyond the bridge itself.
 - No feature of the legacy walkthrough may be removed or degraded.
 - UI layout, step order, and stricter validation are all fair game.
 
-If you are integrating BIWT into a different host, none of this binds you — but it explains
-why some things are shaped the way they are.
+If you are integrating BIWT into a different host, none of this binds you.

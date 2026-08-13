@@ -1,10 +1,8 @@
 # The API contract
 
-Three dataclasses in `biwt.types` define everything that crosses the host boundary. They live
-in one file specifically so the interface can be audited at a glance.
+Three dataclasses in `biwt.types` define everything that crosses the host boundary.
 
-For generated signatures see the [API reference](../reference/types.md); this page is about
-what the fields *mean* and how to use them well.
+For generated signatures see the [API reference](../reference/types.md).
 
 ## `DomainSpec` — the simulation box
 
@@ -37,8 +35,7 @@ potential mismatches.
 
 Records how the spec was determined, so you can tell whether your domain survived:
 
-Three answers matter to you — your domain, the data's, or the user's — so those are the values.
-`biwt.types.DomainSource` names them, so you need not hand-type strings:
+`biwt.types.DomainSource` names the values, so you need not hand-type strings:
 
 | `DomainSource` | Value | Meaning |
 |---|---|---|
@@ -97,7 +94,7 @@ widget = create_biwt_widget(host_input, on_complete=save)
 
 Keep it cheap and free of side effects; it runs inside the import path. If it raises, or returns
 anything that is not a `BiwtInput`, BIWT logs it and **refuses the import** — nothing is loaded, and
-the user is told your application could not supply its settings. Make it reliable, not merely cheap.
+the user is told your application could not supply its settings.
 `domain_accepted` is the exception to all of this — read once at construction, since the checkbox it
 seeds is authoritative from then on.
 
@@ -105,7 +102,7 @@ seeds is authoritative from then on.
 [domain editor](../guide/domain.md). It defaults to `DomainSpec.default()` — the ±500 µm ×
 ±10 µm box from the PhysiCell XML defaults, the same fallback BIWT already used internally
 when it could not infer a domain from the data. Pass your own if your application has a
-meaningful one; that is the normal case and worth doing.
+meaningful one.
 
 **`host_cell_type_names`** — the cell types your application already defines; optional, and never
 binding on the user. Used for [rename suggestions](../guide/rename-cell-types.md) and as candidates
@@ -117,7 +114,7 @@ suppressing the automatic domain-mismatch dialog. This sets the checkbox's defau
 can untick it and get the dialog back.
 
 **`host_name`** — appears in the domain editor as `Use <host_name> Domain`. Set it; the
-default `"Host"` reads like a placeholder because it is one.
+default `"Host"` reads like a placeholder.
 
 **`cell_template_paths`** — paths to TOML files, each mapping a template name to its content.
 The content is opaque to BIWT: read as text, never parsed, handed back verbatim.
@@ -160,9 +157,7 @@ BiwtResult(
 **`coordinates`** — one row per placed cell, columns `["x", "y", "z", "type"]`. The header is
 `type`, not `cell_type`, matching PhysiCell's CSV convention. 2D data has `z = 0.0`.
 
-**`cell_type_map`** — every original label mapped to its final name, with `None` for deleted
-types. Use it to reconcile the output against your own cell definitions, or to report to the
-user what happened to each input cluster.
+**`cell_type_map`** — every original label mapped to its final name, with `None` for deleted types.
 
 **`domain_used`** — see `source` above.
 
@@ -174,8 +169,7 @@ included.
 One value of `path` is not a path: [`HOST_SOURCE`][biwt.types.HOST_SOURCE] (`"<host>"`) means the
 user picked one of the names you passed in `host_cell_type_names`, i.e. *a cell type you already
 define*. `content` is then `""`, so check the marker before using it — see
-[`HOST_SOURCE`][biwt.types.HOST_SOURCE] for the check to write. What to do about the match is
-yours to decide.
+[`HOST_SOURCE`][biwt.types.HOST_SOURCE] for the check to write.
 
 Assembling anything out of that is yours to do — BIWT generates no XML; see
 [templates and name matching](templates-and-matching.md) for a worked example. Types the user left
@@ -192,9 +186,8 @@ A convenience for hosts that just want the file written:
 result.to_csv("config/cells.csv")
 ```
 
-Writes only the four PhysiCell columns, no index. Using it is optional — the DataFrame is
-yours, and where the output lives is your decision. The result carries no path field: BIWT
-does not choose an output location, so it has no business remembering one.
+Writes only the four PhysiCell columns, no index. The result carries no path field: BIWT
+does not choose an output location.
 
 ### Reserved fields
 

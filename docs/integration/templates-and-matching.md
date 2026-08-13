@@ -7,8 +7,7 @@ Two host responsibilities that are easy to miss, because BIWT deliberately decli
 - **Deciding whether two names mean the same cell type.** BIWT has a default, but the decision
   is yours to take over.
 
-Neither is required. A host that wires up neither still gets coordinates and a cell-type map,
-which is a complete result.
+Neither is required. A host that wires up neither still gets coordinates and a cell-type map.
 
 ## Supplying a template library
 
@@ -31,8 +30,7 @@ A template file is TOML mapping a template name to its content:
 
 The content is **opaque to BIWT**: read as text, never parsed, validated or wrapped. The
 example above is PhysiCell XML because that is what the reference host uses, but nothing in
-BIWT requires XML. A JSON blob, a Julia struct literal, a path to a parameter file in your own
-format — if your host understands it, it can travel through here.
+BIWT requires XML.
 
 Point BIWT at your files when you construct `BiwtInput`:
 
@@ -47,14 +45,13 @@ BiwtInput(
 Rules worth knowing:
 
 - **Every value must be a string.** A `[section]` header nests the keys that follow it into a
-  table, which BIWT rejects with a message naming the key — better than letting a dict reach
-  your `write()` call.
+  table, which BIWT rejects with a message naming the key.
 - **Duplicate keys raise**, per the TOML spec.
 - **A malformed or unreadable file warns and is skipped.** The step still opens; the user is
   told which file failed.
 - **The user controls which libraries are loaded**, adding files of their own and removing yours.
-  What you pass is a starting point, not a fixture: do not assume every returned template came
-  from your files, which is why the result reports each template's source path (see below).
+  Do not assume every returned template came from your files, which is why the result reports
+  each template's source path (see below).
 - **Two files defining the same `default` cancel it out.** The step's "assign the default
   template" action is withdrawn, and the auto-match fallback tier with it, rather than resolving
   the ambiguity by file order. Templates stay individually selectable.
@@ -66,7 +63,7 @@ Rules worth knowing:
     running BIWT**. If your host streams the GUI from elsewhere — a Galaxy interactive tool, a
     container behind noVNC — the user's own files never reach it and no drop arrives; the file
     dialog browses the *server's* filesystem, not theirs. Drag-and-drop is an accelerator, never
-    the only route, so nothing is lost. But in that environment the library should come from you:
+    the only route. But in that environment the library should come from you:
     stage the file server-side (in Galaxy, `galaxy_ie_helpers.get(dataset_id)` fetches it into the
     working directory) and pass the path in `cell_template_paths`.
 
@@ -125,17 +122,15 @@ runs inside widget construction and Qt signal handlers, and BIWT does not promis
 it calls it. One call per (cell type, candidate) pair each time matches are resolved, and they
 are re-resolved on every template-file load and auto-match. BIWT short-circuits a
 case-insensitive exact match before consulting it, so you never have to handle that case.
-Among the candidates your predicate accepts, BIWT takes the first in sorted order — a boolean
-predicate offers nothing to rank by, and sorting keeps the outcome independent of file or dict
-ordering.
+Among the candidates your predicate accepts, BIWT takes the first in sorted order.
 
 **The default**, if you supply nothing, is `default_name_matches` (see
 [`biwt.core.cell_types`](../reference/core.md)): digit runs must be equal, then
 `difflib.SequenceMatcher` ratio on the casefolded strings must reach `name_match_cutoff`
 (0.85).
 
-The digit gate is load-bearing rather than a refinement. Numbers in a cell-type name
-distinguish types instead of spelling them differently, and similarity alone cannot tell:
+Numbers in a cell-type name distinguish types instead of spelling them differently, and
+similarity alone cannot tell:
 
 | Pair | Ratio | With the digit gate |
 |---|---|---|
@@ -153,7 +148,7 @@ compares those qualifiers too.
 
 If you only want to tighten the threshold, leave `name_matches` alone and raise
 `name_match_cutoff`. And if you want the default plus a rule of your own, import it rather than
-reimplementing it — there is then no second copy to drift:
+reimplementing it:
 
 ```python
 from biwt.core.cell_types import default_name_matches

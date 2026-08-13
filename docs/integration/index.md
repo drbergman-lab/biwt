@@ -3,8 +3,6 @@
 BIWT is designed to be embedded. It ships a Qt widget and a two-type data contract, and
 deliberately knows nothing about the application hosting it.
 
-If you maintain an ABM tool and want a single-cell import path, this section is for you.
-
 ## The whole interface
 
 ```python
@@ -17,12 +15,10 @@ widget = create_biwt_widget(
 )
 ```
 
-That is the entire surface. One factory function, one input type, one result type. Everything
-else in `biwt` is internal and free to change.
+That is the entire surface. Everything else in `biwt` is internal and free to change.
 
-`biwt.__version__` is also public — read it to show which BIWT your application is bundling, or to
-record it alongside output you generate. The widget shows it on its own home screen too, which is
-the only place a user can see it when BIWT is embedded as a tab.
+`biwt.__version__` is also public. The widget shows it on its own home screen, which is the
+only place a user can see it when BIWT is embedded as a tab.
 
 ## Two rules
 
@@ -31,10 +27,6 @@ the only place a user can see it when BIWT is embedded as a tab.
 BIWT never writes to disk. It hands you a `BiwtResult` in memory and your `on_complete` does
 whatever your application does with output — write it, show a save dialog, keep it in memory,
 push it to a server.
-
-This is not an oversight to work around. It keeps BIWT usable from a notebook or a headless
-script, and it means BIWT never has to know about your project layout, your file-overwrite
-policy, or your undo system.
 
 ### 2. The widget does not close itself
 

@@ -1,7 +1,7 @@
 # Your first walkthrough
 
-The fastest way to understand BIWT is to run it once on a file small enough to reason about.
-This page does that in about five minutes, with no bioinformatics data required.
+Run the wizard once on a file small enough to reason about — about five minutes, with no
+bioinformatics data required.
 
 ## 1. A minimal input file
 
@@ -18,9 +18,8 @@ x,y,celltype
 268,281,tcell
 ```
 
-That is a legitimate BIWT input. One row per cell, coordinate columns BIWT recognizes by
-name, and a metadata column holding the cell-type call. Real data has thousands of rows and
-dozens of metadata columns, but the shape is identical.
+That is a legitimate BIWT input: one row per cell, coordinate columns BIWT recognizes by
+name, and a metadata column holding the cell-type call.
 
 ## 2. Launch the wizard
 
@@ -57,9 +56,8 @@ Nothing writes to disk unless your `on_complete` says so.
 ## 3. Walk through it
 
 Click **Import file…** and pick `demo.csv`, or drop the file onto the dashed area. The
-**Supported** chips below it show which formats this environment can actually read — a ✗ means the
-optional dependency for that format is not installed, and hovering says which one and how to get
-it.
+**Supported** chips show which formats this environment can actually read, and hovering says why
+and how to resolve it.
 
 What happens next depends on your data, because BIWT skips steps that do not apply. With this file
 you will see:
@@ -75,12 +73,12 @@ you will see:
 
 Two steps do **not** appear: [spot deconvolution](../guide/spot-deconvolution.md) (this file
 has no probability columns) and [cell counts](../guide/cell-counts.md) (you chose to use the
-spatial coordinates, which determine the counts). That skipping is the wizard's core
-behavior — see [how the wizard flows](../guide/index.md#how-steps-are-chosen).
+spatial coordinates, which determine the counts). See
+[how the wizard flows](../guide/index.md#how-steps-are-chosen).
 
 At the positions step the [domain editor](../guide/domain.md) may open on its own, because
-your data spans roughly ±320 µm inside a ±500 µm box. That is BIWT telling you the cells will
-sit in the middle of the domain rather than filling it. For this demo, just click OK.
+your data spans roughly ±320 µm inside a ±500 µm box, so the cells will sit in the middle of
+the domain rather than filling it. For this demo, just click OK.
 
 ## 4. What you get
 

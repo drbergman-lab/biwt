@@ -4,9 +4,8 @@ Pure-Python logic with no Qt dependency: loading files, inferring the domain, pl
 and reconciling cell-type edits.
 
 !!! warning "Internal"
-    These are not part of the public API. They are documented because reading them is the
-    fastest way to understand what BIWT actually does, but signatures may change between
-    releases. If you are embedding BIWT, work through [`biwt.types`](types.md) and
+    These are not part of the public API, and signatures may change between releases.
+    If you are embedding BIWT, work through [`biwt.types`](types.md) and
     `create_biwt_widget` instead.
 
 ## `biwt.core.data_loader`

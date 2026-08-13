@@ -19,8 +19,8 @@ adata.obs.columns          # find your cell-type annotation column
 adata.uns.get("spatial")   # scale factors live here for Visium
 ```
 
-The third one matters more than it looks. Visium coordinates are in **full-resolution image
-pixels**, and the µm-per-pixel conversion lives in `uns["spatial"]`. If that metadata
+Visium coordinates are in **full-resolution image pixels**, and the µm-per-pixel conversion
+lives in `uns["spatial"]`. If that metadata
 survived your pipeline, BIWT reads it and pre-fills the scale factor. If it did not, you will
 supply the number yourself.
 
@@ -42,20 +42,19 @@ numeric `cluster` column, unless numbers are all you have.
 
 ### Spatial query → **yes**
 
-This is the whole point of Visium data. Say yes.
+This is the whole point of Visium data.
 
 ### Edit and rename
 
 Merge the subclusters your model does not distinguish. Annotations are sometimes region-level
-rather than cell-type-level — `Tumor_edge` and `Tumor_core`, say. Where that is the case,
-decide whether your simulation treats them as one cell type in different environments, or as
-two cell types. If the former, merge them.
+rather than cell-type-level — `Tumor_edge` and `Tumor_core`, say. Decide whether your
+simulation treats them as one cell type in different environments, or as two cell types.
 
 ### The domain editor — the step that matters
 
 At the positions screen the [domain editor](../guide/domain.md) will almost certainly open on
 its own, because raw Visium coordinates run into the thousands while a PhysiCell domain is
-typically ±500 µm. This is the mismatch it exists to catch.
+typically ±500 µm.
 
 **Check the `micron/data unit` field first.**
 
@@ -69,7 +68,7 @@ typically ±500 µm. This is the mismatch it exists to catch.
 **Then decide the domain.** Two reasonable approaches:
 
 - **Fit the domain to the tissue.** Click **Use Data Domain**, which fills host-units with
-  raw × factor. Your domain becomes exactly the tissue extent in microns. Best when the
+  raw × factor — your domain becomes exactly the tissue extent in microns. Best when the
   tissue *is* the simulation.
 - **Keep your domain and let the tissue sit inside it.** Click **`Use <host> Domain`**. The
   cells occupy a centered region proportional to their real size. Best when the domain has
@@ -80,8 +79,8 @@ extent, which for Visium is thousands of units wide and almost never what you wa
 
 ### Positions
 
-Look at the preview. It should look like your tissue section. If it looks like a small blob
-in a big empty box, your scale factor is too small; if cells are being reported out of
+The preview should look like your tissue section. If it looks like a small blob in a big
+empty box, your scale factor is too small; if cells are being reported out of
 bounds, it is too large.
 
 ## Traps

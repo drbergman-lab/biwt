@@ -12,9 +12,6 @@ One dropdown per cell type, plus **(none)** at the top of every dropdown. **You 
 Continue straight away, and you can click Skip instead** — this step is never required. Skip
 leaves every type unassigned; so does picking `(none)` for individual types.
 
-That said, this is where a table of positions becomes a runnable model. Positions say where
-cells are; parameters say what they do.
-
 <figure markdown>
   ![The cell-parameters screen with no template libraries loaded](../assets/screenshots/templates-no-libraries.png)
   <figcaption>With nothing loaded, every type sits on <strong>(none)</strong> and the actions that
@@ -24,8 +21,7 @@ cells are; parameters say what they do.
 
 ## Where the templates come from
 
-**BIWT ships none.** It is host-agnostic, and a phenotype block only means something to a
-particular simulation framework. Templates reach the dropdowns two ways:
+**BIWT ships none.** Templates reach the dropdowns two ways:
 
 **From the host.** An application embedding BIWT passes template files at launch through
 [`BiwtInput.cell_template_paths`][biwt.types.BiwtInput], so they are present before you
@@ -46,11 +42,10 @@ tagged with its name — `Tumor (Studio)`. Picking one assigns no template; it s
 type you already have*, and the host decides what to do about it. Where a name exists both ways,
 the host's wins.
 
-If nothing is supplied and you load nothing, every dropdown offers only `(none)` — the step
-still works, and the result simply carries no templates.
+If nothing is supplied and you load nothing, every dropdown offers only `(none)`.
 
-Either way the file is TOML, mapping a template name to its content. The content is opaque to
-BIWT: it is read as text and handed back verbatim. For a PhysiCell host it looks like this:
+Either way the file is TOML, mapping a template name to its content. For a PhysiCell host it
+looks like this:
 
 ```toml
 "My Cell Type" = """
@@ -107,36 +102,31 @@ to dismiss it.
 **Set all → Assign (none)** is Skip without leaving the step. **Auto-match** is greyed out if no
 templates are loaded at all, and **Assign default** if nothing is named `default`, or if two loaded
 files each define one and the host does not — then there is no single default to mean, so pick the
-one you want from the dropdown, where each is labelled with its source.
+one you want from the dropdown.
 
 **Changing the loaded files re-matches the types you have not touched.** If a new file names a
 better match for a type whose dropdown you never used, that type takes it; a type you chose for
-yourself keeps your choice, including an explicit `(none)`. So you can load a library at any
-point and have it apply, without it overwriting decisions you already made.
+yourself keeps your choice, including an explicit `(none)`.
 
 Removing a file works the same way, except for rows that were using it: their template no longer
 exists, so there is no choice left to preserve and they re-match with the rest rather than
 quietly picking up some other template.
 
-**Auto-match** resets that, at either scope: a row you auto-match counts as untouched again,
-because it now holds exactly what matching computes. So auto-matching one row is also how you say
-"forget my pick here, follow the library from now on".
+**Auto-match** resets that, at either scope: a row you auto-match counts as untouched again.
 
 Numbers in a name are treated as significant, so `M1 Macrophage` never matches
 `M2 Macrophage`, nor `CD4 T Cell` a `CD8` one. A host can replace the whole rule by supplying
 its own predicate (see [`BiwtInput.name_matches`][biwt.types.BiwtInput]).
 
-Pre-selection is a hint. The names are suggestive, not binding — nothing stops you assigning
-`Fibroblast` parameters to a type you named something else.
+Pre-selection is a hint: nothing stops you assigning `Fibroblast` parameters to a type you named
+something else.
 
 !!! tip "Treat templates as starting points"
     A template library is generally literature-derived defaults, not calibrated parameters for
-    your system. Expect to tune them in your config afterwards. Their value is giving you a
-    complete, valid parameter block to edit rather than a blank one to fill in.
+    your system. Expect to tune them in your config afterwards.
 
 **Sort templates** reorders the dropdown entries by name, or groups them under a heading per
-source file. Either way names sort case-insensitively — `default`, `Macrophage`, `t_cell`, `Tumor` —
-rather than filing every lowercase name after every capitalized one.
+source file. Either way names sort case-insensitively — `default`, `Macrophage`, `t_cell`, `Tumor`.
 
 With a single file loaded, entries show the bare template name. Once two or more are loaded every
 entry is tagged with its source file. The host's own cell types are always tagged.

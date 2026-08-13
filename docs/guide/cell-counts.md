@@ -1,12 +1,12 @@
 # Cell counts
 
 **Shown when:** you are **not** using spatial data. With spatial data, one cell is placed per
-data row, so there is nothing to decide and this screen is skipped.
+data row and this screen is skipped.
 
 ## The question
 
 How many cells of each type to place. The four modes sit side by side as columns — pick one
-with its radio button and that column becomes editable while the others gray out.
+with its radio button.
 
 <figure markdown>
   ![The cell counts screen with confluence mode selected](../assets/screenshots/cell-counts-confluence.png)
@@ -28,9 +28,8 @@ Use this when the dataset size is already the population size you want to simula
 Keep the observed proportions, change the total. You set a total; BIWT divides it among the
 types in the same ratios as the data.
 
-This is the usual answer for large datasets. A 40,000-cell scRNA-seq experiment is more
-agents than most simulations want; asking for 4,000 in the same proportions gives you a
-representative population at a tractable size.
+A 40,000-cell scRNA-seq experiment is more agents than most simulations want; asking for
+4,000 in the same proportions gives you a representative population at a tractable size.
 
 ### Set confluence (%)
 
@@ -40,8 +39,7 @@ backwards from the domain area and a per-cell area to a count.
 Confluence is the natural currency when what you care about is tissue density rather than an
 absolute number — "start at 60% confluent" is a statement about the biology; "start with
 7,318 cells" is a statement about a specific domain size. The fields are pre-populated from
-your current counts, so you can see what confluence the data corresponds to before changing
-it.
+your current counts.
 
 ### Set manually
 
@@ -60,13 +58,13 @@ of those cells, useful when the population is meant to appear later, through div
 differentiation, rather than at t = 0.
 
 [Deleting the type](edit-cell-types.md) is the other choice: it removes the type outright, so
-the host never hears about it. Zero keeps the type; delete removes it.
+the host never hears about it.
 
 Every type may be zero if you want, which gives you a config full of cell definitions and an
 empty positions file.
 
-At the [positions](positions.md) screen a zero-count type arrives already grayed out — there
-is nothing to place — so it will not hold up **Continue**.
+At the [positions](positions.md) screen a zero-count type arrives already grayed out, so it
+will not hold up **Continue**.
 
 **Counts interact with the domain.** A confluence figure is meaningless without a domain
 area, and a large manual count in a small domain produces heavy overlap. If you are also

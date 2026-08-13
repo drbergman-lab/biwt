@@ -31,8 +31,7 @@ How every original label in your data maps to its final name:
 ```
 
 `None` means the type was [deleted](edit-cell-types.md) and contributes no cells. This is your
-audit trail: it records every decision you made at the edit and rename steps, so a reviewer
-can trace an output population back to the clusters it came from.
+audit trail: it records every decision you made at the edit and rename steps.
 
 ### `domain_used`
 
