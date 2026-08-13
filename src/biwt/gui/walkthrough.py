@@ -207,7 +207,9 @@ class DomainEditorDialog(QDialog):
         self._factor_edit.setStyleSheet(_LE_STYLE)
         self._factor_edit.setMaximumWidth(120)
         self._factor_edit.setPlaceholderText(self._placeholder_for_empty())
-        F0 = current_factor if current_factor is not None else file_factor
+        # Not falling back to file_factor: a factor the user cleared must stay
+        # cleared, and the ↺ button is how the file's value comes back.
+        F0 = current_factor
         if F0 is not None:
             self._factor_edit.setText(f"{F0:g}")
         factor_hbox.addWidget(self._factor_edit)
@@ -1486,6 +1488,12 @@ class BioinformaticsWalkthrough(QWidget):
             box.setText(str(err))
         box.exec_()
 
+    def closeEvent(self, event):  # noqa: N802
+        """Take the current step window with us; it is parentless by design."""
+        if self.window is not None:
+            self.window.close()
+        super().closeEvent(event)
+
     def _allow_import(self, allowed: bool) -> None:
         """Importing resets the session, so a run in progress refuses it.
 
@@ -1521,6 +1529,14 @@ class BioinformaticsWalkthrough(QWidget):
             bdata = data_loader.load(path)
         except LoadError as e:
             self._show_import_error(e)
+            return
+        except Exception as exc:               # noqa: BLE001 — any reader, any file
+            # Readers raise their own types on a corrupt file, and this runs in a
+            # slot, where an escape aborts the host process.
+            log.exception("Import of %s failed.", path)
+            self._show_import_error(
+                LoadError(f"Could not read '{path}'.\n\n{type(exc).__name__}: {exc}")
+            )
             return
 
         # A run starts here, so this is where the host is asked what its domain

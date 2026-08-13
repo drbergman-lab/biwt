@@ -325,7 +325,7 @@ The framework-coupled content is **already out** of this package: BIWT ships no 
 - [x] Loading a template file re-matches untouched types and leaves user-picked ones — including an explicit `(none)` — alone.
 - [x] Bulk and per-row actions behave as specified, pair up by glyph, and are disabled when they would have nothing to do.
 - [x] Host cell types appear as candidates, match on equal footing with file templates, and come back as `(HOST_SOURCE, name, "")`.
-- [x] A host cell type named `default` neither supplies the `default` fallback nor makes it ambiguous.
+- [x] A host cell type named `default` is the baseline: it supplies the `default` actions and the auto-match fallback, and outranks two library `default`s rather than being made ambiguous by them.
 - [x] Host entries are labelled with `host_name` at any source count, and cannot be removed.
 - [x] Removing a library file re-matches the rows that used it and leaves other picks intact; a cancelled dialog changes nothing.
 - [x] A `default` defined by two files withdraws the default actions, with a tooltip explaining why.

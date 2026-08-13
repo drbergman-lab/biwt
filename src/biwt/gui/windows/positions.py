@@ -2183,9 +2183,6 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
                     self.patch_history[5].append(self._default_spatial_pars())
                     self.patch_history_idx[5] = len(self.patch_history[5]) - 1
 
-        # Domain area changed → confluence-based cell counts are stale.
-        self.walkthrough.session.cell_counts_confirmed = False
-
         # Replot all previously placed cells (restores visual state and legend);
         # also re-enables checkboxes for any cell types that have no placed cells.
         # (This also recomputes scatter marker sizes for the new domain, before
@@ -2220,8 +2217,10 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
             mask = ((coords[:, 0] < new_domain.xmin) | (coords[:, 0] > new_domain.xmax) |
                     (coords[:, 1] < new_domain.ymin) | (coords[:, 1] > new_domain.ymax))
 
-            if not new_domain.is_2d:
-                mask |= ((coords[:, 2] < new_domain.zmin) | (coords[:, 2] > new_domain.zmax))
+            # Unconditionally: 2-D placement emits z=0 and a 2-D domain contains
+            # 0, so an ordinary 2-D domain still reports nothing — but a 3-D one
+            # shrunk to a slab leaves real cells outside it.
+            mask |= ((coords[:, 2] < new_domain.zmin) | (coords[:, 2] > new_domain.zmax))
 
             if mask.any():
                 out_of_bounds[ct] = int(mask.sum())

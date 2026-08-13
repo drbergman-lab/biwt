@@ -156,7 +156,7 @@ def scaled_editor(qapp):
     parent = QWidget()
     dlg = DomainEditorDialog(parent, DATA_DOMAIN, HOST_DOMAIN,
                              host_name="Studio", initial_domain=HOST_DOMAIN,
-                             file_factor=2.0)
+                             file_factor=2.0, current_factor=2.0)
     yield dlg
     dlg.deleteLater()
     parent.deleteLater()
@@ -520,3 +520,13 @@ class TestSubstitutedHostDomain:
         dlg = DomainEditorDialog(parent, DATA_DOMAIN, HOST_DOMAIN, host_name="Scratch")
         dlg._fill_preferred()
         assert dlg.result()[0].source == DomainSource.HOST
+
+
+class TestClearedFactorStaysCleared:
+    def test_reopening_does_not_restore_the_file_factor(self, qapp):
+        """The file's value is what ↺ is for; re-opening must not undo a clear."""
+        parent = QWidget()
+        dlg = DomainEditorDialog(parent, DATA_DOMAIN, HOST_DOMAIN, host_name="Studio",
+                                 file_factor=2.0, current_factor=None)
+        assert dlg._factor_edit.text() == ""
+        assert dlg.result()[1] is None

@@ -1510,3 +1510,18 @@ class TestEveryTypeDeletedSpatially:
         assert s.cell_types_final == []
         assert s.spatial_data_final.shape[0] == 0
         assert s.cell_counts == {}
+
+
+class TestNoObsColumns:
+    def test_a_file_with_no_obs_columns_is_refused_at_load(self, tmp_path):
+        """Nothing to pick a cell-type column from: the step would show an empty
+        dropdown and the next one would read None."""
+        anndata = pytest.importorskip("anndata")
+        import numpy as np
+        import pandas as pd
+
+        path = tmp_path / "bare.h5ad"
+        anndata.AnnData(X=np.zeros((3, 2)), obs=pd.DataFrame(index=list("abc"))).write_h5ad(path)
+
+        with pytest.raises(LoadError, match="no obs columns"):
+            data_loader.load(str(path))

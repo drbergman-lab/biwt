@@ -782,3 +782,39 @@ class TestHostInputFailureIsVisible:
         assert len(shown) == 1
         assert "nothing was imported" in shown[0]
         assert "the host is mid-teardown" in shown[0]      # the actual reason
+
+
+class TestImportFailureIsContained:
+    def test_a_reader_raising_anything_does_not_escape_the_slot(
+        self, make_widget, drive_import, monkeypatch
+    ):
+        """Readers raise their own types on a corrupt file, and an escape from a
+        Qt slot aborts the host process."""
+        from PyQt5.QtWidgets import QMessageBox
+
+        from biwt.core import data_loader
+
+        shown = []
+        monkeypatch.setattr(QMessageBox, "exec_", lambda self: shown.append(self.text()))
+        monkeypatch.setattr(data_loader, "load",
+                            lambda *a, **k: (_ for _ in ()).throw(KeyError("obsm")))
+
+        w, _ = make_widget()
+        drive_import(w, "spatial.csv")          # must not raise
+
+        assert w.window is None
+        assert "KeyError" in shown[0]
+
+    def test_closing_the_widget_takes_its_step_window(
+        self, make_widget, drive_import, qapp
+    ):
+        w, _ = make_widget()
+        drive_import(w, "nonspatial.csv")
+        qapp.processEvents()
+        step = w.window
+        step.show()
+        qapp.processEvents()
+
+        w.close()
+        qapp.processEvents()
+        assert not step.isVisible()

@@ -355,7 +355,11 @@ class CellCountsWindow(BiwinformaticsWalkthroughWindow):
         elif mode == 3:  # manual
             for ct in self._cell_types:
                 s.cell_counts[ct] = int(self._w_manual[ct].text() or 0)
-        # mode == 0: use data counts as-is (already set in session.cell_counts)
+        else:            # mode 0: the data's own counts, as the Count column shows
+            # Written rather than left alone: after Go back through another mode,
+            # session.cell_counts holds that mode's numbers, not these.
+            for ct in self._cell_types:
+                s.cell_counts[ct] = int(self._w_count[ct].text() or 0)
 
         # A count of zero is allowed: the type still gets a <cell_definition> in
         # the output config, it just places no cells.  Deleting the type at the
