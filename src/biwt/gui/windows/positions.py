@@ -205,7 +205,7 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
         vbox = QVBoxLayout()
         vbox.addWidget(splitter, stretch=1)
 
-        go_back_button = GoBackButton(self, walkthrough, pre_cb=self._close_legend)
+        go_back_button = GoBackButton(self, walkthrough)
         self.continue_to_write_button = ContinueButton(
             self, self.process_window
         )
@@ -649,7 +649,6 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
     # ------------------------------------------------------------------
 
     def process_window(self) -> None:
-        self._close_legend()
         self.walkthrough.session.positions_set = True
         self.walkthrough.advance()
 
@@ -2294,9 +2293,34 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
     # Lifecycle
     # ------------------------------------------------------------------
 
+    def hideEvent(self, event):  # noqa: N802
+        """Take the legend with us.
+
+        The legend is its own top-level window, so it does not follow this one
+        unless told to — and every way of leaving this step goes through
+        ``hide()``: Continue, Go back, discarding a stale cached window, and
+        re-importing.  Hooking the hide covers all four; the two explicit
+        ``_close_legend`` calls this replaces covered only the first two.
+        """
+        self._legend_was_visible = bool(
+            self.legend_window is not None and self.legend_window.isVisible()
+        )
+        if self._legend_was_visible:
+            self.legend_window.hide()
+        super().hideEvent(event)
+
+    def showEvent(self, event):  # noqa: N802
+        """Bring it back with us.
+
+        Back-then-forward without changes reuses this window and keeps its plot;
+        the legend is that plot's key, so it is part of the same state.
+        """
+        if getattr(self, "_legend_was_visible", False) and self.legend_window is not None:
+            self.legend_window.show()
+        super().showEvent(event)
+
     def closeEvent(self, event):  # noqa: N802
-        if hasattr(self, "legend_window") and self.legend_window is not None:
-            self.legend_window.close()
+        self._close_legend()
         if hasattr(self, "figure"):
             self.figure.clear()
         super().closeEvent(event)

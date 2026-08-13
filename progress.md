@@ -1999,3 +1999,26 @@ four inline duplicates of it; one now, hoisted above its first use.
 
 Net −129 lines across the modules against +78 for the shared file. The number is not the point:
 there is now one place to edit when a step's contract changes.
+
+### The legend outlived its window
+
+Reported from a live run: the Positions legend stays on screen after leaving that step, including
+after going back and invalidating it.
+
+It is its own top-level window, so it does not follow the step window unless told to — and it was
+being told in two specific places: `process_window`, and the Go back *button*'s `pre_cb`. Both are
+exits, but neither is *the* exit. Probing all four routes out:
+
+    after Continue:                  hidden
+    after go_back_to_prev_window():  VISIBLE   <- the controller's own route
+    after invalidating it:           VISIBLE   <- reported
+    after re-import:                 VISIBLE
+
+The Back button is one caller of `go_back_to_prev_window`; the controller calls it directly too, and
+neither discarding a stale cached window nor re-importing goes anywhere near that button. What all
+four share is `self.window.hide()` — so the legend now follows a `hideEvent` on the window it
+belongs to, and the two explicit calls are gone. One rule where there were two special cases, and it
+covers the exits nobody has written yet.
+
+`showEvent` brings it back, because back-then-forward without changes deliberately reuses the window
+and its plot; the legend is that plot's key, so it belongs to the same preserved state.

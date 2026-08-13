@@ -474,6 +474,89 @@ class TestManualDomainEditor:
         assert domain.source == DomainSource.HOST
 
 
+class TestPositionsLegend:
+    """The legend is its own top-level window, so it needs telling to follow.
+
+    It used to be closed by two explicit calls — Continue, and the Go back
+    *button*'s pre-hook — which left it floating over the next step whenever the
+    user left by any other route: the controller's own `go_back_to_prev_window`,
+    a stale cached window being discarded, or a re-import.
+    """
+
+    @staticmethod
+    def _at_positions_with_legend(make_widget, drive_import, qapp, monkeypatch):
+        from PyQt5.QtWidgets import QDialog
+
+        from biwt.gui.walkthrough import DomainEditorDialog
+
+        monkeypatch.setattr(DomainEditorDialog, "exec_",
+                            lambda self: QDialog.Rejected)
+        w, _ = make_widget()
+        drive_import(w, "spatial.csv")
+        for _ in range(6):
+            qapp.processEvents()
+            if _name(w) == "PositionsWindow":
+                break
+            _continue(w)
+        assert _name(w) == "PositionsWindow"
+        pos = w.window
+        pos.show()
+        qapp.processEvents()
+        pos._show_legend_cb()
+        qapp.processEvents()
+        assert pos.legend_window.isVisible()
+        return w, pos
+
+    def test_continue_takes_the_legend_with_it(
+        self, make_widget, drive_import, qapp, monkeypatch
+    ):
+        w, pos = self._at_positions_with_legend(make_widget, drive_import, qapp, monkeypatch)
+        pos.process_window()
+        qapp.processEvents()
+        assert not pos.legend_window.isVisible()
+
+    def test_going_back_takes_the_legend_with_it(
+        self, make_widget, drive_import, qapp, monkeypatch
+    ):
+        """Through the controller, not the button — the button is one caller."""
+        w, pos = self._at_positions_with_legend(make_widget, drive_import, qapp, monkeypatch)
+        w.go_back_to_prev_window()
+        qapp.processEvents()
+        assert not pos.legend_window.isVisible()
+
+    def test_discarding_the_window_takes_the_legend_with_it(
+        self, make_widget, drive_import, qapp, monkeypatch
+    ):
+        w, pos = self._at_positions_with_legend(make_widget, drive_import, qapp, monkeypatch)
+        w.go_back_to_prev_window()
+        qapp.processEvents()
+        w.stale_futures = True              # the user changes something upstream
+        w.window.process_window()
+        qapp.processEvents()
+        assert not pos.legend_window.isVisible()
+
+    def test_reimport_takes_the_legend_with_it(
+        self, make_widget, drive_import, qapp, monkeypatch
+    ):
+        w, pos = self._at_positions_with_legend(make_widget, drive_import, qapp, monkeypatch)
+        drive_import(w, "spatial.csv")
+        qapp.processEvents()
+        assert not pos.legend_window.isVisible()
+
+    def test_it_returns_with_the_window_it_describes(
+        self, make_widget, drive_import, qapp, monkeypatch
+    ):
+        """Back-then-forward reuses the window and its plot; the legend is that
+        plot's key, so it comes back too."""
+        w, pos = self._at_positions_with_legend(make_widget, drive_import, qapp, monkeypatch)
+        w.go_back_to_prev_window()
+        qapp.processEvents()
+        w.window.process_window()
+        qapp.processEvents()
+        assert w.window is pos
+        assert pos.legend_window.isVisible()
+
+
 class TestReimport:
     def test_reimport_drops_every_window_of_the_previous_run(
         self, make_widget, drive_import, qapp
