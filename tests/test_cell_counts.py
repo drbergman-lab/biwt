@@ -150,3 +150,30 @@ class TestEmptyConfluenceField:
 
         win.process_window()                      # must not raise
         assert set(win.walkthrough.session.cell_counts.values()) == {0}
+
+
+class TestProportionModeCommits:
+    """The mode the shared helper leaves the window in, actually committed.
+
+    Every other test switched away from proportion mode before Continue, so the
+    line that reads the Proportion column had never run — it decides the row
+    counts per type in ``BiwtResult.coordinates`` for anyone scaling that way.
+    """
+
+    def test_the_proportion_column_is_what_reaches_the_session(self, qapp):
+        win = _counts_window()                 # already in proportion mode
+        s = win.walkthrough.session
+        for ct, w in win._w_prop.items():
+            w.setText({"Tumor": "40", "T_cell": "25", "Macrophage": "7"}[ct])
+
+        win.process_window()
+
+        assert s.cell_counts == {"Tumor": 40, "T_cell": 25, "Macrophage": 7}
+        assert s.cell_counts_confirmed
+
+    def test_an_empty_proportion_field_commits_zero(self, qapp):
+        win = _counts_window()
+        for w in win._w_prop.values():
+            w.setText("")
+        win.process_window()
+        assert set(win.walkthrough.session.cell_counts.values()) == {0}

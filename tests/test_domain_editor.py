@@ -546,3 +546,40 @@ class TestHostDomainPrecision:
         assert (domain.xmin, domain.xmax) == (host.xmin, host.xmax)
         assert (domain.ymin, domain.ymax) == (host.ymin, host.ymax)
         assert domain.source == DomainSource.HOST
+
+
+class TestTypingInTheDataUnitsColumn:
+    """``_on_du_edited`` — the multiply behind an accepted domain.
+
+    The other tests drive fields with ``setText``, which emits ``textChanged``;
+    these handlers listen for ``textEdited``, which only a real edit emits. So
+    this direction of the conversion had never run, though ``result()`` reads the
+    host fields it writes.
+    """
+
+    def test_a_typed_data_units_bound_becomes_host_units(self, qapp, scaled_editor):
+        from PyQt5.QtTest import QTest
+
+        dlg = scaled_editor
+        F = dlg._effective_factor()
+        field = dlg._du_fields["xmax"]
+        field.setEnabled(True)
+        field.clear()
+        QTest.keyClicks(field, "25")
+
+        assert dlg._parse(dlg._host_fields["xmax"]) == pytest.approx(25.0 * F)
+
+    def test_the_host_bound_it_wrote_is_what_result_returns(self, qapp, scaled_editor):
+        from PyQt5.QtTest import QTest
+
+        dlg = scaled_editor
+        F = dlg._effective_factor()
+        for attr, typed in (("xmin", "-10"), ("xmax", "25")):
+            field = dlg._du_fields[attr]
+            field.setEnabled(True)
+            field.clear()
+            QTest.keyClicks(field, typed)
+
+        domain = dlg.result()[0]
+        assert domain.xmin == pytest.approx(-10.0 * F)
+        assert domain.xmax == pytest.approx(25.0 * F)
