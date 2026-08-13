@@ -306,3 +306,37 @@ def test_the_drop_zone_highlights_only_for_a_droppable_file(widget, drive_import
     junk.write_text("nope")
     assert _drag(FIXTURES / "nonspatial.csv")
     assert not _drag(junk)
+
+
+def test_the_readme_quick_start_runs(qapp, tmp_path, monkeypatch):
+    """Every line of the README's snippet, in order.
+
+    It is the first code a new host runs, and nothing else in the suite touched
+    ``apply_light_palette`` — a bad QPalette role there would raise on line one of
+    a user's first attempt.
+    """
+    from biwt.core.positioning import build_ic_dataframe
+    from biwt.gui.theme import apply_light_palette
+    from biwt.gui.walkthrough import create_biwt_widget
+    from biwt.types import BiwtInput, BiwtResult, DomainSpec
+
+    domain = DomainSpec(xmin=-500, xmax=500, ymin=-500, ymax=500, units="micron")
+    biwt_input = BiwtInput(preferred_domain=domain)
+
+    written = []
+
+    def on_complete(result):
+        out = tmp_path / "cells.csv"
+        result.to_csv(str(out))
+        written.append(out)
+
+    apply_light_palette(qapp)
+    widget = create_biwt_widget(biwt_input, on_complete=on_complete)
+    widget.show()
+
+    # Then the callback's own body, on the empty result a Skip produces.
+    on_complete(BiwtResult(
+        coordinates=build_ic_dataframe({}), cell_type_map={}, domain_used=domain,
+    ))
+    assert written and written[0].exists()
+    assert written[0].read_text().splitlines()[0] == "x,y,z,type"
