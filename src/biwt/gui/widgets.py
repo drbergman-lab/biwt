@@ -374,6 +374,12 @@ def row_label(text: str, max_width: int = ROW_LABEL_MAX_WIDTH) -> QLabel:
     label.setWordWrap(True)
     label.setFixedWidth(max_width)
     label.setToolTip(text)
+    fm = label.fontMetrics()
+    pieces = text.replace("-", " ").replace("/", " ").split()   # where Qt may break
+    if max((fm.horizontalAdvance(w) for w in pieces), default=0) > max_width:
+        # Nothing to wrap at, and a right-aligned QLabel clips an over-wide word
+        # at its *start* — reading backwards. Elide it ourselves instead.
+        label.setText(fm.elidedText(text, Qt.ElideRight, max_width))
     return label
 
 

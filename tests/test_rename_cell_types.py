@@ -141,6 +141,16 @@ class TestLongLabelPrimitives:
 
     LONG = "Epithelial-cancer" * 6
 
+    def test_an_unbreakable_name_elides_at_its_end(self, qapp):
+        """A right-aligned QLabel clips an over-wide word at its start, so a
+        name with nothing to wrap at reads backwards unless we elide it."""
+        from biwt.gui.widgets import row_label
+
+        label = row_label("Macrophage" * 6)
+        assert label.text().endswith("\u2026")
+        assert label.text().startswith("Macrophage")
+        assert label.toolTip() == "Macrophage" * 6
+
     def test_a_wrapping_label_keeps_every_character(self, qapp):
         from biwt.gui.widgets import ROW_LABEL_MAX_WIDTH, row_label
 
