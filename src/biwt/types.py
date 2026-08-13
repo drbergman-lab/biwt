@@ -189,20 +189,15 @@ class BiwtInput:
         Runs again on every ``dataclasses.replace``, so :meth:`snapshot` inherits
         it and a field the host mutated after construction is normalized too.
 
-        A single string where a list belongs is refused rather than repaired: it
-        iterates into characters, which becomes one failed template load per
-        character.  Everything else is repaired, because a walkthrough on a
-        substituted domain beats none — and because raising later would abort the
-        host's process, this being reached from a Qt slot.
+        Nothing here raises.  This is reached from a Qt slot, where an exception
+        would abort the host's process, and every case has an unambiguous repair:
+        a bare string is one entry rather than a list of its characters, and a
+        walkthrough on a substituted domain beats no walkthrough.
         """
         for field_name in ("host_cell_type_names", "cell_template_paths"):
             value = getattr(self, field_name)
-            if isinstance(value, (str, bytes)):
-                raise TypeError(
-                    f"BiwtInput.{field_name} must be a list of strings, "
-                    f"not a single {type(value).__name__}"
-                )
-            setattr(self, field_name, list(value))
+            setattr(self, field_name,
+                    [value] if isinstance(value, (str, bytes)) else list(value))
 
         # Dropped, not coerced: str(None) would become a cell type named "None".
         self.host_cell_type_names = [

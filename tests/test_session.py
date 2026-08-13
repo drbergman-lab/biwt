@@ -1468,3 +1468,25 @@ class TestUsableDomain:
         bi = BiwtInput()
         bi.preferred_domain = DomainSpec(xmin=0, xmax=0, ymin=-1, ymax=1)
         assert bi.snapshot().preferred_domain.source == DomainSource.DEFAULT
+
+
+class TestSingleValueFields:
+    """A bare string is one entry, not a list of its characters.
+
+    Unambiguous, so it is repaired rather than refused: a string is never a valid
+    list of paths, and `list("some/path.toml")` would otherwise become one failed
+    template load per character.
+    """
+
+    def test_a_string_of_paths_becomes_one_path(self):
+        bi = BiwtInput(cell_template_paths="tests/fixtures/templates_a.toml")
+        assert bi.cell_template_paths == ["tests/fixtures/templates_a.toml"]
+
+    def test_a_string_of_names_becomes_one_name(self):
+        assert BiwtInput(host_cell_type_names="Tumor").host_cell_type_names == ["Tumor"]
+
+    def test_a_list_is_left_alone(self):
+        paths = ["a.toml", "b.toml"]
+        bi = BiwtInput(cell_template_paths=paths)
+        assert bi.cell_template_paths == paths
+        assert bi.cell_template_paths is not paths      # copied, not aliased
