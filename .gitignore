@@ -23,6 +23,9 @@ env/
 
 # R test fixtures regenerated on every CI run (see tests/fixtures/make_fixtures.R)
 tests/fixtures/toy_*.rds
+# Coverage data, when run from the repo root
+/.coverage
+
 # MkDocs build output
 site/
 
