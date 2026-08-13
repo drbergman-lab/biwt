@@ -14,6 +14,10 @@ env/
 # Test scripts (not part of the package)
 /test_biwt.py
 
+# Standalone hosts for driving BIWT by hand. They exist to be edited during a
+# testing session — a tracked copy would collect everyone's local edits.
+/scratch_*.py
+
 # Miscellaneous
 *.DS_Store
 
