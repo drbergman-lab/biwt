@@ -17,8 +17,14 @@ from pathlib import Path
 
 from biwt.core.positioning import compute_spatial_placement
 from biwt.gui.windows.positions import PositionsWindow
+from biwt.types import DomainSpec
 
 FIXTURES = Path(__file__).parent / "fixtures"
+
+# Deep enough that DomainSpec.is_2d is False, so the axes are a real 3-D
+# projection — the condition the reported crash needed.
+DOMAIN_3D = DomainSpec(xmin=-500, xmax=500, ymin=-500, ymax=500,
+                       zmin=-750, zmax=750)
 
 
 class _Dummy:
@@ -320,8 +326,14 @@ class TestSpotDeconvolutionPlacement:
         win.plot_cell_pos()
 
         assert len(s.coords_by_type.get("Neoplastic", [])) > 0
-        # Every spot placed something: nothing was dropped for want of a key.
-        assert sum(len(v) for v in s.coords_by_type.values()) == s.spatial_data_final.shape[0]
+        # Every spot that was plotted placed something: nothing was dropped for
+        # want of a key.  Not every spot is plotted — this fixture's placement
+        # rectangle is x -50..350 against a 0..300 domain, so 3 of the 6 fall
+        # outside it and are skipped, the same way the non-deconvolution branch
+        # skips them.
+        assert len(s.plotted_cell_types_per_spot) == 3
+        assert sum(len(v) for v in s.coords_by_type.values()) == \
+            len(s.plotted_cell_types_per_spot)
 
     def test_the_dicts_are_keyed_by_the_final_names(self, qapp, monkeypatch):
         widget = self._walk_to_positions(qapp, monkeypatch)
@@ -332,3 +344,112 @@ class TestSpotDeconvolutionPlacement:
         assert {k for d in s.cell_prob_feature_dicts for k in d} == {
             "Macrophage", "T_cell", "Tumor",
         }
+
+
+class TestPlottingIntoA3DDomain:
+    """Spatial plotting in a 3-D domain — reported as a hard crash.
+
+    ``self.circles()`` builds a 2-D ``PatchCollection``; adding one to a 3-D axes
+    makes ``canvas.draw()`` raise ``AttributeError: 'PatchCollection' object has
+    no attribute 'do_3d_projection'``. That escapes the Plot slot, and PyQt5 turns
+    an exception escaping a slot into a fatal abort, so it killed the host.
+
+    Three call sites chose a renderer independently and two assumed 2-D.
+    """
+
+    @staticmethod
+    def _at_positions(qapp, monkeypatch, fixture, domain, n_per_spot=1):
+        from PyQt5.QtWidgets import QDialog, QFileDialog
+
+        from biwt.gui.walkthrough import DomainEditorDialog, create_biwt_widget
+        from biwt.types import BiwtInput
+
+        monkeypatch.setattr(DomainEditorDialog, "exec_",
+                            lambda self: QDialog.Rejected)
+        widget = create_biwt_widget(
+            BiwtInput(preferred_domain=domain, domain_accepted=True),
+            on_complete=lambda result: None,
+        )
+        monkeypatch.setattr(
+            QFileDialog, "getOpenFileName",
+            staticmethod(lambda *a, **k: (str(FIXTURES / fixture), "")),
+        )
+        widget._import_cb()
+        for _ in range(8):
+            qapp.processEvents()
+            if type(widget.window).__name__ == "PositionsWindow":
+                break
+            widget.window.process_window()
+        assert type(widget.window).__name__ == "PositionsWindow"
+        win = widget.window
+        for cb in win.checkbox_dict.values():
+            cb.setChecked(True)
+        win.cell_pos_button_group.button(win.spatial_plotter_id).setChecked(True)
+        win.num_box.setValue(n_per_spot)
+        return widget, win
+
+    # The reported repro used a Visium .h5ad; spot_deconv.csv is the fixture with
+    # the same shape — coordinates plus *_probability columns.
+    @pytest.mark.parametrize("fixture,n_per_spot", [
+        ("spot_deconv.csv", 1),     # exactly what was reported
+        ("spot_deconv.csv", 4),     # the sub-spot renderer, same call site
+        ("spatial.csv", 1),         # already worked; guards against regressing it
+        ("spatial.csv", 3),         # the third call site
+    ])
+    def test_plotting_does_not_raise(self, qapp, monkeypatch, fixture, n_per_spot):
+        widget, win = self._at_positions(qapp, monkeypatch, fixture, DOMAIN_3D,
+                                         n_per_spot)
+        win.plot_cell_pos()          # would abort the host before the fix
+        s = widget.session
+        assert sum(len(v) for v in s.coords_by_type.values()) > 0
+
+    @pytest.mark.parametrize("fixture", ["spot_deconv.csv", "spatial.csv"])
+    def test_cells_land_inside_an_offset_z_range(self, qapp, monkeypatch, fixture):
+        """z=0 was hardcoded, so a domain not straddling zero placed every cell
+        outside itself."""
+        offset = DomainSpec(xmin=-500, xmax=500, ymin=-500, ymax=500,
+                            zmin=100, zmax=400)
+        widget, win = self._at_positions(qapp, monkeypatch, fixture, offset, 3)
+        win.plot_cell_pos()
+        placed = np.vstack([v for v in widget.session.coords_by_type.values()
+                            if len(v)])
+        assert len(placed) > 0
+        assert placed[:, 2].min() >= 100
+        assert placed[:, 2].max() <= 400
+
+    def test_every_drawn_cell_reaches_the_host(self, qapp, monkeypatch):
+        """The sub-spot arm drew cells and stored none, so the canvas filled while
+        ``coordinates`` came back empty — in 2-D as well as 3-D."""
+        flat = DomainSpec(xmin=-500, xmax=500, ymin=-500, ymax=500)
+        widget, win = self._at_positions(qapp, monkeypatch, "spot_deconv.csv",
+                                         flat, 4)
+        win.plot_cell_pos()
+        s = widget.session
+        drawn = sum(len(r["cell_types"]) for r in s.plotted_cell_types_per_spot)
+        assert drawn == 4 * len(s.plotted_cell_types_per_spot)
+        assert sum(len(v) for v in s.coords_by_type.values()) == drawn
+
+    def test_a_region_the_domain_cannot_reach_gives_up(self, qapp, monkeypatch):
+        """``_wedge_sample_2d`` had no fail counter where its 3-D twin does, so an
+        unreachable region spun forever inside the Plot slot.
+
+        Under a SIGALRM watchdog: without it a regression hangs the run instead of
+        failing it, which is how this went unnoticed in the first place.
+        """
+        import signal
+
+        widget, win = self._at_positions(qapp, monkeypatch, "spatial.csv",
+                                         DOMAIN_3D)
+
+        def _boom(signum, frame):
+            raise TimeoutError("_wedge_sample_2d did not give up")
+
+        old = signal.signal(signal.SIGALRM, _boom)
+        signal.setitimer(signal.ITIMER_REAL, 5.0)
+        try:
+            # A disc wholly outside the domain: nothing sampled can be accepted.
+            out = win._wedge_sample_2d(5, win.plot_xmax + 10_000, 0.0, 1.0)
+        finally:
+            signal.setitimer(signal.ITIMER_REAL, 0)
+            signal.signal(signal.SIGALRM, old)
+        assert out.shape == (0, 3)
