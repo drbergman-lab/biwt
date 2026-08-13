@@ -294,6 +294,11 @@ class DomainEditorDialog(QDialog):
         preset_hbox = QHBoxLayout()
         data_btn = QPushButton("Use Data Domain")
         data_btn.clicked.connect(self._fill_data)
+        if data_domain is None or data_domain.source == DomainSource.DEFAULT:
+            # No coordinates in the file, so data_domain is BIWT's fallback box —
+            # not the data's anything.  DEFAULT is what marks it as not real.
+            data_btn.setEnabled(False)
+            data_btn.setToolTip("This file has no spatial coordinates.")
         preferred_btn = QPushButton(f"Use {host_name} Domain")
         preferred_btn.clicked.connect(self._fill_preferred)
         preset_hbox.addWidget(data_btn)

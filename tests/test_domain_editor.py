@@ -470,3 +470,27 @@ class TestReportedSource:
         assert factor == 0.5
         assert (dom.xmin, dom.xmax) == (0.0, 1000.0)
         assert dom.source == DomainSource.DATA
+
+
+class TestDataPresetNeedsRealData:
+    def test_the_data_preset_is_off_without_coordinates(self, qapp):
+        """A non-spatial file has no data domain — `data_domain` is BIWT's own
+        fallback box, so offering it as "the data's" would be a lie."""
+        from PyQt5.QtWidgets import QPushButton
+
+        parent = QWidget()
+        dlg = DomainEditorDialog(parent, DomainSpec.default(), HOST_DOMAIN,
+                                 host_name="Studio")
+        btn = next(b for b in dlg.findChildren(QPushButton)
+                   if b.text() == "Use Data Domain")
+        assert not btn.isEnabled()
+        assert "no spatial coordinates" in btn.toolTip()
+
+    def test_it_is_on_when_the_data_has_an_extent(self, qapp):
+        from PyQt5.QtWidgets import QPushButton
+
+        parent = QWidget()
+        dlg = DomainEditorDialog(parent, DATA_DOMAIN, HOST_DOMAIN, host_name="Studio")
+        btn = next(b for b in dlg.findChildren(QPushButton)
+                   if b.text() == "Use Data Domain")
+        assert btn.isEnabled()
