@@ -1269,3 +1269,31 @@ class TestHostDefinedCellTypes:
         assert win._row_flag["default"].toolTip() == (
             "'default' also defined by templates_a.toml."
         )
+
+
+class TestBadPathsAreReportedOnce:
+    def test_a_batch_of_unreadable_paths_gives_one_dialog(self, qapp, monkeypatch):
+        """A modal per bad path has to be dismissed before the step will open.
+
+        `list("some/path.toml")` — a host meaning to pass one path — produces one
+        bad path per character, which is how this was found.
+        """
+        shown = []
+        monkeypatch.setattr(QMessageBox, "warning",
+                            staticmethod(lambda *a, **k: shown.append(a[2])))
+        bad = list("tests/fixtures/templates_z.toml")
+        win = _params_window(bad)
+
+        assert len(shown) == 1
+        assert f"Could not load {len(bad)} template files" in shown[0]
+        assert win._template_db == {}          # nothing loaded, step still opens
+
+    def test_one_bad_path_still_names_it(self, qapp, monkeypatch):
+        shown = []
+        monkeypatch.setattr(QMessageBox, "warning",
+                            staticmethod(lambda *a, **k: shown.append(a[2])))
+        _params_window(["/no/such/file.toml"])
+
+        assert len(shown) == 1
+        assert "Could not load template file" in shown[0]
+        assert "/no/such/file.toml" in shown[0]

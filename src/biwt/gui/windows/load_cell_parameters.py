@@ -105,6 +105,7 @@ class LoadCellParametersWindow(BiwinformaticsWalkthroughWindow):
         # step.  Re-reading the files each time also picks up edits on disk, and
         # drops any that have become unreadable.
         self._template_db: dict[tuple[str, str], str] = {}
+        self._load_errors: list[str] = []
         seed = (
             s.biwt_input.cell_template_paths
             if s.template_library_paths is None
@@ -117,6 +118,7 @@ class LoadCellParametersWindow(BiwinformaticsWalkthroughWindow):
         s.template_library_paths = list(dict.fromkeys(
             loaded for loaded in (self._load_template_file(p) for p in seed) if loaded
         ))
+        self._report_load_errors()
         # The host's own cell types are candidates too, under a reserved source
         # that is not a path and carries no content — see biwt.types.HOST_SOURCE.
         # BiwtInput.snapshot has already dropped anything unusable.
@@ -301,14 +303,29 @@ class LoadCellParametersWindow(BiwinformaticsWalkthroughWindow):
         try:
             data = core_templates.load_templates_from_file(path)
         except Exception as exc:
-            QMessageBox.warning(
-                self, "Template Load Error",
-                f"Could not load template file:\n{path}\n\n{exc}",
-            )
+            self._load_errors.append(f"{path}\n    {exc}")
             return None
         for name, content in data.items():
             self._template_db[(name, path)] = content
         return path
+
+    def _report_load_errors(self) -> None:
+        """One dialog for a batch, however many files failed.
+
+        A host that passes a bad list — or one bad path per character, which is
+        what ``list("some/path.toml")`` produces — otherwise gets a modal per
+        entry, each of which must be dismissed before the step will open.
+        """
+        if not self._load_errors:
+            return
+        failed, self._load_errors = self._load_errors, []
+        head = ("Could not load template file:" if len(failed) == 1
+                else f"Could not load {len(failed)} template files:")
+        shown = failed[:5]
+        if len(failed) > len(shown):
+            shown.append(f"…and {len(failed) - len(shown)} more")
+        QMessageBox.warning(self, "Template Load Error",
+                            head + "\n\n" + "\n".join(shown))
 
     def _add_templates_cb(self) -> None:
         paths, _ = QFileDialog.getOpenFileNames(
@@ -336,6 +353,7 @@ class LoadCellParametersWindow(BiwinformaticsWalkthroughWindow):
             added = True
             if loaded not in library:
                 library.append(loaded)
+        self._report_load_errors()
         if added:
             self._remerge(saved)
 
