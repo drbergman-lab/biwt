@@ -59,9 +59,9 @@ Worth copying:
 - A path field pre-filled from Studio's configured output folder and filename, with a
   **Browse…** button.
 - **Overwrite** / **Append to existing** radio buttons, shown *only* when the chosen path
-- Studio always confirms the save path, even when the file does not exist.
   already exists. Append concatenates BIWT's rows onto the existing CSV; extra columns in the
   existing file are left empty for the appended rows.
+- Studio always confirms the save path, even when the file does not exist.
 - Save / Cancel.
 
 Then, separately, if `result.cell_templates` is non-empty, Studio assembles a PhysiCell config
