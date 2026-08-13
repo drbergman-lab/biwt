@@ -692,9 +692,11 @@ class DomainEditorDialog(QDialog):
                 for a in bounds
             )
 
-        # Host first: if the two coincide, the host's domain did survive.
+        # Host first: if the two coincide, the host's domain did survive — and
+        # its own source says whether it was ever really the host's, since an
+        # unusable one was replaced by BIWT's box before it got here.
         if same_as({a: getattr(self._preferred_domain, a) for a in bounds}):
-            return DomainSource.HOST
+            return self._preferred_domain.source
         if same_as(self._data_host_bounds()):
             return DomainSource.DATA
         return DomainSource.USER

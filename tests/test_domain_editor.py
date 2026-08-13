@@ -494,3 +494,29 @@ class TestDataPresetNeedsRealData:
         btn = next(b for b in dlg.findChildren(QPushButton)
                    if b.text() == "Use Data Domain")
         assert btn.isEnabled()
+
+
+class TestSubstitutedHostDomain:
+    """An unusable host domain is replaced by BIWT's box before the dialog opens.
+
+    Accepting it must not then be reported as the host's: the numbers on screen
+    are BIWT's, and a host checking `source != HOST` to see whether its own
+    domain survived would be told it did.
+    """
+
+    def test_accepting_a_substituted_domain_reports_default(self, qapp):
+        substituted = BiwtInput(
+            preferred_domain=DomainSpec(xmin=0, xmax=0, ymin=-500, ymax=500)
+        ).preferred_domain
+        assert substituted.source == DomainSource.DEFAULT      # __post_init__ did it
+
+        parent = QWidget()
+        dlg = DomainEditorDialog(parent, DATA_DOMAIN, substituted, host_name="Scratch")
+        dlg._fill_preferred()
+        assert dlg.result()[0].source == DomainSource.DEFAULT
+
+    def test_a_real_host_domain_still_reports_host(self, qapp):
+        parent = QWidget()
+        dlg = DomainEditorDialog(parent, DATA_DOMAIN, HOST_DOMAIN, host_name="Scratch")
+        dlg._fill_preferred()
+        assert dlg.result()[0].source == DomainSource.HOST
