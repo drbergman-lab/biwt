@@ -107,23 +107,21 @@ class _Axis(NamedTuple):
     factor_scaled: bool   # does the data-unit ⇄ host-unit factor apply?
 
 
-# z is not ``factor_scaled``: it is a 2-D slab / synthetic depth rather than a
-# measurement in data units, so the factor has nothing to convert.  Its
-# data-units cells are still built, so the Z row matches the others and wiring
-# them up later is a matter of flipping this flag.
-
-
 def _scale_domain(d: DomainSpec, factor: float,
-                  source: str = DomainSource.DATA, units: str = "micron") -> DomainSpec:
-    """Return *d* with its x/y bounds multiplied by *factor* (host-units per data unit).
+                  source: str = DomainSource.DATA, units: str = "micron",
+                  scale_z: bool = False) -> DomainSpec:
+    """Return *d* with its bounds multiplied by *factor* (host-units per data unit).
 
-    Z bounds are left untouched (a 2-D slab / synthetic depth, not a data-unit
-    measurement). Used to convert a raw data-range domain into host units.
+    x and y are always scaled.  z only when *scale_z* — see
+    ``biwt.core.domain.data_has_z``: a z the file supplied is a real measurement
+    and converts like the others, while a synthesized ±10 slab is not in data
+    units at all and the factor has nothing to convert.
     """
+    z = (d.zmin * factor, d.zmax * factor) if scale_z else (d.zmin, d.zmax)
     return DomainSpec(
         xmin=d.xmin * factor, xmax=d.xmax * factor,
         ymin=d.ymin * factor, ymax=d.ymax * factor,
-        zmin=d.zmin, zmax=d.zmax, source=source, units=units,
+        zmin=z[0], zmax=z[1], source=source, units=units,
     )
 
 
@@ -168,6 +166,7 @@ class DomainEditorDialog(QDialog):
         file_factor: Optional[float] = None,
         current_factor: Optional[float] = None,
         apply_scale: bool = True,
+        data_has_z: bool = False,
     ):
         super().__init__(parent)
         self.setWindowTitle("Domain Settings")
@@ -175,6 +174,9 @@ class DomainEditorDialog(QDialog):
         self.setMinimumWidth(660)
 
         self._data_domain = data_domain            # raw bounds, data units
+        # Whether the file supplied z at all; a synthesized slab is not in data
+        # units, so the factor must not be applied to it.
+        self._data_has_z = data_has_z
         self._preferred_domain = preferred_domain  # host bounds, host units
         self._file_factor = file_factor
         # Re-entrancy guard: bounds and extents write to each other, so whichever
@@ -525,7 +527,11 @@ class DomainEditorDialog(QDialog):
             attr: (getattr(d, attr) * F if F is not None else getattr(d, attr))
             for attr in self._XY
         }
-        bounds["zmin"], bounds["zmax"] = zmin, zmax     # z is never scaled
+        # A z the file supplied is a data-unit measurement and converts like x and
+        # y; a synthesized slab is not, so the factor has nothing to convert.
+        if self._data_has_z and F is not None:
+            zmin, zmax = zmin * F, zmax * F
+        bounds["zmin"], bounds["zmax"] = zmin, zmax
         return bounds
 
     def _fill_data(self) -> None:
@@ -857,6 +863,17 @@ class WalkthroughSession:
             return self.user_domain
         return self.preferred_domain
 
+    @property
+    def data_has_z(self) -> bool:
+        """True when the imported file supplied a third coordinate axis.
+
+        Decides whether the scale factor applies to z: a z the file measured
+        converts like x and y, a synthesized slab has nothing to convert.
+        """
+        if self.data is None:
+            return False
+        return domain_module.data_has_z(obs=self.data.obs, obsm=self.data.obsm)
+
     def effective_scale(self) -> float:
         """Uniform factor applied to place cells (``1.0`` = no conversion).
 
@@ -928,13 +945,17 @@ class WalkthroughSession:
         self.cell_types_list_original = sorted((
             {c.replace("_probability", "") for c in prob_cols}
         ), key=alpha_key)
-        prob_matrix = self.data.obs[prob_cols].values
+        # Clamped before use, not just when the columns were selected: a raw NaN
+        # wins argmax outright, so one bad spot picked its own cell type as the
+        # spot's maximum and carried the NaN into the per-spot weights.
+        prob_matrix = np.column_stack(
+            [data_loader.clamp_probabilities(self.data.obs[c]) for c in prob_cols]
+        )
         max_indices = prob_matrix.argmax(axis=1)
         cell_types = [c.replace("_probability", "") for c in prob_cols]
         self.cell_types_max = [cell_types[i] for i in max_indices]
         self.cell_prob_feature_dicts = [
-            {c.replace("_probability", ""): self.data.obs[c].iloc[i]
-             for c in prob_cols}
+            dict(zip(cell_types, prob_matrix[i]))
             for i in range(len(self.data.obs))
         ]
 

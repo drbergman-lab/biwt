@@ -1315,6 +1315,49 @@ class TestReAddingAnEditedFile:
         assert win._template_db[("Beta", str(path))] == "B2"
 
 
+class TestAPickStrandedByAnEditedFile:
+    """The file no longer offers the template a cell type was pointing at.
+
+    Not matching it any more is the intended behaviour — nothing should invent a
+    template that is gone. What was untested is that the row actually lets go of
+    it: a stale pick left in ``_touched`` would be treated as the user's own
+    choice and preserved against a key no longer in the model.
+    """
+
+    def test_the_row_lets_go_and_re_matches(self, qapp, monkeypatch, tmp_path):
+        path = tmp_path / "lib.toml"
+        # "Extra" is what the user picks by hand; "Tumor" is what name matching
+        # would choose on its own.
+        path.write_text('"Tumor" = "T"\n"Extra" = "X"\n')
+        win = _params_window([str(path)])
+        _user_select(win, "Tumor", "Extra")
+        assert win.walkthrough.session.cell_templates["Tumor"][1] == "Extra"
+        assert "Tumor" in win._touched
+
+        path.write_text('"Tumor" = "T"\n')                 # Extra deleted
+        _add_file(win, monkeypatch, str(path))
+
+        assert ("Extra", str(path)) not in win._template_db
+        # Back to the name match rather than stuck on a template that is gone.
+        assert win.walkthrough.session.cell_templates["Tumor"][1] == "Tumor"
+        assert "Tumor" not in win._touched
+
+    def test_a_pick_the_file_still_offers_is_kept(self, qapp, monkeypatch, tmp_path):
+        """The discard must be conditional, or every re-add would throw away the
+        user's choices."""
+        path = tmp_path / "lib.toml"
+        path.write_text('"Tumor" = "T"\n"Extra" = "X"\n')
+        win = _params_window([str(path)])
+        _user_select(win, "Tumor", "Extra")
+
+        path.write_text('"Tumor" = "T"\n"Extra" = "X2"\n')   # Extra survives
+        _add_file(win, monkeypatch, str(path))
+
+        assert win.walkthrough.session.cell_templates["Tumor"][1] == "Extra"
+        assert win.walkthrough.session.cell_templates["Tumor"][2] == "X2"
+        assert "Tumor" in win._touched
+
+
 class TestLibraryPathsAreDeduplicated:
     def test_the_same_file_under_two_spellings_is_one_entry(self, qapp, monkeypatch):
         """Two entries for one file left Remove taking out only one of them, so the

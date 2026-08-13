@@ -1292,6 +1292,39 @@ class TestApplyRenameIsIdempotent:
         s.apply_rename()
         assert [dict(d) for d in s.cell_prob_feature_dicts] == before
 
+    def test_a_spot_whose_whole_mass_was_deleted_drops_with_its_coordinate(self):
+        """Not about deleting every cell type — about one *spot* losing all of its.
+
+        Delete Macrophage and a spot that was pure Macrophage weighs nothing. It
+        has to leave, and its coordinate has to leave with it: if the two appends
+        ever fall out of step, every spot after the first dropped one is paired
+        with a neighbour's location and the placement is silently wrong.
+
+        The fixture keeps mass in every spot, so nothing here is filtered unless
+        the profiles are built by hand.
+        """
+        s = self._deconv_session()
+        s.cell_prob_feature_dicts = [
+            {"Macrophage": 0.0, "T_cell": 1.0, "Tumor": 0.0},   # survives
+            {"Macrophage": 1.0, "T_cell": 0.0, "Tumor": 0.0},   # all mass deleted
+            {"Macrophage": 0.5, "T_cell": 0.0, "Tumor": 0.5},   # survives, reduced
+        ]
+        s.spatial_data = np.array([[10.0, 10.0, 0.0],
+                                   [20.0, 20.0, 0.0],
+                                   [30.0, 30.0, 0.0]])
+        s.cell_type_dict_on_rename = {"T_cell": "T_cell", "Tumor": "Tumor"}
+
+        s.apply_rename()
+
+        assert s.cell_prob_feature_dicts_final == [
+            {"T_cell": 1.0, "Tumor": 0.0},
+            {"T_cell": 0.0, "Tumor": 0.5},
+        ]
+        # The first and third rows, in order — the middle one is gone.
+        assert s.spatial_data_final.tolist() == [[10.0, 10.0, 0.0],
+                                                [30.0, 30.0, 0.0]]
+        assert s.cell_types_final == ["T_cell", "Tumor"]
+
     def test_probabilities_stay_aligned_with_coordinates(self):
         # Deleting a type drops any spot whose probability mass was all in it,
         # which is what used to desynchronize the two arrays on a second pass.

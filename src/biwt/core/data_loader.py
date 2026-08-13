@@ -5,7 +5,9 @@ Supported formats
 -----------------
 .h5ad          AnnData (requires biwt[anndata])
 .rds           Seurat / SingleCellExperiment / SpatialExperiment via rpy2 + anndata2ri (requires biwt[seurat])
-.rda / .rdata  R workspace files (same rpy2 requirement; loaded with base::load())
+.rda / .rdata  R workspace files (same rpy2 requirement, loaded with base::load();
+               the object of a supported class is used, and an ambiguous
+               workspace is refused rather than guessed at)
 .csv           Flat tabular; spatial coordinates inferred from column names
 
 All paths return a ``BiwtData`` object with a common interface so downstream
@@ -17,6 +19,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
+import numpy as np
 import pandas as pd
 
 from biwt.core.domain import (
@@ -234,14 +237,61 @@ def _load_h5ad(file_path: str) -> BiwtData:
     return _from_anndata_object(adata, file_path, host_units_per_data_unit=mpu)
 
 
+# Classes anndata2ri can convert.  SpatialExperiment is an SCE subclass and goes
+# through the SCE path; Seurat needs a re-read so its own method is available.
+_SCE_CLASSES = ("SingleCellExperiment", "SpatialExperiment", "SummarizedExperiment")
+_R_DATASET_CLASSES = _SCE_CLASSES + ("Seurat",)
+
+
+def _pick_workspace_object(env, obj_names: list, file_path: str) -> str:
+    """Return the name of the single loadable dataset in an R workspace.
+
+    ``base::ls()`` returns names *sorted*, so taking the first took whatever
+    sorted first rather than whatever was saved first — a workspace holding
+    ``annotations`` and ``seurat_obj`` imported ``annotations``.  Choosing by
+    class instead makes the common multi-object workspace work.
+
+    More than one dataset is refused rather than guessed at.  Which one the user
+    meant is genuinely unknown, and it would have to be asked somewhere; a file
+    holding exactly one object also keeps the run reproducible from the file
+    alone.
+    """
+    matches = []
+    for name in obj_names:
+        try:
+            classes = tuple(env[name].rclass)
+        except Exception:
+            continue                       # not an R object we can inspect
+        if any(c in _R_DATASET_CLASSES for c in classes):
+            matches.append(name)
+
+    if len(matches) == 1:
+        return matches[0]
+    listing = ", ".join(obj_names)
+    if not matches:
+        raise LoadError(
+            f"'{file_path}' contains no Seurat or SingleCellExperiment object.\n"
+            f"Objects found: {listing}.\n"
+            "Re-save the workspace with the dataset in it, or export it with "
+            "saveRDS() to a .rds file.",
+            docs_url=TROUBLESHOOTING_DOCS_URL,
+        )
+    raise LoadError(
+        f"'{file_path}' contains more than one dataset: {', '.join(matches)}.\n"
+        "BIWT cannot tell which one you meant. Re-save just that one into its "
+        "own file — save(obj, file=\"one.rda\") or saveRDS(obj, \"one.rds\").",
+        docs_url=TROUBLESHOOTING_DOCS_URL,
+    )
+
+
 def _load_r_file(file_path: str, suffix: str) -> BiwtData:
     """Load an R object file (.rds, .rda, or .rdata) via rpy2 + anndata2ri.
 
     .rds files contain a single serialised R object (``saveRDS`` / ``readRDS``).
-    .rda / .rdata files are R workspace files that can contain multiple named
-    objects (``save`` / ``load``).  We grab the first object in the workspace;
-    if the file was produced by a standard Seurat/SCE export workflow it will
-    contain exactly one object.
+    .rda / .rdata files are R workspace files that can hold several named objects
+    (``save`` / ``load``); the one of a supported class is used, and anything
+    ambiguous is refused with the reason.  The extension is matched lowercased,
+    so the conventional ``.RData`` spelling works.
     """
     try:
         import anndata2ri
@@ -268,21 +318,18 @@ def _load_r_file(file_path: str, suffix: str) -> BiwtData:
             # readRDS returns the object directly
             robj = base.readRDS(file_path)
         else:
-            # load() reads into an environment; grab the first named object
+            # load() reads into an environment; pick the dataset out of it
             env = reval("new.env(parent = emptyenv())")
             base.load(file_path, envir=env)
             obj_names = list(base.ls(env))
             if not obj_names:
                 raise LoadError(f"No objects found in R workspace '{file_path}'.")
-            robj = env[obj_names[0]]
+            ws_name = _pick_workspace_object(env, obj_names, file_path)
+            robj = env[ws_name]
 
         classname = tuple(robj.rclass)[0]
 
-        if classname in (
-            "SingleCellExperiment",
-            "SpatialExperiment",  # SCE subclass; anndata2ri converts it via the SCE path
-            "SummarizedExperiment",
-        ):
+        if classname in _SCE_CLASSES:
             adata = anndata2ri.rpy2py(robj)
         elif classname == "Seurat":
             reval("library(Seurat)")
@@ -291,14 +338,13 @@ def _load_r_file(file_path: str, suffix: str) -> BiwtData:
             if suffix == ".rds":
                 reval(f'x <- readRDS("{file_path}")')
             else:
-                reval(f'load("{file_path}"); x <- get(ls()[1])')
+                reval(f'load("{file_path}"); x <- get("{ws_name}")')
             adata = reval("as.SingleCellExperiment(x)")
             adata = anndata2ri.rpy2py(adata)
         else:
             raise LoadError(
                 f"R object class '{classname}' is not supported. "
-                "Expected: Seurat, SingleCellExperiment, SpatialExperiment, "
-                "or SummarizedExperiment."
+                f"Expected one of: {', '.join(_R_DATASET_CLASSES)}."
             )
     except LoadError:
         raise
@@ -411,9 +457,26 @@ def _extract_visium_microns_per_pixel(adata) -> Optional[float]:
     return None
 
 
+def clamp_probabilities(values) -> np.ndarray:
+    """Return *values* as floats confined to ``[0, inf)``, everything else zeroed.
+
+    NaN, ±inf and negatives are not weights, but they are also not a reason to
+    discard the cell type they belong to: a single NaN used to fail an
+    ``(obs[col] >= 0).all()`` test for the whole column, so that type vanished
+    from the run with no error and no mention.  Zeroing the offending spot leaves
+    the rest of the column — and the cell type — intact.
+    """
+    arr = np.asarray(values, dtype=float)
+    return np.where(np.isfinite(arr) & (arr >= 0.0), arr, 0.0)
+
+
 def _find_probability_columns(obs: pd.DataFrame) -> list[str]:
-    """Return obs columns that look like per-cell-type deconvolution probabilities."""
+    """Return obs columns that look like per-cell-type deconvolution probabilities.
+
+    A column qualifies on its name plus any surviving mass once out-of-range
+    values are zeroed; an all-zero column weights nothing and is dropped.
+    """
     return [
         col for col in obs.columns
-        if col.endswith("_probability") and (obs[col] >= 0).all() and obs[col].sum() > 0
+        if col.endswith("_probability") and clamp_probabilities(obs[col]).sum() > 0
     ]

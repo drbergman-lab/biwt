@@ -244,7 +244,8 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
             s.domain_accepted = True
             return
         # Compare the data extent in host units (raw × factor) vs the domain.
-        data_host = _scale_domain(data_d, s.scale_factor) if s.scale_factor else data_d
+        data_host = (_scale_domain(data_d, s.scale_factor, scale_z=s.data_has_z)
+                     if s.scale_factor else data_d)
         mismatch = classify_domain_mismatch(data_host, s.effective_domain)
         if mismatch is None:
             s.domain_accepted = True
@@ -260,6 +261,7 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
             file_factor=(s.data.host_units_per_data_unit if s.data else None),
             current_factor=s.scale_factor,
             apply_scale=s.apply_scale,
+            data_has_z=s.data_has_z,
         )
         if dlg.exec_() == QDialog.Accepted:
             user_domain, factor, apply = dlg.result()
@@ -2170,6 +2172,7 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
             file_factor=(s.data.host_units_per_data_unit if s.data else None),
             current_factor=s.scale_factor,
             apply_scale=s.apply_scale,
+            data_has_z=s.data_has_z,
         )
         if dlg.exec_() == QDialog.Accepted:
             user_domain, factor, apply = dlg.result()
