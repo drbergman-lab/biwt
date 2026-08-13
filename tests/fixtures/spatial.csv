@@ -4,7 +4,5 @@ x,y,type
 -100,50,Tumor
 -150,-50,Tumor
 50,-200,Tumor
--2000,-2000,Tumor
-2000,2000,Tumor
 200,-100,Macrophage
 -200,100,Macrophage
