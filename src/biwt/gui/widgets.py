@@ -13,8 +13,9 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
 
 from PyQt5.QtWidgets import (
-    QPushButton, QFrame, QSizePolicy, QCheckBox, QComboBox,
-    QCompleter, QDialog, QStyle, QStyleOptionComboBox, QStylePainter,
+    QApplication, QPushButton, QFrame, QSizePolicy, QCheckBox, QComboBox,
+    QCompleter, QDialog, QStyle, QStyleOptionComboBox, QStyleOptionViewItem,
+    QStyledItemDelegate, QStylePainter,
     QVBoxLayout, QLabel, QLineEdit, QShortcut,
 )
 from PyQt5.QtCore import QSortFilterProxyModel
@@ -383,6 +384,168 @@ def row_label(text: str, max_width: int = ROW_LABEL_MAX_WIDTH) -> QLabel:
     return label
 
 
+# ---------------------------------------------------------------------------
+# Name on the left, qualifier on the right
+# ---------------------------------------------------------------------------
+
+# Muted inks for the qualifier: it is context, not the choice itself.
+SECONDARY_INK = QColor("#8a8a8a")
+SECONDARY_INK_DISABLED = QColor("#c4c4c4")
+
+#: Gap kept between the two halves, and the floor below which the primary is
+#: considered too squeezed to be worth qualifying.
+_GAP_EMS = 2
+_PRIMARY_FLOOR_CHARS = 6
+
+
+def split_gap(fm) -> int:
+    """Pixels kept between the two halves."""
+    return _GAP_EMS * fm.horizontalAdvance(" ")
+
+
+def split_layout(fm, width: int, primary: str, secondary: str) -> tuple:
+    """What fits in *width*: ``(primary, secondary)``, either elided.
+
+    The rule when both do not fit: **the secondary goes**.  The primary names the
+    thing chosen, so it is what must always be readable; a half-elided file path
+    qualifies nothing.  Only once the primary has room to stay legible is the
+    qualifier worth its space.
+    """
+    if secondary:
+        for_primary = width - fm.horizontalAdvance(secondary) - split_gap(fm)
+        if for_primary >= _PRIMARY_FLOOR_CHARS * fm.averageCharWidth():
+            return fm.elidedText(primary, Qt.ElideRight, for_primary), secondary
+    return fm.elidedText(primary, Qt.ElideRight, width), ""
+
+
+def draw_split_text(painter, rect, primary: str, secondary: str,
+                    ink, secondary_ink) -> None:
+    """Draw *primary* flush left and *secondary* flush right inside *rect*.
+
+    Right-aligning the qualifier is what lines the qualifiers up down a column
+    instead of leaving them ragged after names of different lengths.
+    """
+    painter.setPen(ink)
+    painter.drawText(rect, Qt.AlignLeft | Qt.AlignVCenter, primary)
+    if secondary:
+        painter.setPen(secondary_ink)
+        painter.drawText(rect, Qt.AlignRight | Qt.AlignVCenter, secondary)
+
+
+def split_width(fm, pairs) -> int:
+    """Width needed to show every ``(primary, secondary)`` pair aligned.
+
+    Aligned columns need the widest primary *plus* the widest secondary, which is
+    wider than the longest combined single line whenever the longest name and the
+    longest qualifier belong to different rows.
+    """
+    pairs = [(p, s) for p, s in pairs]
+    if not pairs:
+        return 0
+    widest_primary = max(fm.horizontalAdvance(p) for p, _ in pairs)
+    seconds = [s for _, s in pairs if s]
+    if not seconds:
+        return widest_primary
+    return widest_primary + split_gap(fm) + max(
+        fm.horizontalAdvance(s) for s in seconds)
+
+
+class SplitColumnDelegate(QStyledItemDelegate):
+    """Paints a popup row as name-left / qualifier-right.
+
+    The popup counterpart to :class:`RelabelledComboBox`, which already draws the
+    *closed* box that way.  Assign ``parts_for_index``: given a ``QModelIndex`` it
+    returns ``(primary, secondary)`` to split the row, or ``None`` to leave the
+    row to the default painter.
+
+    The item's own text is untouched — it stays the combined single string that
+    ``currentText()``, assistive technology and the tests all read.  This is
+    presentation only.
+    """
+
+    def __init__(self, parts_for_index: Callable, parent=None):
+        super().__init__(parent)
+        self.parts_for_index = parts_for_index
+
+    def _split(self, index) -> Optional[tuple]:
+        parts = self.parts_for_index(index)
+        if not parts:
+            return None
+        primary, secondary = parts
+        return (primary, secondary) if secondary else None
+
+    def text_rect(self, opt, style, widget):
+        """The band the two halves are drawn in: the whole row, inset.
+
+        Deliberately NOT ``SE_ItemViewItemText`` — that rect is sized to the row's
+        own text, so right-aligning inside it reproduces the ragged edge this class
+        exists to remove.  The full row is the only thing every row has in common.
+        """
+        margin = style.pixelMetric(QStyle.PM_FocusFrameHMargin, opt, widget) + 1
+        return opt.rect.adjusted(margin, 0, -margin, 0)
+
+    def row_layout(self, option, index) -> tuple:
+        """``(primary, secondary)`` exactly as this row will be drawn.
+
+        Shared with ``paint`` so a test can assert what reaches the screen rather
+        than re-deriving it. ``("", "")`` when the row is left to the default
+        painter.
+        """
+        parts = self._split(index)
+        if parts is None:
+            return "", ""
+        opt = QStyleOptionViewItem(option)
+        self.initStyleOption(opt, index)
+        widget = opt.widget
+        style = widget.style() if widget is not None else QApplication.style()
+        return split_layout(
+            opt.fontMetrics, self.text_rect(opt, style, widget).width(), *parts)
+
+    def paint(self, painter, option, index) -> None:
+        parts = self._split(index)
+        if parts is None:
+            super().paint(painter, option, index)
+            return
+        opt = QStyleOptionViewItem(option)
+        self.initStyleOption(opt, index)
+        # Background, hover and selection from the style; the text is ours, so it
+        # is withheld from the style rather than drawn twice.
+        opt.text = ""
+        widget = opt.widget
+        style = widget.style() if widget is not None else QApplication.style()
+        style.drawControl(QStyle.CE_ItemViewItem, opt, painter, widget)
+
+        rect = self.text_rect(opt, style, widget)
+        primary, secondary = split_layout(opt.fontMetrics, rect.width(), *parts)
+        enabled = bool(opt.state & QStyle.State_Enabled)
+        selected = bool(opt.state & QStyle.State_Selected)
+        role = QPalette.HighlightedText if selected else QPalette.Text
+        ink = opt.palette.color(
+            QPalette.Active if enabled else QPalette.Disabled, role)
+        painter.save()
+        draw_split_text(
+            painter, rect, primary, secondary, ink,
+            ink if selected else (SECONDARY_INK if enabled
+                                  else SECONDARY_INK_DISABLED),
+        )
+        painter.restore()
+
+    def sizeHint(self, option, index):
+        """Reserve room for both halves, so the popup opens wide enough to align."""
+        hint = super().sizeHint(option, index)
+        parts = self._split(index)
+        if parts is None:
+            return hint
+        opt = QStyleOptionViewItem(option)
+        self.initStyleOption(opt, index)
+        fm = opt.fontMetrics
+        needed = (split_width(fm, [parts]) + 2 * split_gap(fm)
+                  + fm.horizontalAdvance(' '))
+        if needed > hint.width():
+            hint.setWidth(needed)
+        return hint
+
+
 class RelabelledComboBox(QComboBox):
     """A combo box that can draw something other than its current item's text.
 
@@ -400,11 +563,6 @@ class RelabelledComboBox(QComboBox):
     Nothing else changes: the popup, the signals and ``currentText()`` all behave
     exactly as before, so selection logic is unaffected.
     """
-
-    #: Gap kept between the two halves, and the floor below which the primary is
-    #: considered too squeezed to be worth qualifying.
-    _GAP_EMS = 2
-    _PRIMARY_FLOOR_CHARS = 6
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -434,19 +592,9 @@ class RelabelledComboBox(QComboBox):
     def text_layout(self, width: int) -> tuple:
         """What actually fits in *width*: ``(primary, secondary)``, either elided.
 
-        The rule when both do not fit: **the secondary goes**. The primary names
-        the thing chosen, so it is what the box must always say; a half-elided
-        file path qualifies nothing. Only once the primary has room to stay
-        legible is the qualifier worth its space.
+        See ``split_layout`` for the rule when both do not fit.
         """
-        primary, secondary = self.displayed_parts()
-        fm = self.fontMetrics()
-        if secondary:
-            gap = self._GAP_EMS * fm.horizontalAdvance(" ")
-            for_primary = width - fm.horizontalAdvance(secondary) - gap
-            if for_primary >= self._PRIMARY_FLOOR_CHARS * fm.averageCharWidth():
-                return fm.elidedText(primary, Qt.ElideRight, for_primary), secondary
-        return fm.elidedText(primary, Qt.ElideRight, width), ""
+        return split_layout(self.fontMetrics(), width, *self.displayed_parts())
 
     # ------------------------------------------------------------------
     # Painting
@@ -468,10 +616,7 @@ class RelabelledComboBox(QComboBox):
         primary, secondary = self.text_layout(field.width())
 
         enabled = self.isEnabled()
-        painter.setPen(self.palette().color(
-            QPalette.Active if enabled else QPalette.Disabled, QPalette.Text
-        ) if enabled else QColor("#9a9a9a"))
-        painter.drawText(field, Qt.AlignLeft | Qt.AlignVCenter, primary)
-        if secondary:
-            painter.setPen(QColor("#8a8a8a") if enabled else QColor("#c4c4c4"))
-            painter.drawText(field, Qt.AlignRight | Qt.AlignVCenter, secondary)
+        ink = (self.palette().color(QPalette.Active, QPalette.Text) if enabled
+               else QColor("#9a9a9a"))
+        draw_split_text(painter, field, primary, secondary, ink,
+                        SECONDARY_INK if enabled else SECONDARY_INK_DISABLED)

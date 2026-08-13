@@ -16,7 +16,8 @@ from PyQt5.QtGui import QStandardItem, QStandardItemModel, QColor
 from biwt.gui.windows.base import BiwinformaticsWalkthroughWindow
 from biwt.gui.widgets import (
     GoBackButton, ContinueButton, ROW_LABEL_MAX_WIDTH, RelabelledComboBox,
-    action_icon, dropped_local_paths, row_arrow, row_label,
+    SplitColumnDelegate, action_icon, dropped_local_paths, row_arrow, row_label,
+    split_width,
 )
 from biwt.core import templates as core_templates
 from biwt.core.cell_types import alpha_key, names_match
@@ -212,6 +213,9 @@ class LoadCellParametersWindow(BiwinformaticsWalkthroughWindow):
             # Popup items can be short (grouped under a file header); the closed
             # box always names the source.  See RelabelledComboBox.
             dd.display_for_index = self._closed_label
+            # ...and the popup rows get the same treatment, so the sources line up
+            # down a column instead of trailing each name at its own indent.
+            dd.setItemDelegate(SplitColumnDelegate(self._popup_parts, dd))
             dd.setModel(self._model)
             dd.currentIndexChanged.connect(lambda _i: self._sync_session())
             # activated fires only for a real user pick, unlike
@@ -511,6 +515,20 @@ class LoadCellParametersWindow(BiwinformaticsWalkthroughWindow):
         item = self._model.item(index) if index >= 0 else None
         key = None if item is None else item.data(Qt.UserRole)
         return self._parts.get(key) if isinstance(key, tuple) else None
+
+    def _popup_parts(self, index):
+        """``(name, qualifier)`` for a popup row, or None to paint it normally.
+
+        By Source already carries the file in a group header, so a qualifier on
+        every row there would repeat it; only By Name splits.
+        """
+        if not self._sort_by_name:
+            return None
+        key = index.data(Qt.UserRole)
+        parts = self._parts.get(key) if isinstance(key, tuple) else None
+        # An entry with no qualifier (one library loaded) has nothing to align, so
+        # it is left to the default painter rather than split into an empty half.
+        return parts if parts and parts[1] else None
 
     def _rebuild_and_restore(self, saved: dict) -> None:
         """Rebuild the shared model, restore *saved*, and publish the result."""
@@ -829,12 +847,24 @@ class LoadCellParametersWindow(BiwinformaticsWalkthroughWindow):
     # Window sizing
     # ------------------------------------------------------------------
 
+    def _fitted_dropdown_width(self) -> int:
+        """Width a dropdown needs for every entry to be shown aligned.
+
+        Aligned columns need the widest name *plus* the widest source, which is
+        wider than the longest combined single line whenever the longest name and
+        the longest source belong to different rows.
+        """
+        fm = self.fontMetrics()
+        return max(
+            split_width(fm, list(self._parts.values())),
+            fm.horizontalAdvance(_NO_TEMPLATE_LABEL),
+            200,
+        )
+
     def _fit_width(self, s) -> None:
         """Resize so the longest label + longest cell-type name fit without truncation."""
         fm = self.fontMetrics()
-        labels = [f"{n} ({s})" if s else n for n, s in self._parts.values()]
-        labels.append(_NO_TEMPLATE_LABEL)
-        max_dd  = max((fm.horizontalAdvance(v) for v in labels), default=200)
+        max_dd = self._fitted_dropdown_width()
         max_lbl = min(ROW_LABEL_MAX_WIDTH, max(
             (fm.horizontalAdvance(ct) for ct in s.cell_types_list_final),
             default=100,

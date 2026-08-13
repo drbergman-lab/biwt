@@ -1376,3 +1376,137 @@ class TestLibraryPathsAreDeduplicated:
 
         assert s.template_library_paths == []
         assert win._template_db == {}
+
+
+class TestSourcesLineUpInAColumn:
+    """By Name draws the name left and the file right, so files share an edge.
+
+    The failure this guards is subtle: right-aligning inside
+    ``SE_ItemViewItemText`` looks correct but changes nothing, because that rect
+    is sized to each row's own text. It only shows up with files of *different*
+    name lengths — with equal-length names a ragged left edge and an aligned
+    right edge are indistinguishable.
+    """
+
+    @staticmethod
+    def _two_libraries(tmp_path):
+        short = tmp_path / "a.toml"
+        short.write_text('"Tumor" = "T"\n"default" = "D"\n')
+        long = tmp_path / "much_longer_library_name.toml"
+        long.write_text('"Macrophage" = "M"\n"T_cell" = "C"\n')
+        return _params_window([str(short), str(long)]), short, long
+
+    def _layouts(self, win):
+        """``{name: (primary, secondary)}`` as the popup actually draws them."""
+        from PyQt5.QtWidgets import QStyleOptionViewItem
+
+        dd = win._dropdowns[0][1]
+        view = dd.view()
+        view.resize(win._fitted_dropdown_width(), view.height())
+        delegate = dd.itemDelegate()
+        out = {}
+        for row in range(win._model.rowCount()):
+            index = win._model.index(row, 0)
+            parts = win._popup_parts(index)
+            if not parts:
+                continue
+            opt = QStyleOptionViewItem()
+            opt.initFrom(view)
+            opt.rect = view.visualRect(index)
+            out[parts[0]] = delegate.row_layout(opt, index)
+        return out
+
+    def test_the_band_does_not_depend_on_the_row_content(self, qapp, tmp_path):
+        """Alignment *is* a shared drawing band.
+
+        Given one row rect, every row must be drawn in the same band — otherwise
+        right-aligning inside it reproduces the ragged edge it was meant to fix.
+        Qt hands every row of a list the same rect, so this is the whole of it.
+        Deliberately not measured through ``visualRect``: that reflects each row's
+        own size hint and the view's layout state, neither of which is the
+        delegate's behaviour.
+        """
+        from PyQt5.QtCore import QRect
+        from PyQt5.QtWidgets import QStyleOptionViewItem
+
+        win, _, _ = self._two_libraries(tmp_path)
+        dd = win._dropdowns[0][1]
+        view = dd.view()
+        delegate = dd.itemDelegate()
+        row_rect = QRect(0, 0, 400, 20)          # one rect, as Qt would pass it
+
+        bands = {}
+        for row in range(win._model.rowCount()):
+            index = win._model.index(row, 0)
+            parts = win._popup_parts(index)
+            if not parts:
+                continue
+            opt = QStyleOptionViewItem()
+            opt.initFrom(view)
+            opt.rect = QRect(row_rect)
+            delegate.initStyleOption(opt, index)
+            band = delegate.text_rect(opt, view.style(), view)
+            bands[parts[0]] = (band.left(), band.right())
+
+        assert len(bands) > 1, "needs at least two split rows to mean anything"
+        assert len(set(bands.values())) == 1, f"bands differ by row: {bands}"
+        # And the band is the row, inset — not something narrower per row.
+        left, right = next(iter(bands.values()))
+        assert left > 0 and right < row_rect.right()
+        assert right - left > 0.9 * row_rect.width()
+
+    def test_every_row_keeps_its_file_name(self, qapp, tmp_path):
+        """A short name next to a long one must not tip one row over the elision
+        threshold while its neighbour stays intact."""
+        win, short, long = self._two_libraries(tmp_path)
+        drawn = self._layouts(win)
+        assert drawn, "no rows were split"
+        assert all(sec for _, sec in drawn.values()), drawn
+        assert drawn["Tumor"][1] == "a.toml"
+        assert drawn["Macrophage"][1] == "much_longer_library_name.toml"
+
+    def test_the_window_reserves_the_aligned_width(self, qapp, tmp_path):
+        """The reserved width must cover the aligned layout, not the ragged one.
+
+        Crossed on purpose: the longest *name* and the longest *file* are in
+        different rows, which is exactly when widest-name + widest-file exceeds
+        every combined single line — and when sizing from the latter clips.
+        """
+        from biwt.gui.widgets import split_width
+
+        win, _, _ = self._two_libraries(tmp_path)
+        fm = win.fontMetrics()
+        crossed = [("a_very_long_cell_type_name", "z.toml"),
+                   ("x", "a_very_long_library_name.toml")]
+        longest_single_line = max(
+            fm.horizontalAdvance(f"{n} ({s})") for n, s in crossed)
+        assert split_width(fm, crossed) > longest_single_line
+        # And the window asks for at least what its own entries need.
+        assert win._fitted_dropdown_width() >= split_width(
+            fm, list(win._parts.values()))
+
+    def test_by_source_rows_are_not_split(self, qapp, tmp_path):
+        """The group header already names the file; repeating it on every row
+        under it would be noise."""
+        win, _, _ = self._two_libraries(tmp_path)
+        win._sort_toggled(1, True)
+        for row in range(win._model.rowCount()):
+            assert win._popup_parts(win._model.index(row, 0)) is None
+
+    def test_the_none_row_is_never_split(self, qapp, tmp_path):
+        win, _, _ = self._two_libraries(tmp_path)
+        assert win._popup_parts(win._model.index(0, 0)) is None
+
+    def test_a_single_library_has_nothing_to_qualify(self, qapp, tmp_path):
+        """One file loaded means the source is never in question, so no split."""
+        only = tmp_path / "a.toml"
+        only.write_text('"Tumor" = "T"\n')
+        win = _params_window([str(only)])
+        assert all(win._popup_parts(win._model.index(r, 0)) is None
+                   for r in range(win._model.rowCount()))
+
+    def test_the_item_text_still_reads_as_one_string(self, qapp, tmp_path):
+        """The split is presentation only: the item's own text is what a closed
+        box, a screen reader and the rest of these tests read."""
+        win, _, _ = self._two_libraries(tmp_path)
+        assert "Tumor (a.toml)" in _row_labels(win)
