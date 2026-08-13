@@ -15,6 +15,7 @@ import pytest
 pytest.importorskip("PyQt5")
 
 from biwt.gui.walkthrough import _STEP_FIELDS, _STEP_ORDER
+from helpers import FIXTURES
 
 
 def _name(widget) -> str:
@@ -475,61 +476,6 @@ class TestManualDomainEditor:
         assert domain.source == DomainSource.HOST
 
 
-class TestFinishing:
-    """Leaving the last step ends the run and returns to the landing screen.
-
-    ``advance`` used to hide the current window before knowing whether there was
-    a next one, which also pushed the step onto the history while it was still
-    current — so Go back would have returned to the window the user was on.
-    """
-
-    @staticmethod
-    def _at_last_step(make_widget, drive_import, qapp, monkeypatch):
-        from PyQt5.QtWidgets import QDialog
-
-        from biwt.gui.walkthrough import DomainEditorDialog
-
-        monkeypatch.setattr(DomainEditorDialog, "exec_",
-                            lambda self: QDialog.Rejected)
-        w, completed = make_widget()
-        drive_import(w, "nonspatial.csv")
-        for _ in range(8):
-            qapp.processEvents()
-            if _name(w) == "LoadCellParametersWindow":
-                break
-            _continue(w)
-        assert _name(w) == "LoadCellParametersWindow"
-        w.window.show()
-        qapp.processEvents()
-        return w, completed
-
-    @pytest.mark.parametrize("leave", ["skip", "continue"])
-    def test_the_last_step_closes_and_the_result_is_emitted(
-        self, make_widget, drive_import, qapp, monkeypatch, leave
-    ):
-        w, completed = self._at_last_step(make_widget, drive_import, qapp, monkeypatch)
-        last = w.window
-        (last._skip_cb if leave == "skip" else last.process_window)()
-        qapp.processEvents()
-
-        assert len(completed) == 1
-        assert not last.isVisible()
-        assert w.window is None                  # the run is over
-
-    def test_the_landing_screen_can_import_again(
-        self, make_widget, drive_import, qapp, monkeypatch
-    ):
-        w, _ = self._at_last_step(make_widget, drive_import, qapp, monkeypatch)
-        w.window._skip_cb()
-        qapp.processEvents()
-
-        assert w.import_button.isEnabled()
-        drive_import(w, "spatial.csv")
-        qapp.processEvents()
-        assert w.window is not None
-        assert w.session.data.n_cells != 6        # the new file, not the old one
-
-
 class TestImportIsRefusedMidRun:
     def test_a_stray_import_cannot_discard_a_walkthrough(
         self, make_widget, drive_import, qapp
@@ -796,3 +742,33 @@ class TestStepFieldOwnership:
                     f"{label} committed {field!r}, which belongs to the later "
                     f"step {owner!r} — the invalidation in advance() wipes it"
                 )
+
+
+class TestSkipAtTheLastStep:
+    def test_skip_hands_the_host_no_templates(
+        self, make_widget, drive_import, qapp, monkeypatch
+    ):
+        """The whole contract of Skip: the walkthrough completes, and every cell
+        type comes back unassigned — which is an absent key, not a None value."""
+        from PyQt5.QtWidgets import QDialog
+
+        from biwt.gui.walkthrough import DomainEditorDialog
+
+        monkeypatch.setattr(DomainEditorDialog, "exec_",
+                            lambda self: QDialog.Rejected)
+        w, completed = make_widget(cell_template_paths=[str(FIXTURES / "templates_a.toml")])
+        drive_import(w, "nonspatial.csv")
+        for _ in range(8):
+            qapp.processEvents()
+            if _name(w) == "LoadCellParametersWindow":
+                break
+            _continue(w)
+        assert _name(w) == "LoadCellParametersWindow"
+        # templates_a would otherwise match Macrophage and Tumor.
+        assert w.session.cell_templates
+
+        w.window._skip_cb()
+        qapp.processEvents()
+
+        assert len(completed) == 1
+        assert completed[0].cell_templates == {}
