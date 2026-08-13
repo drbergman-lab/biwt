@@ -132,6 +132,12 @@ class BiwinformaticsWalkthroughWindow(QWidget, metaclass=_WidgetABCMeta):
         """Read UI state, commit decisions, and advance the walkthrough."""
 
 
+    def closeEvent(self, event):  # noqa: N802
+        """Closing a step abandons the run, so let the landing screen import again."""
+        self.walkthrough._allow_import(True)
+        super().closeEvent(event)
+
+
 class YesNoQueryWindow(BiwinformaticsWalkthroughWindow):
     """A step that asks one yes/no question and writes one session field.
 

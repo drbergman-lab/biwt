@@ -1309,6 +1309,7 @@ class BioinformaticsWalkthrough(QWidget):
         self.import_button = QPushButton("Import file…")
         self.import_button.setStyleSheet(
             "QPushButton {background-color: lightgreen; color: black; padding: 6px 18px;}"
+            "QPushButton:disabled {background-color: #d9d9d9; color: #999;}"
         )
         self.import_button.clicked.connect(self._import_cb)
 
@@ -1424,7 +1425,7 @@ class BioinformaticsWalkthrough(QWidget):
         return paths[0] if paths else None
 
     def dragEnterEvent(self, event) -> None:      # noqa: N802
-        if self._dropped_path(event) is not None:
+        if self.import_button.isEnabled() and self._dropped_path(event) is not None:
             self._set_drop_active(True)
             event.acceptProposedAction()
 
@@ -1470,6 +1471,17 @@ class BioinformaticsWalkthrough(QWidget):
             box.setTextFormat(Qt.PlainText)
             box.setText(str(err))
         box.exec_()
+
+    def _allow_import(self, allowed: bool) -> None:
+        """Importing resets the session, so a run in progress refuses it.
+
+        Ends when the result is emitted, or when the user closes a step window —
+        that abandons the run, and the landing screen is then all there is.
+        """
+        self.import_button.setEnabled(allowed)
+        self.import_button.setToolTip(
+            "" if allowed else "Finish or close the walkthrough first."
+        )
 
     def _import_cb(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
@@ -1533,8 +1545,7 @@ class BioinformaticsWalkthrough(QWidget):
 
     def _start_walkthrough(self) -> None:
         """Begin the step-window sequence after successful file import."""
-        self.import_button.setEnabled(False)
-        self.import_button.setToolTip("Finish or go back through the walkthrough first.")
+        self._allow_import(False)
         # Drop any window from a previous import: its handlers read the session
         # live, and advance() would otherwise push it onto the fresh history,
         # where Go back would show a window bound to data that no longer exists.
@@ -1698,8 +1709,7 @@ class BioinformaticsWalkthrough(QWidget):
             cell_templates=s.cell_templates,
         )
         self.on_complete(result)
-        self.import_button.setEnabled(True)
-        self.import_button.setToolTip("")
+        self._allow_import(True)
 
 
 # ---------------------------------------------------------------------------
