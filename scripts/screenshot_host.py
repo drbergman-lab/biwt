@@ -56,8 +56,13 @@ def main(argv=None) -> int:
                                     units="micron"),
     )
 
+    widget = create_biwt_widget(biwt_input, on_complete=on_complete)
     window = QMainWindow()
-    window.setCentralWidget(create_biwt_widget(biwt_input, on_complete=on_complete))
+    # The widget titles itself, but wrapping it in a QMainWindow means the frame
+    # shows the *window's* title — blank unless it is carried across, which left
+    # the import screenshot with an empty title bar.
+    window.setWindowTitle(widget.windowTitle())
+    window.setCentralWidget(widget)
     window.resize(1100, 820)
     window.show()
     return app.exec_()

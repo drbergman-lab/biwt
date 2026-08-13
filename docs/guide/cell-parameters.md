@@ -15,6 +15,13 @@ leaves every type unassigned; so does picking `(none)` for individual types.
 That said, this is where a table of positions becomes a runnable model. Positions say where
 cells are; parameters say what they do.
 
+<figure markdown>
+  ![The cell-parameters screen with no template libraries loaded](../assets/screenshots/templates-no-libraries.png)
+  <figcaption>With nothing loaded, every type sits on <strong>(none)</strong> and the actions that
+  need a library are disabled. This is a complete, valid answer — <strong>Continue</strong> and
+  <strong>Skip</strong> both hand back an empty set.</figcaption>
+</figure>
+
 ## Where the templates come from
 
 **BIWT ships none.** It is host-agnostic, and a phenotype block only means something to a
@@ -66,6 +73,14 @@ similarity match, preferring the host's own cell types where both name it equall
 that, whatever is named `default`: the host's if it has one, else the library's. Failing that,
 `(none)`.
 
+<figure markdown>
+  ![Every cell type matched to a template, two libraries loaded](../assets/screenshots/templates-auto-matched.png)
+  <figcaption>Two libraries loaded, every type matched by name. The file each template came from
+  is right-aligned in its own column, so the sources line up down the list rather than trailing
+  each name. With a single library loaded the column is dropped — there is nothing to tell
+  apart.</figcaption>
+</figure>
+
 Three actions redo that for you, each with the same icon in two places: the **Set all** row at the
 top applies it to every cell type, the small button beside a dropdown to that type alone.
 
@@ -77,6 +92,12 @@ top applies it to every cell type, the small button beside a dropdown to that ty
 | ![circular arrow](../assets/icons/action_auto_match.svg){ width="20" } | **Auto-match** | Re-runs the matching above, overriding your picks |
 | ![house in a circle](../assets/icons/action_default_template.svg){ width="20" } | **Assign default** | Assigns whatever is named `default` — the host's, else the library's |
 | ![slashed circle](../assets/icons/action_no_template.svg){ width="20" } | **Assign (none)** | Clears the assignment |
+
+<figure markdown>
+  ![One cell type set to (none) while the others keep their templates](../assets/screenshots/templates-tumor-none.png)
+  <figcaption><strong>(none)</strong> on one type only. Unassigned types are simply absent from
+  the result, so this is how you hand back some templates and not others.</figcaption>
+</figure>
 
 If two sources offer the same name — `tumor` in one library and `Tumor` in another, or one of them
 the host's own cell type — that row is marked with an **ⓘ**. Hover it to see who else defines the
