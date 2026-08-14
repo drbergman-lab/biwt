@@ -67,6 +67,17 @@ jobs:
       - name: Build
         run: mkdocs build --strict
 
+      # A plugin that silently did not run looks exactly like one that worked:
+      # same green build, no cards. Assert the output exists rather than trust it.
+      - name: Check the cards rendered
+        run: |
+          dir=site/assets/images/social
+          if [ ! -d "$dir" ] || [ -z "$(ls -A "$dir")" ]; then
+            echo "::error::no social cards in $dir — the plugin did not run"
+            exit 1
+          fi
+          echo "rendered $(ls "$dir" | wc -l | tr -d ' ') cards"
+
       - name: Upload Pages artifact
         if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v3
