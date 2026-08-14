@@ -32,6 +32,8 @@ tests/fixtures/toy_*.rds
 
 # MkDocs build output
 site/
+# Social-card renderer cache (fonts, rendered cards)
+.cache/
 
 # Generated documentation-screenshot data (see scripts/make_screenshot_data.py)
 screenshot_data.h5ad

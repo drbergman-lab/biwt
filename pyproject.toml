@@ -68,7 +68,10 @@ all = ["biwt[anndata,seurat,gui]"]
 
 # pip install biwt[docs]     — build the documentation site (mkdocs build)
 # black is not a linter here — mkdocstrings uses it to format rendered signatures.
-docs = ["mkdocs>=1.5", "mkdocs-material>=9.5", "mkdocstrings[python]>=0.24", "black>=24"]
+# The [imaging] extra is the social-card renderer (Pillow + CairoSVG). It also
+# needs a native libcairo, which pip does not supply -- see .github/workflows/docs.yml.
+docs = ["mkdocs>=1.5", "mkdocs-material[imaging]>=9.5", "mkdocstrings[python]>=0.24",
+        "black>=24"]
 
 # pip install biwt[dev]      — development / testing extras
 dev = ["pytest>=7", "pytest-qt", "pyflakes>=3", "biwt[anndata,gui]"]

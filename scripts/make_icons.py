@@ -21,8 +21,19 @@ TARGETS = [
     # Width-bound rather than square: it sits inline at the top of the README, so
     # its own aspect is what should survive.
     ("biwt_icon.png", "docs/assets/biwt-sticker.png", None),
+    # GitHub's repo social preview. Upload by hand under Settings -> Social
+    # preview; there is no file location the repo picks up on its own.
+    ("biwt_icon.png", "docs/assets/social-preview.png", "github"),
 ]
 STICKER_WIDTH = 420
+
+# GitHub's own template: 1280x640, and it asks for a 40 pt border around anything
+# that matters because the card is cropped at some sizes. Doubled to 80 px here,
+# since the sticker carries the wordmark and has nothing to gain from filling the
+# frame edge to edge.
+GH_CARD = (1280, 640)
+GH_SAFE = 80
+GH_GROUND = (0, 150, 136, 255)   # the site header's teal
 
 
 def square_pad(im):
@@ -54,7 +65,18 @@ def main(argv=None) -> int:
 
     for master, out_rel, size in TARGETS:
         im = Image.open(src / master).convert("RGBA")
-        if size is None:
+        if size == "github":
+            # Fit the sticker inside the safe area, centred on the ground. No text
+            # is drawn: the sticker already carries the name and the tagline, so
+            # this needs no font and cannot render one differently per machine.
+            card = Image.new("RGBA", GH_CARD, GH_GROUND)
+            room = (GH_CARD[0] - 2 * GH_SAFE, GH_CARD[1] - 2 * GH_SAFE)
+            art = im.copy()
+            art.thumbnail(room, Image.LANCZOS)
+            card.alpha_composite(art, ((GH_CARD[0] - art.width) // 2,
+                                       (GH_CARD[1] - art.height) // 2))
+            im = card
+        elif size is None:
             h = round(im.height * STICKER_WIDTH / im.width)
             im = im.resize((STICKER_WIDTH, h), Image.LANCZOS)
         else:

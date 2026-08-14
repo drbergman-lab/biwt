@@ -41,10 +41,28 @@ jobs:
           python-version: "3.12"
           cache: pip
 
+      # CairoSVG renders the social cards through a native libcairo that pip
+      # cannot install. Without these the build fails here rather than quietly
+      # skipping the cards: GitHub sets CI=true, and that is what the social
+      # plugin is gated on.
+      - name: Install the card renderer's system libraries
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libcairo2-dev libfreetype6-dev libffi-dev libjpeg-dev libpng-dev libz-dev
+
       # mkdocstrings imports the package to read docstrings, so the docs
       # extra alone is not enough — biwt itself must be importable.
       - name: Install BIWT with docs dependencies
         run: pip install -e ".[docs]"
+
+      # The renderer fetches its font once; keyed on the config so ordinary text
+      # edits do not re-fetch it.
+      - name: Cache the card renderer
+        uses: actions/cache@v4
+        with:
+          path: .cache
+          key: mkdocs-social-${{ hashFiles('mkdocs.yml') }}
 
       - name: Build
         run: mkdocs build --strict

@@ -81,7 +81,7 @@ result.cell_templates == {
 Content is opaque and complete: you get exactly what your template file holds, so never resolve
 `name` against your own library to recover it — the user may have loaded a file you do not know
 about. Two more rules bind a host here, on the field's own page:
-[`BiwtResult.cell_templates`](api-contract.md#biwtresult--biwt-to-host).
+[`BiwtResult.cell_templates`](api-contract.md#biwtresult-biwt-to-host).
 
 Assembly is yours. For a PhysiCell-style host, that is one `<cell_definition>` per type
 wrapping the content:
