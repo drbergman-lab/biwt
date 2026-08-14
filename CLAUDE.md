@@ -101,8 +101,10 @@ under **Settings → Social preview**.
 
 Social cards for the docs site come from the `social` plugin, gated `enabled: !ENV [CI, false]`.
 The renderer needs a native libcairo that pip does not install, so ungated it would break
-`mkdocs serve` for anyone without it; CI sets `CI=true` and installs the system libraries. That
-also means a local build never produces cards — the PR's Docs check is where they are verified.
+`mkdocs serve` for anyone without it; CI sets `CI=true` and installs both the system libraries and
+`mkdocs-material[imaging]`. It is installed in the workflow rather than in `biwt[docs]`, so a
+contributor's docs install does not carry a native-dependent package only CI runs. That also means
+a local build never produces cards — the PR's Docs check is where they are verified.
 
 The README header must stay an absolute `raw.githubusercontent.com/.../main/...` URL — a relative
 path does not render on PyPI. It 404s on a branch until the change reaches `main`.

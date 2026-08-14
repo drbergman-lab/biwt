@@ -53,8 +53,14 @@ jobs:
 
       # mkdocstrings imports the package to read docstrings, so the docs
       # extra alone is not enough — biwt itself must be importable.
+      #
+      # The card renderer is installed here rather than in the docs extra: only
+      # this job ever runs it, since the social plugin is gated on CI, and
+      # CairoSVG wants a native libcairo that pip does not supply. Keeping it out
+      # of biwt[docs] means a contributor's docs install does not carry a
+      # native-dependent package they never exercise.
       - name: Install BIWT with docs dependencies
-        run: pip install -e ".[docs]"
+        run: pip install -e ".[docs]" "mkdocs-material[imaging]>=9.5"
 
       # The renderer fetches its font once; keyed on the config so ordinary text
       # edits do not re-fetch it.
