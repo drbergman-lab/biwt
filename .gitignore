@@ -18,6 +18,10 @@ env/
 # testing session — a tracked copy would collect everyone's local edits.
 /scratch_*.py
 
+# Icon masters (~3 MB, ~7000 px). scripts/make_icons.py derives the committed
+# assets from them; the originals buy nothing in the sdist or in a clone.
+/biwt_icon*.png
+
 # Miscellaneous
 *.DS_Store
 

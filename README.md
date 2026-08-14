@@ -1,3 +1,8 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/drbergman-lab/biwt/main/docs/assets/biwt-sticker.png"
+       alt="BIWT" width="240">
+</p>
+
 # BIWT — BioInformatics WalkThrough
 
 A guided wizard for importing single-cell bioinformatics data and generating initial conditions for agent-based models (ABMs). Designed as a standalone pip-installable package that can be embedded in any host application. Currently integrated with PhysiCell Studio.
@@ -157,6 +162,7 @@ mkdocs.yml
 - [x] `tomli` in core dependencies (fixes import crash on Python 3.9/3.10)
 - [x] Step predicate extraction for testability
 - [x] `[project.urls]` metadata so the PyPI page links to the repo, docs, and issues
+- [x] Project mark: window icon on the widget and every step window, docs logo and favicon, README header (`scripts/make_icons.py` derives them)
 - [x] MkDocs Material documentation site published to GitHub Pages by `.github/workflows/docs.yml`
 - [x] Docs: user guide (all wizard steps), recipes (Visium / non-spatial / spot deconvolution), host-integration guide, mkdocstrings API reference
 - [x] `LoadError.docs_url`: environment-related import failures link to the setup docs from the "Import failed" dialog; file-related failures stay plain text. Missing dependencies point at the install page, broken R stacks at troubleshooting

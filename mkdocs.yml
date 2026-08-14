@@ -10,6 +10,9 @@ copyright: BSD-3-Clause
 
 theme:
   name: material
+  # The subtitled sticker is unreadable at these sizes; both take the mini.
+  logo: assets/logo.png
+  favicon: assets/favicon.png
   features:
     - navigation.tabs
     - navigation.sections

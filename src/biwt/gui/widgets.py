@@ -334,6 +334,19 @@ def action_icon(name: str) -> QIcon:
     return QIcon(str(ICON_DIR / f"action_{name}.svg"))
 
 
+def biwt_icon() -> QIcon:
+    """BIWT's own mark, for the title bar and the dock or taskbar entry.
+
+    Set per window, never with ``QApplication.setWindowIcon``: BIWT is usually a
+    tab inside somebody else's application, and setting the *application* icon
+    would replace that application's own.
+
+    The hex sticker without its subtitle — the subtitle is unreadable below about
+    200 px, and this is drawn at 16-64.
+    """
+    return QIcon(str(ICON_DIR / "biwt.png"))
+
+
 ROW_ARROW = "\u21d2"
 
 
