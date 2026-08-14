@@ -337,19 +337,11 @@ def action_icon(name: str) -> QIcon:
 def biwt_icon() -> QIcon:
     """BIWT's own mark, for the title bar and the dock or taskbar entry.
 
-    Set per window, never with ``QApplication.setWindowIcon``: BIWT is usually a
-    tab inside somebody else's application, and setting the *application* icon
-    would replace that application's own.
+    Set per window, never with ``QApplication.setWindowIcon``: that is one icon
+    per process, and BIWT is usually a tab inside somebody else's application.
 
-    So on macOS this is invisible — the Dock and the app switcher show one icon
-    per process, taken from the bundle or that application-level call, and there
-    is no per-window Dock entry for a widget icon to appear in. It shows on
-    Windows and Linux taskbars. A standalone launcher, where BIWT *is* the
-    application, is the place to call ``QApplication.setWindowIcon`` — see
-    ``scripts/screenshot_host.py``.
-
-    The hex sticker without its subtitle — the subtitle is unreadable below about
-    200 px, and this is drawn at 16-64.
+    So this is invisible on macOS, whose Dock has no per-window entry — only a
+    standalone launcher should set the application icon.  Do not "fix" that here.
     """
     return QIcon(str(ICON_DIR / "biwt.png"))
 

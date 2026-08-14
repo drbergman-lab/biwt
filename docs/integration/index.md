@@ -38,11 +38,10 @@ another dataset.
 
 ### 3. The application icon stays yours
 
-BIWT sets its mark on its own widget and on each step window, and never calls
-`QApplication.setWindowIcon` — that is one icon per process, and taking it would replace yours.
-On macOS the Dock and the app switcher show only that process-level icon, so BIWT's per-window
-icons are invisible there and your application's own icon is what a user sees. That is the
-intended outcome; set your icon as you normally would.
+BIWT marks its own widget and step windows, and never calls `QApplication.setWindowIcon` —
+that is one icon per process and taking it would replace yours. On macOS, where the Dock shows
+only that process-level icon, BIWT's per-window icons are invisible and yours is what a user
+sees.
 
 ## Optional inputs worth wiring up
 

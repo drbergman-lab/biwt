@@ -1,25 +1,10 @@
-#!/usr/bin/env python3
-"""Derive the committed icon assets from the two hex-sticker masters.
+"""Derive the committed icon assets from the hex-sticker masters.
 
     python scripts/make_icons.py            # masters in the repo root
     python scripts/make_icons.py --src DIR
 
-Requires Pillow, which the dev and docs installs already pull in.
-
-The masters are ~7000 px and ~3 MB each, so they are not committed — a file that
-size in the sdist and in every clone buys nothing that the derived assets do not.
-Keep them wherever you keep artwork and re-run this when they change.
-
-  biwt_icon.png       the full sticker, "BIWT" over "BioInformatics WalkThrough"
-  biwt_icon_mini.png  the same hex with the subtitle dropped
-
-Which master goes where is decided by render size, not by preference. The
-subtitle is illegible below roughly 200 px, so anything small takes the mini:
-mkdocs-material draws a header logo about 24 px tall, and a favicon 16-32 px. The
-full sticker is only used where it is rendered large, at the top of the README.
-
-Everything is square-padded on transparency. A window icon in a non-square
-aspect gets letterboxed or stretched by whichever platform is drawing it.
+Requires Pillow, which the dev and docs installs already pull in. The masters are
+gitignored; see CLAUDE.md for which one feeds which asset, and why.
 """
 
 from __future__ import annotations

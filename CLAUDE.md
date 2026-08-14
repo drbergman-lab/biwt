@@ -80,6 +80,28 @@ BIWT integrates with PhysiCell Studio as an optional installed dependency:
 - **Test classes**: `Test<Feature>` (e.g. `TestStepSequencing`)
 - **Test files**: `test_<module>.py`
 
+## Project Icon
+
+The two masters are gitignored (`/biwt_icon*.png`) — ~7000 px and ~3 MB each, which would more
+than double the sdist and sit in every clone to buy nothing the derivatives do not. Keep them
+with the artwork; re-run `python scripts/make_icons.py` when they change.
+
+| Master | Feeds |
+|---|---|
+| `biwt_icon.png` — full sticker, "BIWT" over "BioInformatics WalkThrough" | `docs/assets/biwt-sticker.png`, the README header only |
+| `biwt_icon_mini.png` — same hex, subtitle dropped | `src/biwt/gui/icons/biwt.png`, `docs/assets/logo.png`, `docs/assets/favicon.png` |
+
+Render size decides, not preference: the subtitle is illegible below ~200 px, and
+mkdocs-material draws a header logo ~24 px tall and a favicon at 16–32. Anything small takes the
+mini. The full sticker is only used where it renders large.
+
+The README header must stay an absolute `raw.githubusercontent.com/.../main/...` URL — a relative
+path does not render on PyPI. It 404s on a branch until the change reaches `main`.
+
+Never call `QApplication.setWindowIcon` from the package: that is one icon per process and
+embedding would take the host's. Standalone launchers do it themselves. On macOS the per-window
+icons BIWT does set are invisible, since the Dock has no per-window entry.
+
 ## Publishing a Release
 
 Pushing a version tag triggers CI (`.github/workflows/publish.yml`) to build and publish to PyPI automatically. No manual build or upload needed:
