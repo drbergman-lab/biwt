@@ -30,6 +30,7 @@ import sys
 from PyQt5.QtWidgets import QApplication, QMainWindow
 
 from biwt.gui.theme import apply_light_palette
+from biwt.gui.widgets import biwt_icon
 from biwt.gui.walkthrough import create_biwt_widget
 from biwt.types import BiwtInput, DomainSpec
 
@@ -47,6 +48,11 @@ def on_complete(result) -> None:
 def main(argv=None) -> int:
     app = QApplication(argv if argv is not None else sys.argv)
     apply_light_palette(app)
+    # The Dock and the taskbar show one icon per *process*, so this is the only
+    # call that puts BIWT's mark there. The package deliberately does not make it:
+    # embedded in another application it would replace that application's icon.
+    # Standalone, BIWT *is* the application, so here it is ours to set.
+    app.setWindowIcon(biwt_icon())
 
     biwt_input = BiwtInput(
         # Deliberately nothing else: no host_name, no host_cell_type_names, no

@@ -22,7 +22,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt
 
-from biwt.gui.widgets import GoBackButton, ContinueButton
+from biwt.gui.widgets import GoBackButton, ContinueButton, biwt_icon
 
 
 # ---------------------------------------------------------------------------
@@ -84,6 +84,10 @@ class BiwinformaticsWalkthroughWindow(QWidget, metaclass=_WidgetABCMeta):
         # correct 1-based step number that will be shown to the user.
         self._step_number = walkthrough.current_window_idx + 2
         self.setWindowTitle(f"BioInformatics WalkThrough — Step {self._step_number}")
+        # Each step is its own top-level window, so each needs the icon: without
+        # it they appear in the dock or taskbar under whatever generic mark the
+        # host application's interpreter carries.
+        self.setWindowIcon(biwt_icon())
 
     def setLayout(self, layout) -> None:  # noqa: N802
         """Wrap *layout* with margins and the styling BIWT relies on."""

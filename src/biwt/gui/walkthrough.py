@@ -67,6 +67,7 @@ from biwt.core import domain as domain_module
 from biwt.core.cell_types import alpha_key, default_name_matches
 from biwt.core.positioning import build_ic_dataframe
 from biwt.gui.widgets import (
+    biwt_icon,
     QHLine, QLineEdit_custom, QVLine, SectionHeader, dropped_local_paths,
 )
 
@@ -1242,6 +1243,7 @@ class BioinformaticsWalkthrough(QWidget):
     ):
         super().__init__()
         self.setWindowTitle(f"BioInformatics WalkThrough (BIWT) v{__version__}")
+        self.setWindowIcon(biwt_icon())
         self.setWindowFlags(Qt.Window)
         self.setAcceptDrops(True)
 

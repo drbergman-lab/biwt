@@ -334,6 +334,18 @@ def action_icon(name: str) -> QIcon:
     return QIcon(str(ICON_DIR / f"action_{name}.svg"))
 
 
+def biwt_icon() -> QIcon:
+    """BIWT's own mark, for the title bar and the dock or taskbar entry.
+
+    Set per window, never with ``QApplication.setWindowIcon``: that is one icon
+    per process, and BIWT is usually a tab inside somebody else's application.
+
+    So this is invisible on macOS, whose Dock has no per-window entry — only a
+    standalone launcher should set the application icon.  Do not "fix" that here.
+    """
+    return QIcon(str(ICON_DIR / "biwt.png"))
+
+
 ROW_ARROW = "\u21d2"
 
 

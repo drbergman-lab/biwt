@@ -36,6 +36,13 @@ reset. If your application should dismiss the tab, do it in your handler.
 Importing a new file resets the session, so the same widget instance can be reused for
 another dataset.
 
+### 3. The application icon stays yours
+
+BIWT marks its own widget and step windows, and never calls `QApplication.setWindowIcon` —
+that is one icon per process and taking it would replace yours. On macOS, where the Dock shows
+only that process-level icon, BIWT's per-window icons are invisible and yours is what a user
+sees.
+
 ## Optional inputs worth wiring up
 
 `BiwtInput` has four fields beyond the domain that meaningfully improve the experience if
