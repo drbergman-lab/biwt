@@ -57,7 +57,7 @@ definition.
 
 Types you left unassigned are **absent** from the mapping, so `{}` is a normal result — that is
 what Skip produces. Hosts have two more rules to follow here; see
-[the API contract](../integration/api-contract.md#biwtresult--biwt-to-host).
+[the API contract](../integration/api-contract.md#biwtresult-biwt-to-host).
 
 ## What the host does with it
 

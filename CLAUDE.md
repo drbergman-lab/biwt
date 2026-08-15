@@ -95,6 +95,18 @@ Render size decides, not preference: the subtitle is illegible below ~200 px, an
 mkdocs-material draws a header logo ~24 px tall and a favicon at 16–32. Anything small takes the
 mini. The full sticker is only used where it renders large.
 
+GitHub's repo card is generated, not committed: `make_icons.py` writes
+`docs/assets/social-preview.png` (gitignored) at 1280×640 with the sticker inside an 80 px margin,
+double the 40 pt border GitHub asks for. Upload it under **Settings → Social preview**, where
+GitHub keeps its own copy — nothing in the repo or on the docs site reads the file.
+
+Social cards for the docs site come from the `social` plugin, gated `enabled: !ENV [CI, false]`.
+The renderer needs a native libcairo that pip does not install, so ungated it would break
+`mkdocs serve` for anyone without it; CI sets `CI=true` and installs both the system libraries and
+`mkdocs-material[imaging]`. It is installed in the workflow rather than in `biwt[docs]`, so a
+contributor's docs install does not carry a native-dependent package only CI runs. That also means
+a local build never produces cards — the PR's Docs check is where they are verified.
+
 The README header must stay an absolute `raw.githubusercontent.com/.../main/...` URL — a relative
 path does not render on PyPI. It 404s on a branch until the change reaches `main`.
 

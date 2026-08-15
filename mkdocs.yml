@@ -41,6 +41,16 @@ theme:
 
 plugins:
   - search
+  # Open Graph cards for links shared on Slack, Mastodon, and the rest. Gated on
+  # CI: the renderer needs a native libcairo that a plain `pip install` does not
+  # bring, so an ungated plugin breaks `mkdocs serve` for anyone without it. CI
+  # sets CI=true and installs the system libraries.
+  - social:
+      enabled: !ENV [CI, false]
+      cards_layout_options:
+        # Matches the site header, and the dark hex reads well on it.
+        background_color: "#009688"
+        color: "#ffffff"
   - mkdocstrings:
       handlers:
         python:

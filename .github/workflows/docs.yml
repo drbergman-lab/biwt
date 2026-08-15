@@ -41,13 +41,48 @@ jobs:
           python-version: "3.12"
           cache: pip
 
+      # CairoSVG renders the social cards through a native libcairo that pip
+      # cannot install. Without these the build fails here rather than quietly
+      # skipping the cards: GitHub sets CI=true, and that is what the social
+      # plugin is gated on.
+      - name: Install the card renderer's system libraries
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libcairo2-dev libfreetype6-dev libffi-dev libjpeg-dev libpng-dev libz-dev
+
       # mkdocstrings imports the package to read docstrings, so the docs
       # extra alone is not enough — biwt itself must be importable.
+      #
+      # The card renderer is installed here rather than in the docs extra: only
+      # this job ever runs it, since the social plugin is gated on CI, and
+      # CairoSVG wants a native libcairo that pip does not supply. Keeping it out
+      # of biwt[docs] means a contributor's docs install does not carry a
+      # native-dependent package they never exercise.
       - name: Install BIWT with docs dependencies
-        run: pip install -e ".[docs]"
+        run: pip install -e ".[docs]" "mkdocs-material[imaging]>=9.5"
+
+      # The renderer fetches its font once; keyed on the config so ordinary text
+      # edits do not re-fetch it.
+      - name: Cache the card renderer
+        uses: actions/cache@v4
+        with:
+          path: .cache
+          key: mkdocs-social-${{ hashFiles('mkdocs.yml') }}
 
       - name: Build
         run: mkdocs build --strict
+
+      # A plugin that silently did not run looks exactly like one that worked:
+      # same green build, no cards. Assert the output exists rather than trust it.
+      - name: Check the cards rendered
+        run: |
+          dir=site/assets/images/social
+          if [ ! -d "$dir" ] || [ -z "$(ls -A "$dir")" ]; then
+            echo "::error::no social cards in $dir — the plugin did not run"
+            exit 1
+          fi
+          echo "rendered $(ls "$dir" | wc -l | tr -d ' ') cards"
 
       - name: Upload Pages artifact
         if: github.event_name != 'pull_request'
