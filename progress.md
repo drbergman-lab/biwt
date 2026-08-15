@@ -2101,3 +2101,21 @@ reproducible from the file alone.
 Four findings were left alone on the same reasoning in reverse: the signal to the user is already
 clear, so a warning would only be noise. And one was not a bug — the domain editor defaulting to
 the data extent is the intent.
+
+---
+
+## 2026-08-15: "Skip domain validation" removed from the home screen
+
+Nothing on that screen validated anything. The checkbox let the user pre-answer a question the
+positions step asks against data that has not been imported yet — and phrased it as turning off
+a check, which is not a decision anyone can make before seeing the mismatch. The mismatch dialog
+itself remains the place where the domain is judged, and it is worth keeping precisely because it
+is the one moment the data's extent and the host's domain are visible together.
+
+`BiwtInput.domain_accepted` is now the only way to suppress the auto-opened dialog, so it is read
+at each import like the rest of the host's input rather than only at construction. The old
+read-once rule existed to stop a later host value contradicting a box already on screen; with no
+box, a run simply sees what the host currently says.
+
+The cluster-column shortcut stays. It answers a question whose cost the user can predict — a long
+column list to scroll — without needing to see the file first.

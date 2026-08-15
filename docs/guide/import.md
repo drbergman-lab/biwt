@@ -22,11 +22,6 @@ not — which is usual, since most objects call it `cell_type`, `celltype`, or
 Set it to your annotation column's name if you import many files with the same schema;
 otherwise leave it and pick from the dropdown.
 
-## Skip domain validation
-
-The checkbox below suppresses the [domain editor](domain.md) auto-opening at the positions
-step. Leave it unchecked unless you already know your domain is right.
-
 ## What BIWT reads from each format
 
 | Format | Read via | Supported objects |

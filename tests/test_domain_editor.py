@@ -1,5 +1,5 @@
 """DomainEditorDialog behavior — bounds validation, extents, and how a host
-seeds the "Skip domain validation" checkbox.
+suppresses the auto-opened dialog.
 
 Driven headless against the real dialog; the ``qapp`` fixture lives in
 conftest.py.
@@ -334,30 +334,19 @@ class TestZRowIsPresentButInert:
         assert scaled_editor._extent_fields["depth"].text() == "20"
 
 
-class TestDomainAcceptedSeedsCheckbox:
-    """BiwtInput.domain_accepted sets the checkbox's default, not the outcome.
+class TestDomainAcceptedIsHostOnly:
+    """The home screen offers no control for it — nothing there validates anything."""
 
-    It used to be OR-ed with the checkbox, so a host passing True left the user
-    looking at an unticked box that did nothing and could not be untangled.
-    """
+    def test_no_domain_checkbox_on_the_home_screen(self, qapp):
+        from PyQt5.QtWidgets import QCheckBox
 
-    @pytest.mark.parametrize("host_value", [True, False])
-    def test_host_value_seeds_the_checkbox(self, qapp, host_value):
         w = create_biwt_widget(
-            BiwtInput(preferred_domain=DOMAIN, domain_accepted=host_value),
-            on_complete=lambda _r: None,
+            BiwtInput(preferred_domain=DOMAIN), on_complete=lambda _r: None,
         )
-        assert w._domain_accepted_cb.isChecked() is host_value
-        w.deleteLater()
-
-    @pytest.mark.parametrize("host_value", [True, False])
-    def test_user_can_override_in_either_direction(self, qapp, host_value):
-        w = create_biwt_widget(
-            BiwtInput(preferred_domain=DOMAIN, domain_accepted=host_value),
-            on_complete=lambda _r: None,
-        )
-        w._domain_accepted_cb.setChecked(not host_value)
-        assert w._domain_accepted_cb.isChecked() is (not host_value)
+        assert not hasattr(w, "_domain_accepted_cb")
+        assert not [
+            cb for cb in w.findChildren(QCheckBox) if "domain" in cb.text().lower()
+        ]
         w.deleteLater()
 
 

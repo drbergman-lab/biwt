@@ -322,19 +322,16 @@ class TestHostInputResolution:
         with pytest.raises(TypeError, match="BiwtInput or a callable"):
             create_biwt_widget({"preferred_domain": None})
 
-    def test_domain_accepted_from_a_later_resolution_is_ignored(
-        self, make_widget, drive_import
-    ):
-        """The checkbox is on screen by then, and it is the documented authority."""
+    def test_domain_accepted_is_read_at_each_import(self, make_widget, drive_import):
+        """No user-facing control latches it, so the run sees the host's current value."""
         from biwt.types import BiwtInput
 
         box = [False]
         w, _ = make_widget(_source=lambda: BiwtInput(domain_accepted=box[0]))
-        assert w._domain_accepted_cb.isChecked() is False
 
         box[0] = True
         drive_import(w, "spatial.csv")
-        assert w.session.domain_accepted is False
+        assert w.session.domain_accepted is True
 
 
 class TestPositionsDomainAutoShow:
@@ -682,7 +679,7 @@ class TestStepFieldOwnership:
     def test_no_step_commits_a_downstream_field(
         self, make_widget, drive_import, qapp, fixture, answers
     ):
-        # Skip domain validation: reaching the positions step otherwise raises
+        # Pre-accept the domain: reaching the positions step otherwise raises
         # the modal domain editor, which a headless run cannot dismiss.
         w, _ = make_widget(domain_accepted=True)
         drive_import(w, fixture)

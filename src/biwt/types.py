@@ -147,10 +147,9 @@ class BiwtInput:
         type", which comes back marked with :data:`HOST_SOURCE` rather than a file
         path.  They match on equal footing with templates from files.
     domain_accepted:
-        Seeds the "Skip domain validation" checkbox.  The checkbox,
-        not this field, decides the outcome — the user stays in control.  Read
-        only when the widget is built, since the checkbox is on screen from then
-        on: a different value from a later resolution is deliberately ignored.
+        ``True`` suppresses the domain-mismatch dialog that otherwise opens by
+        itself at the positions step.  The user can still open the domain editor
+        from that step.  Read at the start of every run, like the rest of the input.
     host_name:
         Your application's name, shown in BIWT's UI — the domain editor's
         "Use <host_name> Domain" button, and the tag on your own cell types at the

@@ -109,9 +109,8 @@ binding on the user. Used for [rename suggestions](../guide/rename-cell-types.md
 at the [cell-parameters step](../guide/cell-parameters.md), where assigning one comes back marked
 `HOST_SOURCE` (see `cell_templates` below). A name defined both ways resolves to the host.
 
-**`domain_accepted`** — set `True` to pre-tick **Skip domain validation** on the import screen,
-suppressing the automatic domain-mismatch dialog. This sets the checkbox's default; the user
-can untick it and get the dialog back.
+**`domain_accepted`** — set `True` to suppress the automatic domain-mismatch dialog at the
+positions step. The user can still open the domain editor from there.
 
 **`host_name`** — appears in the domain editor as `Use <host_name> Domain`. Set it; the
 default `"Host"` reads like a placeholder.
