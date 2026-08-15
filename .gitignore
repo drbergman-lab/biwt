@@ -18,6 +18,11 @@ env/
 # testing session — a tracked copy would collect everyone's local edits.
 /scratch_*.py
 
+# GitHub's repo social preview. Generated on demand by scripts/make_icons.py and
+# uploaded by hand under Settings -> Social preview; GitHub keeps its own copy, so
+# nothing here or on the docs site reads it.
+/docs/assets/social-preview.png
+
 # Icon masters (~3 MB, ~7000 px). scripts/make_icons.py derives the committed
 # assets from them; the originals buy nothing in the sdist or in a clone.
 /biwt_icon*.png

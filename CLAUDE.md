@@ -95,9 +95,10 @@ Render size decides, not preference: the subtitle is illegible below ~200 px, an
 mkdocs-material draws a header logo ~24 px tall and a favicon at 16–32. Anything small takes the
 mini. The full sticker is only used where it renders large.
 
-`docs/assets/social-preview.png` is GitHub's repo card, 1280×640 with the sticker inside an 80 px
-margin — double the 40 pt border GitHub asks for. Nothing picks it up automatically: upload it
-under **Settings → Social preview**.
+GitHub's repo card is generated, not committed: `make_icons.py` writes
+`docs/assets/social-preview.png` (gitignored) at 1280×640 with the sticker inside an 80 px margin,
+double the 40 pt border GitHub asks for. Upload it under **Settings → Social preview**, where
+GitHub keeps its own copy — nothing in the repo or on the docs site reads the file.
 
 Social cards for the docs site come from the `social` plugin, gated `enabled: !ENV [CI, false]`.
 The renderer needs a native libcairo that pip does not install, so ungated it would break
