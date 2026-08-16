@@ -52,7 +52,7 @@ src/biwt/
       rename_cell_types.py
       cell_counts.py
       positions.py
-      load_cell_parameters.py
+      load_cell_templates.py
 tests/
   test_session.py       — Tests covering session logic end-to-end
   fixtures/             — CSV test fixtures

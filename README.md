@@ -95,7 +95,7 @@ tests/
   test_walkthrough_nav.py — Real controller: advance / go back / re-import
   test_name_matching.py — "same cell type?" rules
   test_cell_templates.py — Template files and per-type pre-selection
-  test_load_cell_parameters.py — The cell-parameters window
+  test_load_cell_templates.py — The cell-templates window
   test_gui_smoke.py     — Headless Qt import-path and error-dialog tests
   test_positions_plot.py — Spatial placement / plot scaling tests
   test_static_checks.py — pyflakes name resolution over every module

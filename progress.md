@@ -2218,11 +2218,20 @@ libraries. `TestNaming.test_both_screens_call_them_cell_templates` sweeps the la
 buttons of both screens for the old wording, because `SectionHeader` is a disabled `QPushButton`
 and a `QLabel`-only sweep misses the header this whole change is about.
 
-The step keeps its own name. "Cell parameters" is the screen, `LoadCellParameters` the label,
-`load_cell_parameters.py` the module — none of them is the object being renamed, and the docs
-still say "the cell-parameters step" throughout.
+The step took the name too. "Cell parameters" was the screen, `LoadCellParameters` the label,
+`LoadCellParametersWindow` the class, `load_cell_parameters.py` the module — a step named for
+parameters that loads, matches and hands back nothing but templates. It is now
+`LoadCellTemplates` / `LoadCellTemplatesWindow` / `load_cell_templates.py`, with
+`tests/test_load_cell_parameters.py` and `docs/guide/cell-parameters.md` following. That last
+one changes a published URL, and there is no redirects plugin in `mkdocs.yml` to soften it.
 
-Nothing on the API moved: no field, argument or return shape changed, so a host needs no edit.
+`session.parameters_loaded` became `templates_assigned` rather than `templates_loaded`. The
+mechanical rename would have put it six lines under `template_library_paths`, where "loaded"
+already means *read off disk* — the flag is about the user having answered the step, not about
+any file. `positions_set` is the shape it follows.
+
+Nothing on the API moved: `BiwtInput`, `BiwtResult` and `create_biwt_widget` are untouched, so a
+host needs no edit. `WalkthroughSession` is internal, which is what makes the field rename cheap.
 
 `docs/assets/screenshots/import.png` (the header) and the three `templates-*.png` (the step label)
 are stale. Retaking them is a manual macOS window capture per image — `scripts/screenshot_host.py`,

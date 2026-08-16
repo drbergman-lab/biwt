@@ -55,7 +55,7 @@ _TIP_NONE    = f"Assign {_NO_TEMPLATE_LABEL}"
 _ICON_TIE = "ⓘ"
 
 
-class LoadCellParametersWindow(BiwinformaticsWalkthroughWindow):
+class LoadCellTemplatesWindow(BiwinformaticsWalkthroughWindow):
     """Let the user assign each final cell type a cell template, or none.
 
     BIWT ships no templates: they come from the landing screen's library and from
@@ -816,7 +816,7 @@ class LoadCellParametersWindow(BiwinformaticsWalkthroughWindow):
 
     def process_window(self) -> None:
         self._sync_session()
-        self.walkthrough.session.parameters_loaded = True
+        self.walkthrough.session.templates_assigned = True
         self.walkthrough.advance()
 
     # ------------------------------------------------------------------

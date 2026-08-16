@@ -130,4 +130,4 @@ keep it. Keeping them is legitimate — some hosts cull out-of-bounds cells, som
 
 ## Next
 
-[Cell parameters →](cell-parameters.md).
+[Cell templates →](cell-templates.md).

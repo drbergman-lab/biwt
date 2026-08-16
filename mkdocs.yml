@@ -104,7 +104,7 @@ nav:
       - Cell counts: guide/cell-counts.md
       - The domain editor: guide/domain.md
       - Positions: guide/positions.md
-      - Cell parameters: guide/cell-parameters.md
+      - Cell templates: guide/cell-templates.md
       - Finishing up: guide/result.md
   - Recipes:
       - recipes/index.md

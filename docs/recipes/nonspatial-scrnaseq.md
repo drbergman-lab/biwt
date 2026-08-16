@@ -87,7 +87,7 @@ where you can build the geometry your model expects. Place
 each type in its own pass with a different [plotter](../guide/positions.md) — a disc of tumor,
 an annulus of immune cells around it, a rectangle of stroma along one edge.
 
-### Cell parameters
+### Cell templates
 
 Assign a cell template per type, if your host supplied a template library or you load a
 TOML file here. The step is skippable, and positions alone are a valid result.

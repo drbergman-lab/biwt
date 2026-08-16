@@ -11,7 +11,7 @@ Why a dedicated launcher
 ``scratch_biwt.py`` is built for adversarial testing: it passes
 ``host_name="Scratch"``, host cell types and a template library, and every one of
 those is visible in a screenshot — as "Use Scratch Domain", as extra rows on the
-cell-parameters screen.  The published images show a plain host, so this passes
+cell-templates screen.  The published images show a plain host, so this passes
 nothing but a domain and lets ``host_name`` default to "Host".
 
 Studio is the wrong launcher for the same reason: it embeds the widget in a tab,
@@ -57,7 +57,7 @@ def main(argv=None) -> int:
     biwt_input = BiwtInput(
         # Deliberately nothing else: no host_name, no host_cell_type_names, no
         # cell_template_paths.  Load the .toml libraries through "Add templates
-        # from file…" instead, which is what the cell-parameters picture shows.
+        # from file…" instead, which is what the cell-templates picture shows.
         preferred_domain=DomainSpec(xmin=-500, xmax=500, ymin=-500, ymax=500,
                                     units="micron"),
     )

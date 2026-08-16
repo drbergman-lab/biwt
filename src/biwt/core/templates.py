@@ -9,7 +9,7 @@ knows or cares about that.
 
 BIWT ships no templates of its own.  Files come from the landing screen's library
 — seeded by the host at widget construction, edited by the user — or from the
-user at the cell-parameters step.
+user at the cell-templates step.
 """
 
 from __future__ import annotations
@@ -96,7 +96,7 @@ def minimal_unique_suffixes(filepaths: list[str]) -> dict[str, str]:
     Paths are shortened to the minimal trailing suffix (basename, then
     parent/basename, etc.) that avoids collisions within this group.
 
-    Shared, so the landing screen's library list and the cell-parameters step
+    Shared, so the landing screen's library list and the cell-templates step
     name the same file the same way.
     """
     if not filepaths:

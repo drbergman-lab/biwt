@@ -79,7 +79,7 @@ class TestMatchedCandidates:
 
     ``matched_candidates`` returns ``None`` when nothing matched; what to do then
     depends on which source supplies the ``default`` baseline, which only the
-    cell-parameters window knows.  Its tests cover that half.
+    cell-templates window knows.  Its tests cover that half.
     """
 
     NAMES = ["default", "Tumor", "Macrophage"]

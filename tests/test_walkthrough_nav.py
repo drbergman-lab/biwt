@@ -192,7 +192,7 @@ class TestNonDeconvolutionPaths:
         seen = []
         for _ in range(4):
             seen.append(w.session.use_spatial_data)
-            if _name(w) in {"PositionsWindow", "LoadCellParametersWindow"}:
+            if _name(w) in {"PositionsWindow", "LoadCellTemplatesWindow"}:
                 break
             _continue(w)
             qapp.processEvents()
@@ -703,7 +703,7 @@ class TestStepFieldOwnership:
             label = getattr(w.window, "_step_label", None)
             # Stop at Positions: continuing from it can raise a modal dialog
             # about out-of-domain cells, which would block a headless run.
-            if label is None or label in {"Positions", "LoadCellParameters"}:
+            if label is None or label in {"Positions", "LoadCellTemplates"}:
                 break
             if answers and hasattr(w.window, "yes_rb"):
                 _answer(w, answers.pop(0))
@@ -743,10 +743,10 @@ class TestSkipAtTheLastStep:
         drive_import(w, "nonspatial.csv")
         for _ in range(8):
             qapp.processEvents()
-            if _name(w) == "LoadCellParametersWindow":
+            if _name(w) == "LoadCellTemplatesWindow":
                 break
             _continue(w)
-        assert _name(w) == "LoadCellParametersWindow"
+        assert _name(w) == "LoadCellTemplatesWindow"
         # templates_a would otherwise match Macrophage and Tumor.
         assert w.session.cell_templates
 
@@ -913,7 +913,7 @@ class TestImportLockoutLifecycle:
 
         for _ in range(8):
             qapp.processEvents()
-            if _name(w) == "LoadCellParametersWindow":
+            if _name(w) == "LoadCellTemplatesWindow":
                 break
             _continue(w)
         w.window._skip_cb()

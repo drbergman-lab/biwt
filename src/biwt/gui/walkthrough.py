@@ -847,11 +847,11 @@ class WalkthroughSession:
     # undo it.  None means a session nobody imported into.
     template_library_paths: Optional[list] = None
 
-    # ---- after load-cell-parameters step ---------------------------------
+    # ---- after load-cell-templates step ----------------------------------
     # final cell-type name → (toml path, template name, template content).
     # Types the user left unassigned are absent; see BiwtResult.cell_templates.
     cell_templates: dict = field(default_factory=dict)
-    parameters_loaded: bool = False
+    templates_assigned: bool = False
 
     # ------------------------------------------------------------------
     # Convenience properties
@@ -1159,8 +1159,8 @@ def _step_predicates(s: "WalkthroughSession") -> list:
             "Positions",
         ),
         (
-            lambda: not s.parameters_loaded,
-            "LoadCellParameters",
+            lambda: not s.templates_assigned,
+            "LoadCellTemplates",
         ),
     ]
 
@@ -1212,7 +1212,7 @@ _STEP_FIELDS: dict[str, list[str]] = {
     ],
     "CellCounts": ["cell_counts_confirmed"],
     "Positions": ["positions_set", "coords_by_type", "plotted_cell_types_per_spot"],
-    "LoadCellParameters": ["parameters_loaded", "cell_templates"],
+    "LoadCellTemplates": ["templates_assigned", "cell_templates"],
 }
 
 
@@ -1400,7 +1400,7 @@ class BioinformaticsWalkthrough(QWidget):
         # --- Cell templates --------------------------------------------------
         # Loading a library is the one choice that has nothing to do with the file
         # being imported, so it is the one choice that should outlive the import.
-        # Loaded at the cell-parameters step it is thrown away with the session on
+        # Loaded at the cell-templates step it is thrown away with the session on
         # the next import, and a user comparing two datasets against one library
         # reloads it every time.
         vbox.addWidget(SectionHeader("Cell templates"))
@@ -1458,7 +1458,7 @@ class BioinformaticsWalkthrough(QWidget):
     def _refresh_template_summary(self) -> None:
         """Name the files in the library, nothing more.
 
-        Their contents are read at the cell-parameters step and only there: a
+        Their contents are read at the cell-templates step and only there: a
         landing screen that parsed them would be reading files the user has not
         asked anything about yet, at the moment an embedding host is starting up.
         """
@@ -1466,7 +1466,7 @@ class BioinformaticsWalkthrough(QWidget):
         self._remove_templates_btn.setEnabled(bool(paths))
         if not paths:
             self._template_summary.setText(
-                "Optional. Files listed here are offered at the cell-parameters "
+                "Optional. Files listed here are offered at the cell-templates "
                 "step of every import."
             )
             self._template_summary.setToolTip("")
@@ -1790,7 +1790,7 @@ class BioinformaticsWalkthrough(QWidget):
         Flow:
           import → [SpotDeconvQuery?] → ClusterColumn → [SpatialQuery?]
                → EditCellTypes → RenameCellTypes → [CellCounts?]
-               → Positions → LoadCellParameters → done (host writes output)
+               → Positions → LoadCellTemplates → done (host writes output)
         """
         # Lazy imports keep startup fast and avoid circular imports at module level.
         from biwt.gui.windows.spot_deconvolution import SpotDeconvolutionQueryWindow
@@ -1800,7 +1800,7 @@ class BioinformaticsWalkthrough(QWidget):
         from biwt.gui.windows.rename_cell_types import RenameCellTypesWindow
         from biwt.gui.windows.cell_counts import CellCountsWindow
         from biwt.gui.windows.positions import PositionsWindow
-        from biwt.gui.windows.load_cell_parameters import LoadCellParametersWindow
+        from biwt.gui.windows.load_cell_templates import LoadCellTemplatesWindow
 
         s = self.session
         # Predicates read derived state, so repair it before evaluating them.
@@ -1821,7 +1821,7 @@ class BioinformaticsWalkthrough(QWidget):
             "RenameCellTypes":    lambda: RenameCellTypesWindow(self),
             "CellCounts":         lambda: CellCountsWindow(self),
             "Positions":          lambda: PositionsWindow(self),
-            "LoadCellParameters": lambda: LoadCellParametersWindow(self),
+            "LoadCellTemplates": lambda: LoadCellTemplatesWindow(self),
 
         }
 
@@ -1889,13 +1889,13 @@ def create_biwt_widget(
         would put a removed file back every time.
 
         BIWT ships no templates and never parses the contents; the files are read
-        at the cell-parameters step and nowhere else, so an unreadable one costs a
+        at the cell-templates step and nowhere else, so an unreadable one costs a
         warning there rather than anything at startup.  ``str`` or ``os.PathLike``;
         anything else is dropped with a warning.
     host_name:
         Your application's name, shown in BIWT's UI — the domain editor's
         "Use <host_name> Domain" button, and the tag on your own cell types at
-        the cell-parameters step.  Blank is replaced with ``"Host"``.
+        the cell-templates step.  Blank is replaced with ``"Host"``.
     name_matches:
         Predicate deciding whether two strings name the same cell type, used for
         rename suggestions and template pre-selection.  Supplying it replaces

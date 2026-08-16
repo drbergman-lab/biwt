@@ -57,7 +57,7 @@ The long-term plan is to split `biwt` into:
 - **`biwt-physicell`** (future) — a PhysiCell-specific layer, should one prove useful: curated template libraries, config assembly, framework-aware validation.
 - **`biwt-<framework>`** (future) — analogous packages for other ABM frameworks.
 
-The framework-coupled content is **already out** of this package: BIWT ships no cell templates and generates no XML. Templates arrive as opaque TOML content through `create_biwt_widget(cell_template_paths=…)` (from the host) or a file loader (from the user, on the landing screen or at the cell-parameters step), and come back as `BiwtResult.cell_templates` for the host to assemble. PhysiCell Studio owns the PhysiCell templates and the config assembly. A future `biwt-physicell` would be a convenience layer over that boundary, not a prerequisite for it.
+The framework-coupled content is **already out** of this package: BIWT ships no cell templates and generates no XML. Templates arrive as opaque TOML content through `create_biwt_widget(cell_template_paths=…)` (from the host) or a file loader (from the user, on the landing screen or at the cell-templates step), and come back as `BiwtResult.cell_templates` for the host to assemble. PhysiCell Studio owns the PhysiCell templates and the config assembly. A future `biwt-physicell` would be a convenience layer over that boundary, not a prerequisite for it.
 
 ---
 
@@ -297,7 +297,7 @@ The framework-coupled content is **already out** of this package: BIWT ships no 
 
 ---
 
-## F10: Load Cell Parameters
+## F10: Load Cell Templates
 
 **One-line description:** Assign each cell type a cell template, or none.
 
@@ -397,7 +397,7 @@ The framework-coupled content is **already out** of this package: BIWT ships no 
   2. **Then similarity**: `difflib.SequenceMatcher` ratio on the casefolded strings must reach the cutoff (default `0.85`). This admits `Fibroblast`/`Fibroblasts` (0.95) and `Tumor`/`tumour` (0.91).
 - Known limitation: pairs distinguished by a non-numeric qualifier are not caught — `PD-1hi …`/`PD-1lo …` hold the same digits and score 0.92. A host curating names of that shape supplies its own predicate.
 - Selection (`core.cell_types.best_match`) is shared by both callers: a case-insensitive exact match wins outright, else the first accepted candidate in sorted order. A boolean predicate admits no ranking, and sorting keeps the outcome independent of file or dict order.
-- Both call sites use one policy: rename suggestions (F7) and cell-parameter pre-selection (F10).
+- Both call sites use one policy: rename suggestions (F7) and cell-template pre-selection (F10).
 
 **Acceptance criteria:**
 - [x] Every digit-differing pair in a realistic library is rejected; spelling variants are accepted.
@@ -438,7 +438,7 @@ The walkthrough step sequence is defined in `_step_predicates(session)` in `walk
 | 5 | RenameCellTypes | Final names not yet assigned |
 | 6 | CellCounts | Not using spatial data AND counts not confirmed |
 | 7 | Positions | Positions not yet set |
-| 8 | LoadCellParameters | Parameters not yet loaded (always reached; skippable) |
+| 8 | LoadCellTemplates | Templates not yet assigned (always reached; skippable) |
 
 Predicates read derived state, so `reseed_derived_state()` runs before each evaluation (see F14). After all predicates are False, `_finish()` assembles the result and calls `on_complete`.
 
@@ -477,7 +477,7 @@ name must never set the width of the panel it sits in. Two shared helpers in `bi
 chosen by whether the widget's text can wrap:
 
 - `row_label` wraps within a capped column, keeping every character on screen: the row grows taller
-  instead of the window growing wider. Used for `QLabel` rows — rename, cell parameters, cell counts.
+  instead of the window growing wider. Used for `QLabel` rows — rename, cell templates, cell counts.
 - `set_elided_text` clips and puts the full name in the tooltip, for widgets that cannot wrap
   (`QCheckBox` in the edit and positions steps). Its `suffix` is appended *after* clipping, so an
   annotation such as `⇒ Merge Gp. #2` is never eaten by the ellipsis.

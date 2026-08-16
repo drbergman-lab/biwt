@@ -69,7 +69,7 @@ you will see:
 | [Edit cell types](../guide/edit-cell-types.md) | Keep all three | Always shown |
 | [Rename cell types](../guide/rename-cell-types.md) | Accept the defaults | Always shown |
 | [Positions](../guide/positions.md) | Look at the preview, click through | Always shown |
-| [Cell parameters](../guide/cell-parameters.md) | Click Skip, or Continue — with no template file supplied every type shows `(none)` | Always shown |
+| [Cell templates](../guide/cell-templates.md) | Click Skip, or Continue — with no template file supplied every type shows `(none)` | Always shown |
 
 Two steps do **not** appear: [spot deconvolution](../guide/spot-deconvolution.md) (this file
 has no probability columns) and [cell counts](../guide/cell-counts.md) (you chose to use the

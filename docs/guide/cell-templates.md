@@ -1,4 +1,4 @@
-# Cell parameters
+# Cell templates
 
 **Shown when:** always — the last step before BIWT hands back its result.
 
@@ -13,7 +13,7 @@ Continue straight away, and you can click Skip instead** — this step is never 
 leaves every type unassigned; so does picking `(none)` for individual types.
 
 <figure markdown>
-  ![The cell-parameters screen with no template libraries loaded](../assets/screenshots/templates-no-libraries.png)
+  ![The cell-templates screen with no template libraries loaded](../assets/screenshots/templates-no-libraries.png)
   <figcaption>With nothing loaded, every type sits on <strong>(none)</strong> and the actions that
   need a library are disabled. This is a complete, valid answer — <strong>Continue</strong> and
   <strong>Skip</strong> both hand back an empty set.</figcaption>

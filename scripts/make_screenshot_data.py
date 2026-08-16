@@ -34,7 +34,7 @@ Usage
 Then take two passes through the wizard with the same file:
 
     Pass 1 — answer YES at the spatial query.  Covers import, cluster column,
-             edit cell types, rename, positions, domain editor, cell parameters.
+             edit cell types, rename, positions, domain editor, cell templates.
     Pass 2 — answer NO at the spatial query.  Covers cell counts, which is
              skipped whenever spatial data is used.
 """
@@ -147,7 +147,7 @@ def add_probability_columns(obs: pd.DataFrame, rng: np.random.Generator) -> None
         obs[f"{t}_probability"] = np.round(weights[:, i], 4)
 
 
-# Two template libraries for the cell-parameters screenshot.  Deliberately two:
+# Two template libraries for the cell-templates screenshot.  Deliberately two:
 # with one file loaded the source is never in question and BIWT drops the
 # qualifier entirely, so the right-aligned source column — the thing the picture
 # is meant to show — only appears from the second file onward.  The names match
@@ -248,7 +248,7 @@ def main(argv=None) -> int:
     if args.deconv:
         print("  probability columns added -> spot-deconvolution step will appear")
     print()
-    print("\nTemplate libraries for the cell-parameters screen:")
+    print("\nTemplate libraries for the cell-templates screen:")
     for path in libraries:
         print(f"  {path}")
     print("  Load BOTH via 'Add templates from file...' — one file alone shows")
@@ -256,7 +256,7 @@ def main(argv=None) -> int:
 
     print("Screenshot passes (same file, twice):")
     print("  1. answer YES at the spatial query -> import, cluster column,")
-    print("     edit cell types, rename, positions, domain editor, cell parameters")
+    print("     edit cell types, rename, positions, domain editor, cell templates")
     print("  2. answer NO  at the spatial query -> cell counts")
     return 0
 

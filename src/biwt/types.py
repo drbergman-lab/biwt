@@ -156,7 +156,7 @@ class BiwtInput:
         Cell type names currently defined in the host (e.g. a cell-definitions
         tab).  BIWT does not require them, and never constrains the user to them.
         Used twice: as rename suggestions, and as candidates at the
-        cell-parameters step — assigning one means "the host already has this cell
+        cell-templates step — assigning one means "the host already has this cell
         type", which comes back marked with :data:`HOST_SOURCE` rather than a file
         path.  They match on equal footing with templates from files.
     """

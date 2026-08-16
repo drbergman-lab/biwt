@@ -101,7 +101,7 @@ meaningful one.
 
 **`host_cell_type_names`** — the cell types your application already defines; optional, and never
 binding on the user. Used for [rename suggestions](../guide/rename-cell-types.md) and as candidates
-at the [cell-parameters step](../guide/cell-parameters.md), where assigning one comes back marked
+at the [cell-templates step](../guide/cell-templates.md), where assigning one comes back marked
 `HOST_SOURCE` (see `cell_templates` below). A name defined both ways resolves to the host.
 
 ## Widget setup
@@ -123,13 +123,13 @@ widget = create_biwt_widget(
 **`cell_template_paths`** — paths to TOML files, each mapping a template name to its content.
 The content is opaque to BIWT: read as text, never parsed, handed back verbatim.
 
-**BIWT ships no templates**, so these files are the parameter library — pass them if you want the
-[cell parameters step](../guide/cell-parameters.md) to offer anything. They seed the library listed
+**BIWT ships no templates**, so these files are the template library — pass them if you want the
+[cell-templates step](../guide/cell-templates.md) to offer anything. They seed the library listed
 on the landing screen, which the user owns from then on: files they add stay for every run, files
 they remove — yours included — stay gone. The result reports each template's source path either way.
 
 Paths may be `str` or `os.PathLike`; anything else is dropped with a warning. The files are read at
-the cell-parameters step and nowhere else, so an unreadable one costs a warning dialog there rather
+the cell-templates step and nowhere else, so an unreadable one costs a warning dialog there rather
 than anything at startup. A non-string value in the file (a stray `[section]` header, a number) is
 rejected with a message naming the key. [Templates and name
 matching](templates-and-matching.md) covers the file rules and a worked assembly example.
@@ -142,7 +142,7 @@ cell type. Used for rename suggestions and template pre-selection. Supplying it 
 BIWT's default **and** `name_match_cutoff`.
 
 BIWT calls it once per (cell type, candidate) pair every time it resolves matches — at the
-cell-parameters step that is one call per cell type per template — and it re-resolves whenever a
+cell-templates step that is one call per cell type per template — and it re-resolves whenever a
 template file is loaded or an auto-match button is pressed. Two requirements follow:
 
 - **Deterministic.** The same pair must always get the same answer — the call count is not part
@@ -172,7 +172,7 @@ BiwtResult(
 
 **`domain_used`** — see `source` above.
 
-**`cell_templates`** — the [templates](../guide/cell-parameters.md) the user assigned, mapping
+**`cell_templates`** — the [templates](../guide/cell-templates.md) the user assigned, mapping
 each final cell-type name to `(path, name, content)`: the absolute path of the `.toml` file it
 came from, its key in that file, and that key's value verbatim, surrounding whitespace
 included.
