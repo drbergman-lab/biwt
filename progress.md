@@ -2233,8 +2233,15 @@ any file. `positions_set` is the shape it follows.
 Nothing on the API moved: `BiwtInput`, `BiwtResult` and `create_biwt_widget` are untouched, so a
 host needs no edit. `WalkthroughSession` is internal, which is what makes the field rename cheap.
 
-`docs/assets/screenshots/import.png` (the header) and the three `templates-*.png` (the step label)
-are stale. Retaking them is a manual macOS window capture per image — `scripts/screenshot_host.py`,
-walk to the step, size the window, capture — and the four committed images differ in size because
-each was sized by hand, so an offscreen grab would not match them. Left for a docs pass, as with
-the last time this happened.
+`import.png` (the header) and the three `templates-*.png` (the step label) were retaken by hand.
+All four come in under the 1600 cap, so `sips -Z` stays away from them — on an under-cap capture
+it scales *up* and softens the text.
+
+They were normalized P3 → sRGB, which is the half of the rule the capture itself cannot satisfy:
+`screencapture` writes Display P3 with `cICP`, `iDOT` and a ~3 KB `iCCP`, and these are shots of a
+Qt UI specified in sRGB, so a P3-tagged file is genuinely wrong rather than merely heavy.
+`sips --matchTo "/System/Library/ColorSync/Profiles/sRGB Profile.icc"` converts and re-encodes to
+the compact `sRGB` chunk in one pass, dropping 7–10 KB each. That leaves the same chunk list the
+three step captures already carried — `IHDR sRGB eXIf pHYs iTXt IDAT IEND` — so the set is
+uniform for the first time: `import.png` had been the one file still tagged P3. No ICC profile is
+written, so the littleCMS wall-clock trap noted above does not apply to this route.
