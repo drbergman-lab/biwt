@@ -107,11 +107,9 @@ No dialog appears when the domain came from the fallback default.
 
 ## Suppressing it
 
-Two ways, in increasing scope:
-
-1. Dismiss it — OK or Cancel both mark the domain accepted, so it will not re-trigger when
-   you navigate back and forward.
-2. A host can set `BiwtInput.domain_accepted = True`, which suppresses it for every run.
+Dismiss it — OK or Cancel both mark the domain accepted, so it will not re-trigger when you
+navigate back and forward. That is the only way, and it lasts for that run: the mismatch is
+between your data and the host's domain, so nothing before the import can answer it.
 
 ## What gets saved
 

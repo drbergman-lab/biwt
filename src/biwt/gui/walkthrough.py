@@ -779,7 +779,7 @@ class WalkthroughSession:
     # ---- domain editor overrides (set by DomainEditorDialog) -------------
     user_domain: Optional[DomainSpec] = None     # user-edited domain (host units); overrides the host's
     data_domain: Optional[DomainSpec] = None     # raw data bounding box (data units) computed at import
-    domain_accepted: bool = False                # True once user has resolved domain dialog
+    domain_accepted: bool = False                # True once the user has resolved the dialog
     # Scale factor: host-units per one raw data-coordinate unit. Seeded from
     # BiwtData.host_units_per_data_unit; user-editable in the domain editor.
     scale_factor: Optional[float] = None
@@ -1560,10 +1560,6 @@ class BioinformaticsWalkthrough(QWidget):
             obsm=bdata.obsm,
         )
         self.session.data_domain = data_domain
-
-        # The host decides whether the domain editor opens by itself; the user
-        # can always open it from the positions step.
-        self.session.domain_accepted = biwt_input.domain_accepted
 
         log.info(
             "Loaded %d cells from '%s'. Domain source: %s.",

@@ -124,7 +124,7 @@ The framework-coupled content is **already out** of this package: BIWT ships no 
 - The dialog's initial fill is the caller's choice (`initial_preset`), taken from the session: the data extent when the data's own coordinates are in use, the host's domain otherwise. A revisit always shows the domain currently in force. The data extent is only a useful starting point when the data is what positions the cells.
 - When OK is clicked, the **host-units** bounds become `session.user_domain`; the factor and the apply-scale state persist to `session.scale_factor` / `session.apply_scale`.
 - When Cancel is clicked, nothing is written: whatever domain was already in effect stays — the host's on first open, a previous user edit thereafter.
-- `BiwtInput.domain_accepted` alone determines `session.domain_accepted`, read at each import like the rest of the host's input. There is no user-facing control for it: the home screen offered no validation to skip, only a pre-answer to a question the positions step asks against the data. The "Domain Settings…" button behaves as before.
+- **Nothing pre-accepts the domain.** `session.domain_accepted` starts False on every run and is set only by dismissing the dialog. The mismatch is between the data's extent and the host's domain, so it cannot be answered before the import: a landing-screen checkbox asked the user to rule on data they had not loaded, and a `BiwtInput` field let the host rule on data it never sees. Dismissing costs one click, and the "Domain Settings…" button behaves as before.
 - **Placement (`_default_spatial_pars` via `compute_spatial_placement`):** cells are scaled by `session.effective_scale()` (`scale_factor` when `apply_scale` and a positive factor exist, else `1.0`) and **centered** in the domain — a pure uniform scale + translate. Aspect ratio is always preserved; editing the domain resizes the container without changing the cell scale. On a domain change the spatial default is recomputed and any user edit is preserved as an undo step (`_apply_domain_change_and_redraw`).
 
 **Acceptance criteria:**
@@ -142,7 +142,7 @@ The framework-coupled content is **already out** of this package: BIWT ships no 
 - [x] Tests cover extractor, `_scale_domain`, units label, `effective_scale`, and `compute_spatial_placement` invariant.
 - [x] OK disabled on an inverted, zero-width, or unparseable bound, per axis, with the offending fields flagged; Cancel always enabled.
 - [x] Extent rows derive from the bounds; editing one moves that axis' maximum and anchors its minimum, leaving the other axes unaffected.
-- [x] `BiwtInput.domain_accepted` suppresses the auto-opened dialog and is read at each import; `BiwtInput()` constructs with the default domain.
+- [x] Neither the host nor the landing screen can suppress the auto-opened dialog; only dismissing it does, and only for that run. `BiwtInput()` constructs with the default domain.
 - [x] A host value changed after the widget was built reaches the next run: the provider is called at each import, and the resolved context does not move for the duration of that run.
 - [x] `session.effective_domain is session.preferred_domain` while the user has not edited the domain; no third domain field exists.
 - [x] A provider that raises, or returns something other than a `BiwtInput`, does not fail the import.

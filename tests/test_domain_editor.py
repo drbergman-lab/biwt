@@ -334,8 +334,12 @@ class TestZRowIsPresentButInert:
         assert scaled_editor._extent_fields["depth"].text() == "20"
 
 
-class TestDomainAcceptedIsHostOnly:
-    """The home screen offers no control for it — nothing there validates anything."""
+class TestNobodyPreAcceptsTheDomain:
+    """Only the user, by dismissing the dialog, and only for that run.
+
+    The mismatch is between the data's extent and the host's domain, so neither
+    the host nor a landing-screen control can answer it before the import.
+    """
 
     def test_no_domain_checkbox_on_the_home_screen(self, qapp):
         from PyQt5.QtWidgets import QCheckBox
@@ -348,6 +352,18 @@ class TestDomainAcceptedIsHostOnly:
             cb for cb in w.findChildren(QCheckBox) if "domain" in cb.text().lower()
         ]
         w.deleteLater()
+
+    def test_the_host_has_no_field_for_it_either(self):
+        import dataclasses
+
+        assert "domain_accepted" not in {
+            f.name for f in dataclasses.fields(BiwtInput)
+        }
+
+    def test_a_fresh_run_starts_unaccepted(self, qapp, make_widget, drive_import):
+        w, _ = make_widget()
+        drive_import(w, "spatial.csv")
+        assert w.session.domain_accepted is False
 
 
 class TestBiwtInputDefaults:

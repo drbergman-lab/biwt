@@ -2126,3 +2126,12 @@ the dropdown is built from the file.
 
 The landing screen is left with one question — which file — and every other question is asked by
 the step that owns it, against data it can see.
+
+The host loses its say too: `BiwtInput.domain_accepted` is gone. It was the same pre-answer one
+level up — the host ruling on a mismatch between the data's extent and its own domain, for data
+it never sees. Nothing sets `session.domain_accepted` now except dismissing the dialog, which
+costs one click and settles that run.
+
+That leaves `BiwtInput` asking the host three questions about its state: which cell types it
+already holds, which domain it prefers, and (with the library, later in this series) which
+template files to offer. Everything else on it is identity (`host_name`) or matching behavior.

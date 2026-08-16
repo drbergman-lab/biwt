@@ -333,18 +333,6 @@ class TestHostInputResolution:
         with pytest.raises(TypeError, match="BiwtInput or a callable"):
             create_biwt_widget({"preferred_domain": None})
 
-    def test_domain_accepted_is_read_at_each_import(self, make_widget, drive_import):
-        """No user-facing control latches it, so the run sees the host's current value."""
-        from biwt.types import BiwtInput
-
-        box = [False]
-        w, _ = make_widget(_source=lambda: BiwtInput(domain_accepted=box[0]))
-
-        box[0] = True
-        drive_import(w, "spatial.csv")
-        assert w.session.domain_accepted is True
-
-
 class TestPositionsDomainAutoShow:
     """The one step no other test builds, because it can open a modal dialog.
 
@@ -690,10 +678,12 @@ class TestStepFieldOwnership:
     def test_no_step_commits_a_downstream_field(
         self, make_widget, drive_import, qapp, fixture, answers
     ):
-        # Pre-accept the domain: reaching the positions step otherwise raises
-        # the modal domain editor, which a headless run cannot dismiss.
-        w, _ = make_widget(domain_accepted=True)
+        w, _ = make_widget()
         drive_import(w, fixture)
+        # Stand in for the user having dismissed the domain editor: reaching the
+        # positions step otherwise opens that modal, which a headless run cannot
+        # answer.  Only the user can set this now.
+        w.session.domain_accepted = True
         qapp.processEvents()
         answers = list(answers)
 

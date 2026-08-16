@@ -146,10 +146,6 @@ class BiwtInput:
         cell-parameters step — assigning one means "the host already has this cell
         type", which comes back marked with :data:`HOST_SOURCE` rather than a file
         path.  They match on equal footing with templates from files.
-    domain_accepted:
-        ``True`` suppresses the domain-mismatch dialog that otherwise opens by
-        itself at the positions step.  The user can still open the domain editor
-        from that step.  Read at the start of every run, like the rest of the input.
     host_name:
         Your application's name, shown in BIWT's UI — the domain editor's
         "Use <host_name> Domain" button, and the tag on your own cell types at the
@@ -177,7 +173,6 @@ class BiwtInput:
     """
     preferred_domain: DomainSpec = field(default_factory=lambda: DomainSpec.default())
     host_cell_type_names: list = field(default_factory=list)
-    domain_accepted: bool = False
     host_name: str = "Host"
     cell_template_paths: list = field(default_factory=list)
     name_matches: Optional[Callable[[str, str], bool]] = None

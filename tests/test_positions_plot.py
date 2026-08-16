@@ -367,8 +367,7 @@ class TestPlottingIntoA3DDomain:
         monkeypatch.setattr(DomainEditorDialog, "exec_",
                             lambda self: QDialog.Rejected)
         widget = create_biwt_widget(
-            BiwtInput(preferred_domain=domain, domain_accepted=True),
-            on_complete=lambda result: None,
+            BiwtInput(preferred_domain=domain), on_complete=lambda result: None,
         )
         monkeypatch.setattr(
             QFileDialog, "getOpenFileName",
