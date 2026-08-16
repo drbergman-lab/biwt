@@ -246,17 +246,12 @@ def test_an_unavailable_format_says_how_to_install_it(widget, drive_import, monk
     assert INSTALL_DOCS_URL in chip.toolTip()
 
 
-def test_the_domain_shortcut_names_the_step_it_affects(widget):
-    # It suppresses the dialog at the *positions* step; the old label said
-    # "on import", which is not when it applies.
-    assert "import" not in widget._domain_accepted_cb.text().lower()
-    assert "positions step" in widget._domain_accepted_cb.toolTip()
-
-
-def test_both_shortcuts_explain_what_they_skip(widget):
+def test_the_landing_screen_pre_answers_nothing(widget):
+    """Import is the only question on it; the rest of the wizard asks its own."""
     captions = " ".join(_labels(widget)).lower()
-    assert "skips the cluster-column step" in captions
-    assert "positions step" in captions
+    assert "shortcuts" not in captions
+    assert "cell-type column" not in captions
+    assert not hasattr(widget, "column_line_edit")
 
 
 def _drop(widget, *paths):

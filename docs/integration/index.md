@@ -55,9 +55,6 @@ your application can supply them:
 | `cell_template_paths` | TOML files of parameter templates. BIWT ships none, so this *is* the library offered at the [cell parameters step](../guide/cell-parameters.md) — though the user can load more files there themselves. See [templates and name matching](templates-and-matching.md). |
 | `name_matches` | Your own `(str, str) -> bool` for "do these name the same cell type?", replacing BIWT's default (and `name_match_cutoff`) for both rename suggestions and template pre-selection. See [templates and name matching](templates-and-matching.md). |
 
-`domain_accepted=True` suppresses the automatic domain-mismatch dialog, if your application
-already validates the domain itself.
-
 If your host outlives one walkthrough, pass a **callable returning a `BiwtInput`** rather than an
 instance: BIWT calls it at each import, so these fields do not freeze at build time. See
 [when BIWT reads its input](api-contract.md#when-biwt-reads-it).

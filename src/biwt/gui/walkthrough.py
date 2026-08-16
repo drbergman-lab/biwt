@@ -779,7 +779,7 @@ class WalkthroughSession:
     # ---- domain editor overrides (set by DomainEditorDialog) -------------
     user_domain: Optional[DomainSpec] = None     # user-edited domain (host units); overrides the host's
     data_domain: Optional[DomainSpec] = None     # raw data bounding box (data units) computed at import
-    domain_accepted: bool = False                # True once user has resolved domain dialog
+    domain_accepted: bool = False                # True once the user has resolved the dialog
     # Scale factor: host-units per one raw data-coordinate unit. Seeded from
     # BiwtData.host_units_per_data_unit; user-editable in the domain editor.
     scale_factor: Optional[float] = None
@@ -1256,9 +1256,9 @@ class BioinformaticsWalkthrough(QWidget):
         self._host_input_error = ""
 
         self.on_complete = on_complete or (lambda result: None)
-        # This first resolution only seeds the home screen (the domain-check
-        # checkbox) and stands in until the first import; nothing derived,
-        # placed, or handed back to the host comes out of it.
+        # This first resolution only seeds the home screen and stands in until
+        # the first import; nothing derived, placed, or handed back to the host
+        # comes out of it.
         self.session = WalkthroughSession(
             biwt_input=self._resolve_host_input() or BiwtInput()
         )
@@ -1374,39 +1374,6 @@ class BioinformaticsWalkthrough(QWidget):
         vbox.addWidget(self._drop_frame, 1)
 
         vbox.addLayout(self._build_format_chips())
-
-        # --- Shortcuts --------------------------------------------------------
-        # Both of these pre-answer a question the wizard would otherwise ask.
-        # Grouped and captioned, because as loose controls they read as stray
-        # settings and their effect is invisible.
-        vbox.addWidget(SectionHeader("Shortcuts"))
-
-        hbox_col = QHBoxLayout()
-        hbox_col.addWidget(QLabel("Cell-type column:"))
-        self.column_line_edit = QLineEdit("type")
-        self.column_line_edit.setStyleSheet(_LE_STYLE)
-        self.column_line_edit.setToolTip(
-            "If the imported file has a column with this name, it is used as the "
-            "cell-type column and that step is skipped."
-        )
-        hbox_col.addWidget(self.column_line_edit, 1)
-        vbox.addLayout(hbox_col)
-        vbox.addWidget(self._caption(
-            "Skips the cluster-column step when the imported file has this column."
-        ))
-
-        self._domain_accepted_cb = QCheckBox("Skip domain validation")
-        self._domain_accepted_cb.setToolTip(
-            "When checked, the domain editor will not open by itself at the "
-            "positions step. You can still open it from there."
-        )
-        # The host sets the *default* for this box, not the outcome — the user
-        # stays able to turn domain validation back on.
-        self._domain_accepted_cb.setChecked(self.session.biwt_input.domain_accepted)
-        vbox.addWidget(self._domain_accepted_cb)
-        vbox.addWidget(self._caption(
-            "Suppresses the domain-mismatch dialog at the positions step."
-        ))
 
         vbox.addStretch(1)
 
@@ -1593,10 +1560,6 @@ class BioinformaticsWalkthrough(QWidget):
             obsm=bdata.obsm,
         )
         self.session.data_domain = data_domain
-
-        # The checkbox is the single source of truth; BiwtInput.domain_accepted
-        # only seeded its initial state (see _build_home_ui).
-        self.session.domain_accepted = self._domain_accepted_cb.isChecked()
 
         log.info(
             "Loaded %d cells from '%s'. Domain source: %s.",

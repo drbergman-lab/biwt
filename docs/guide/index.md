@@ -5,16 +5,6 @@ The walkthrough is a sequence of small screens, each asking one question.
 If you have not run the wizard at all yet, do
 [your first walkthrough](../getting-started/first-walkthrough.md) first.
 
-## Two steps you can pre-answer
-
-The landing screen has a **Shortcuts** group. Both entries answer a question the wizard would
-otherwise ask:
-
-- **Cell-type column** — if the imported file has a column with this name, it is used as the
-  cell-type column and [that step](cluster-column.md) is skipped.
-- **Skip domain validation** — suppresses the automatic domain-mismatch dialog at
-  [the positions step](positions.md). You can still open the domain editor from there.
-
 ## How steps are chosen
 
 Before each screen BIWT walks an ordered list of predicates and shows the first step whose

@@ -28,8 +28,7 @@ potential mismatches.
 !!! warning "Non-micron hosts: a known gap"
     The Visium scale factor BIWT auto-detects is in **µm per pixel**. If your `units` is
     something else, that seeded value is not converted and will be wrong. Users can override
-    it manually. Until this is fixed, consider setting `domain_accepted=True` and validating
-    the domain yourself if you work in other units.
+    it manually. Until this is fixed, tell your users to expect it if you work in other units.
 
 ### `source`
 
@@ -64,7 +63,6 @@ most one default PhysiCell voxel (20 µm). `DomainSpec.default()` builds the fal
 BiwtInput(
     preferred_domain=domain,              # optional; defaults to ±500 × ±500 × ±10 µm
     host_cell_type_names=[],              # optional
-    domain_accepted=False,                # optional
     host_name="Host",                     # optional
     cell_template_paths=[],               # optional
     name_matches=None,                    # optional
@@ -95,8 +93,6 @@ widget = create_biwt_widget(host_input, on_complete=save)
 Keep it cheap and free of side effects; it runs inside the import path. If it raises, or returns
 anything that is not a `BiwtInput`, BIWT logs it and **refuses the import** — nothing is loaded, and
 the user is told your application could not supply its settings.
-`domain_accepted` is the exception to all of this — read once at construction, since the checkbox it
-seeds is authoritative from then on.
 
 **`preferred_domain`** is the domain BIWT places into unless the user overrides it in the
 [domain editor](../guide/domain.md). It defaults to `DomainSpec.default()` — the ±500 µm ×
@@ -108,10 +104,6 @@ meaningful one.
 binding on the user. Used for [rename suggestions](../guide/rename-cell-types.md) and as candidates
 at the [cell-parameters step](../guide/cell-parameters.md), where assigning one comes back marked
 `HOST_SOURCE` (see `cell_templates` below). A name defined both ways resolves to the host.
-
-**`domain_accepted`** — set `True` to pre-tick **Skip domain validation** on the import screen,
-suppressing the automatic domain-mismatch dialog. This sets the checkbox's default; the user
-can untick it and get the dialog back.
 
 **`host_name`** — appears in the domain editor as `Use <host_name> Domain`. Set it; the
 default `"Host"` reads like a placeholder.

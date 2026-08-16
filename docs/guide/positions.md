@@ -115,9 +115,8 @@ The first time this screen appears, BIWT compares your data's extent to the doma
 - **small** — the cells fit but cover less than half of an axis or half the area, so they
   would sit as a small island in a large empty box
 
-It opens once. Navigating back and forward does not re-trigger it, and you can suppress it
-with the **Skip domain validation** checkbox on the [import screen](import.md). Reopen it any
-time with **Domain Settings…**.
+It opens once. Dismissing it settles the question for that run, and navigating back and forward
+does not re-trigger it. Reopen it any time with **Domain Settings…**.
 
 ## Undo
 

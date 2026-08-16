@@ -132,10 +132,9 @@ mkdocs.yml
 - [x] Domain mismatch: two-tier detection (classify_domain_mismatch: "outside" / "small" / None)
 - [x] DomainEditorDialog auto-triggered at positions window open (not import time)
 - [x] Context-sensitive mismatch header; no header for manual "Domain Settings…" open
-- [x] domain_accepted flag prevents re-trigger on back/forward navigation
+- [x] Dismissing the domain dialog prevents re-trigger on back/forward navigation
 - [x] Domain editor OK is gated on a usable domain: all six bounds must parse and `min < max` on every axis (a zero-width axis divides by zero in placement scaling); offending fields are highlighted and Cancel is never gated
 - [x] Domain editor shows the live extents of the domain being edited
-- [x] BiwtInput.domain_accepted + "Skip domain validation" checkbox bypass auto-check
 - [x] Z-fields default to ±10 for 2D data in domain editor
 - [x] Data-unit→host-unit scale factor in the domain editor: auto-detected Visium µm/pixel (`_extract_visium_microns_per_pixel`), editable, with each value shown in host units beside its parenthesized data-units mirror, synced by the factor, plus a reset-to-file button
 - [x] Domain editor is an axis-major ruled grid — one row per axis (`X (width)`, `Y (height)`, `Z (depth)`) against min / max / size columns — so an axis' extent sits beside the bounds that span it instead of in a separate block six rows below. `DomainEditorDialog._AXES` is the single source of truth for the layout, the extent derivation, and the validation

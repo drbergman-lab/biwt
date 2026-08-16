@@ -32,6 +32,14 @@ def _answer(widget, yes: bool) -> None:
     (widget.window.yes_rb if yes else widget.window.no_rb).setChecked(True)
 
 
+def _pick_column(widget, name: str = "type") -> None:
+    """Answer the cluster-column step, which every import now reaches."""
+    assert _name(widget) == "ClusterColumnWindow"
+    combo = widget.window.column_combobox
+    combo.setCurrentIndex(combo.findText(name))
+    _continue(widget)
+
+
 # ---------------------------------------------------------------------------
 # Spot deconvolution ⇄ spatial query sequencing
 # ---------------------------------------------------------------------------
@@ -125,12 +133,13 @@ class TestNonDeconvolutionPaths:
         # ClusterColumn auto-continues on the next event loop turn.
         assert _name(w) in {"ClusterColumnWindow", "SpatialQueryWindow"}
 
-    def test_cluster_column_auto_continues_when_the_hint_matches(
+    def test_the_column_step_leads_to_the_spatial_query(
         self, make_widget, drive_import, qapp
     ):
         w, _ = make_widget()
         drive_import(w, "spatial.csv")
-        qapp.processEvents()          # let the auto-continue QTimer fire
+        _pick_column(w)
+        qapp.processEvents()
         assert _name(w) == "SpatialQueryWindow"
         assert any(
             type(win).__name__ == "ClusterColumnWindow" for win in w.window_history
@@ -141,6 +150,7 @@ class TestNonDeconvolutionPaths:
     ):
         w, _ = make_widget()
         drive_import(w, "spatial.csv")
+        _pick_column(w)
         qapp.processEvents()
         first = w.window
         assert _name(w) == "SpatialQueryWindow"
@@ -159,6 +169,7 @@ class TestNonDeconvolutionPaths:
     ):
         w, _ = make_widget()
         drive_import(w, "spatial.csv")
+        _pick_column(w)
         qapp.processEvents()
         spatial_win = w.window
 
@@ -321,21 +332,6 @@ class TestHostInputResolution:
 
         with pytest.raises(TypeError, match="BiwtInput or a callable"):
             create_biwt_widget({"preferred_domain": None})
-
-    def test_domain_accepted_from_a_later_resolution_is_ignored(
-        self, make_widget, drive_import
-    ):
-        """The checkbox is on screen by then, and it is the documented authority."""
-        from biwt.types import BiwtInput
-
-        box = [False]
-        w, _ = make_widget(_source=lambda: BiwtInput(domain_accepted=box[0]))
-        assert w._domain_accepted_cb.isChecked() is False
-
-        box[0] = True
-        drive_import(w, "spatial.csv")
-        assert w.session.domain_accepted is False
-
 
 class TestPositionsDomainAutoShow:
     """The one step no other test builds, because it can open a modal dialog.
@@ -682,10 +678,12 @@ class TestStepFieldOwnership:
     def test_no_step_commits_a_downstream_field(
         self, make_widget, drive_import, qapp, fixture, answers
     ):
-        # Skip domain validation: reaching the positions step otherwise raises
-        # the modal domain editor, which a headless run cannot dismiss.
-        w, _ = make_widget(domain_accepted=True)
+        w, _ = make_widget()
         drive_import(w, fixture)
+        # Stand in for the user having dismissed the domain editor: reaching the
+        # positions step otherwise opens that modal, which a headless run cannot
+        # answer.  Only the user can set this now.
+        w.session.domain_accepted = True
         qapp.processEvents()
         answers = list(answers)
 
@@ -985,6 +983,7 @@ class TestNonSpatialDoesNotLatchTheDomain:
         """
         w, _ = make_widget()
         drive_import(w, "spatial.csv")
+        _pick_column(w)
         qapp.processEvents()
         assert _name(w) == "SpatialQueryWindow"
         _answer(w, False)

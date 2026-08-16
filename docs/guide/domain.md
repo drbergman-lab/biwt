@@ -105,20 +105,10 @@ BIWT compares the data extent to the domain, in host units, and classifies the f
 
 No dialog appears when the domain came from the fallback default.
 
-## Suppressing it
-
-Three ways, in increasing scope:
-
-1. Dismiss it — OK or Cancel both mark the domain accepted, so it will not re-trigger when
-   you navigate back and forward.
-2. Tick **Skip domain validation** on the import screen before importing.
-3. A host can set `BiwtInput.domain_accepted = True`, which ticks that checkbox for you on
-   arrival. It is a default, not an override — untick it and the dialog comes back.
-
 ## What gets saved
 
-On **OK**: the host-units bounds become the domain used for placement, the factor and checkbox
-state are remembered, the positions preview redraws, and the change is undoable from the
+On **OK**: the host-units bounds become the domain used for placement, the factor and the
+apply-scale state are remembered, the positions preview redraws, and the change is undoable from the
 [positions](positions.md) screen.
 
 On **Cancel**: nothing is written and nothing redraws — whatever domain was already in effect

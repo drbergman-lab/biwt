@@ -2101,3 +2101,37 @@ reproducible from the file alone.
 Four findings were left alone on the same reasoning in reverse: the signal to the user is already
 clear, so a warning would only be noise. And one was not a bug — the domain editor defaulting to
 the data extent is the intent.
+
+---
+
+## 2026-08-15: "Skip domain validation" removed from the home screen
+
+Nothing on that screen validated anything. The checkbox let the user pre-answer a question the
+positions step asks against data that has not been imported yet — and phrased it as turning off
+a check, which is not a decision anyone can make before seeing the mismatch. The mismatch dialog
+itself remains the place where the domain is judged, and it is worth keeping precisely because it
+is the one moment the data's extent and the host's domain are visible together.
+
+`BiwtInput.domain_accepted` is now the only way to suppress the auto-opened dialog, so it is read
+at each import like the rest of the host's input rather than only at construction. The old
+read-once rule existed to stop a later host value contradicting a box already on screen; with no
+box, a run simply sees what the host currently says.
+
+The cell-type column field goes with it, and the **Shortcuts** group with that. It looked like the
+defensible half — a long column list is a real cost — but it pre-answers a question about a file
+that has not been chosen yet, and it answered it with `"type"`, which is what PhysiCell writes
+out, not what annotation columns are usually called. What that bought was a whole step skipped on
+a guess the user never saw. The cluster-column step now always asks; it costs one dropdown, and
+the dropdown is built from the file.
+
+The landing screen is left with one question — which file — and every other question is asked by
+the step that owns it, against data it can see.
+
+The host loses its say too: `BiwtInput.domain_accepted` is gone. It was the same pre-answer one
+level up — the host ruling on a mismatch between the data's extent and its own domain, for data
+it never sees. Nothing sets `session.domain_accepted` now except dismissing the dialog, which
+costs one click and settles that run.
+
+That leaves `BiwtInput` asking the host three questions about its state: which cell types it
+already holds, which domain it prefers, and (with the library, later in this series) which
+template files to offer. Everything else on it is identity (`host_name`) or matching behavior.

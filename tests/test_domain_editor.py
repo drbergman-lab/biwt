@@ -1,5 +1,5 @@
 """DomainEditorDialog behavior — bounds validation, extents, and how a host
-seeds the "Skip domain validation" checkbox.
+suppresses the auto-opened dialog.
 
 Driven headless against the real dialog; the ``qapp`` fixture lives in
 conftest.py.
@@ -334,31 +334,36 @@ class TestZRowIsPresentButInert:
         assert scaled_editor._extent_fields["depth"].text() == "20"
 
 
-class TestDomainAcceptedSeedsCheckbox:
-    """BiwtInput.domain_accepted sets the checkbox's default, not the outcome.
+class TestNobodyPreAcceptsTheDomain:
+    """Only the user, by dismissing the dialog, and only for that run.
 
-    It used to be OR-ed with the checkbox, so a host passing True left the user
-    looking at an unticked box that did nothing and could not be untangled.
+    The mismatch is between the data's extent and the host's domain, so neither
+    the host nor a landing-screen control can answer it before the import.
     """
 
-    @pytest.mark.parametrize("host_value", [True, False])
-    def test_host_value_seeds_the_checkbox(self, qapp, host_value):
+    def test_no_domain_checkbox_on_the_home_screen(self, qapp):
+        from PyQt5.QtWidgets import QCheckBox
+
         w = create_biwt_widget(
-            BiwtInput(preferred_domain=DOMAIN, domain_accepted=host_value),
-            on_complete=lambda _r: None,
+            BiwtInput(preferred_domain=DOMAIN), on_complete=lambda _r: None,
         )
-        assert w._domain_accepted_cb.isChecked() is host_value
+        assert not hasattr(w, "_domain_accepted_cb")
+        assert not [
+            cb for cb in w.findChildren(QCheckBox) if "domain" in cb.text().lower()
+        ]
         w.deleteLater()
 
-    @pytest.mark.parametrize("host_value", [True, False])
-    def test_user_can_override_in_either_direction(self, qapp, host_value):
-        w = create_biwt_widget(
-            BiwtInput(preferred_domain=DOMAIN, domain_accepted=host_value),
-            on_complete=lambda _r: None,
-        )
-        w._domain_accepted_cb.setChecked(not host_value)
-        assert w._domain_accepted_cb.isChecked() is (not host_value)
-        w.deleteLater()
+    def test_the_host_has_no_field_for_it_either(self):
+        import dataclasses
+
+        assert "domain_accepted" not in {
+            f.name for f in dataclasses.fields(BiwtInput)
+        }
+
+    def test_a_fresh_run_starts_unaccepted(self, qapp, make_widget, drive_import):
+        w, _ = make_widget()
+        drive_import(w, "spatial.csv")
+        assert w.session.domain_accepted is False
 
 
 class TestBiwtInputDefaults:

@@ -68,7 +68,6 @@ The framework-coupled content is **already out** of this package: BIWT ships no 
 **Behavioral specification:**
 - When the user clicks "Import file...", a file dialog offers `.h5ad`, `.rds`, `.rda`, `.rdata`, `.csv`. Dropping a single file of one of those extensions onto the landing screen's drop area takes the same path; anything else is ignored rather than reported, since a rejected drag never highlights the target in the first place.
 - The landing screen shows a chip per supported format with its **availability in this environment**, probed via `importlib.util.find_spec` (no import, no startup cost) by `core.data_loader.supported_formats`. An unavailable format's tooltip names the missing module, the pip extra that installs it, and the install docs. Without this, a missing optional dependency is discovered only by picking a file and reading the error dialog.
-- The landing screen's **Shortcuts** group holds the two settings that pre-answer a later step — the cell-type column hint and the domain check — each captioned with what it skips. They are grouped because as loose controls they read as stray settings and their effect is invisible: the column hint silently skips a whole step.
 - When a `.h5ad` file is selected, BIWT reads it via `anndata.read_h5ad`.
 - When a `.rds` / `.rda` / `.rdata` file is selected, BIWT reads it via `rpy2` + `anndata2ri`, supporting Seurat, SingleCellExperiment, and SpatialExperiment objects.
 - When a `.csv` file is selected, BIWT reads it via `pandas.read_csv`.
@@ -101,9 +100,9 @@ The framework-coupled content is **already out** of this package: BIWT ships no 
 
 **Behavioral specification:**
 - The host's preferred domain (`BiwtInput.preferred_domain`) always wins for placement. The field defaults to `DomainSpec.default()` (±500 µm × ±10 µm), the same fallback `infer_domain` already used, so a host may omit it and `BiwtInput()` is valid.
-- **The host's input is resolved at the start of each run and frozen for it.** `create_biwt_widget` accepts a `BiwtInput` *or* a zero-argument callable returning one (`BiwtInputSource`), because a host that embeds the widget for the life of the application would otherwise be pinned to whatever its domain and cell definitions were when the tab was built. BIWT calls the provider at exactly two points — widget construction, which only seeds the domain-check checkbox, and each successful import — and holds a `snapshot()` of the result: `preferred_domain` and both list fields are copied, so a host mutating its own objects cannot rewrite a domain cells were already placed into. A provider that raises or returns the wrong type leaves the previous context in place and logs.
+- **The host's input is resolved at the start of each run and frozen for it.** `create_biwt_widget` accepts a `BiwtInput` *or* a zero-argument callable returning one (`BiwtInputSource`), because a host that embeds the widget for the life of the application would otherwise be pinned to whatever its domain and cell definitions were when the tab was built. BIWT calls the provider at exactly two points — widget construction, which only seeds the home screen, and each successful import — and holds a `snapshot()` of the result: `preferred_domain` and both list fields are copied, so a host mutating its own objects cannot rewrite a domain cells were already placed into. A provider that raises or returns the wrong type leaves the previous context in place and logs.
 - There is exactly **one** name for the host's domain on the session (`preferred_domain`); `effective_domain` is `user_domain or preferred_domain`. A second latched copy is what allowed one `DomainEditorDialog` invocation to compute its mismatch warning against one box while resolving "Use <host> Domain" and `_source_of` against another.
-- A host edit *during* a run is deliberately invisible until the next import, and `domain_accepted` is read only at construction (the checkbox is on screen and authoritative from then on).
+- A host edit *during* a run is deliberately invisible until the next import.
 - After import, BIWT independently computes the data's coordinate range and stores it as `session.data_domain`.
 - The `DomainEditorDialog` is shown automatically when the **positions window first opens** (not at import time), using `classify_domain_mismatch()` to detect two-tier mismatches:
   - **"outside"**: any data boundary exceeds the preferred domain (cells would be excluded).
@@ -123,9 +122,9 @@ The framework-coupled content is **already out** of this package: BIWT ships no 
 - `DomainSpec.source` takes one of four values, named by `types.DomainSource`: `host`, `data`, `user`, `default`. Three answers matter to a host — its domain, the data's, or the user's — and `default` is the fourth because "nobody supplied one" is neither, and it also marks a data domain as not real, which is how the positions step knows there is no mismatch worth raising. The earlier vocabulary (`preferred` / `anndata_metadata` / `data_range` / `user_edited` / `default`) distinguished *how* a data domain was found, which nothing ever branched on.
 - The accepted domain's `source` is **derived from the bounds**, not asserted: `host` if they equal the domain the host passed, `data` if they equal the data extent in host units, else `user`. Stamping `user_edited` unconditionally made the field useless — a host is told to check `source != host` to see whether its own domain survived, and the answer was always yes. Where the two coincide, `host` wins: the host's domain did survive.
 - The dialog's initial fill is the caller's choice (`initial_preset`), taken from the session: the data extent when the data's own coordinates are in use, the host's domain otherwise. A revisit always shows the domain currently in force. The data extent is only a useful starting point when the data is what positions the cells.
-- When OK is clicked, the **host-units** bounds become `session.user_domain`; the factor and checkbox persist to `session.scale_factor` / `session.apply_scale`.
+- When OK is clicked, the **host-units** bounds become `session.user_domain`; the factor and the apply-scale state persist to `session.scale_factor` / `session.apply_scale`.
 - When Cancel is clicked, nothing is written: whatever domain was already in effect stays — the host's on first open, a previous user edit thereafter.
-- `BiwtInput.domain_accepted` **seeds** the "Skip domain validation" checkbox rather than overriding it; the checkbox alone determines `session.domain_accepted`, so the user can turn validation back on. The "Domain Settings…" button behaves as before.
+- **Nothing pre-accepts the domain.** `session.domain_accepted` starts False on every run and is set only by dismissing the dialog. The mismatch is between the data's extent and the host's domain, so it cannot be answered before the import: a landing-screen checkbox asked the user to rule on data they had not loaded, and a `BiwtInput` field let the host rule on data it never sees. Dismissing costs one click, and the "Domain Settings…" button behaves as before.
 - **Placement (`_default_spatial_pars` via `compute_spatial_placement`):** cells are scaled by `session.effective_scale()` (`scale_factor` when `apply_scale` and a positive factor exist, else `1.0`) and **centered** in the domain — a pure uniform scale + translate. Aspect ratio is always preserved; editing the domain resizes the container without changing the cell scale. On a domain change the spatial default is recomputed and any user edit is preserved as an undo step (`_apply_domain_change_and_redraw`).
 
 **Acceptance criteria:**
@@ -143,7 +142,7 @@ The framework-coupled content is **already out** of this package: BIWT ships no 
 - [x] Tests cover extractor, `_scale_domain`, units label, `effective_scale`, and `compute_spatial_placement` invariant.
 - [x] OK disabled on an inverted, zero-width, or unparseable bound, per axis, with the offending fields flagged; Cancel always enabled.
 - [x] Extent rows derive from the bounds; editing one moves that axis' maximum and anchors its minimum, leaving the other axes unaffected.
-- [x] `BiwtInput.domain_accepted` seeds the checkbox and the user can override it either way; `BiwtInput()` constructs with the default domain.
+- [x] Neither the host nor the landing screen can suppress the auto-opened dialog; only dismissing it does, and only for that run. `BiwtInput()` constructs with the default domain.
 - [x] A host value changed after the widget was built reaches the next run: the provider is called at each import, and the resolved context does not move for the duration of that run.
 - [x] `session.effective_domain is session.preferred_domain` while the user has not edited the domain; no third domain field exists.
 - [x] A provider that raises, or returns something other than a `BiwtInput`, does not fail the import.
@@ -179,8 +178,7 @@ The framework-coupled content is **already out** of this package: BIWT ships no 
 **One-line description:** Let the user choose which metadata column contains cell-type labels.
 
 **Behavioral specification:**
-- When the user has not yet selected a column, a dropdown lists all columns in `obs`.
-- The default cell-type column name can be pre-set from the launch widget.
+- When the user has not yet selected a column, a dropdown lists all columns in `obs`. The step always asks: nothing before the import pre-answers it, so no step is skipped on a guess the user was never shown.
 - When a column is selected, BIWT extracts unique cell types and per-cell labels.
 - A "Go Back" button is available if the spot deconvolution query was shown.
 
