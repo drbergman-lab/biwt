@@ -14,7 +14,9 @@ pytest.importorskip("PyQt5")
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtTest import QTest
-from PyQt5.QtWidgets import QFileDialog, QInputDialog, QLabel, QMessageBox
+from PyQt5.QtWidgets import (
+    QAbstractButton, QFileDialog, QInputDialog, QLabel, QMessageBox,
+)
 
 from biwt.core.templates import load_templates_from_file
 from biwt.gui.windows.load_cell_parameters import (
@@ -83,6 +85,25 @@ def _add_file(win, monkeypatch, path):
         staticmethod(lambda *a, **k: ([str(path)], "")),
     )
     win._add_templates_cb()
+
+
+class TestNaming:
+    def test_both_screens_call_them_cell_templates(self, qapp):
+        """The library on the landing screen and the list at this step are the
+        same objects, so they get the same name.  They had two — the landing
+        screen said "Cell parameter templates" and the step "parameter
+        templates" — which reads as two different things being loaded."""
+        win = _params_window([TEMPLATES_A])
+        for widget in (win.walkthrough, win):
+            # SectionHeader is a disabled QPushButton, so labels alone miss the
+            # landing screen's heading — the one this test exists for.
+            shown = " ".join(
+                w.text()
+                for kind in (QLabel, QAbstractButton)
+                for w in widget.findChildren(kind)
+            ).lower()
+            assert "cell templates" in shown
+            assert "parameter template" not in shown
 
 
 class TestDefaultSelections:

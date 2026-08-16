@@ -85,7 +85,7 @@ src/biwt/
     domain.py           — Domain inference + coordinate column detection
     positioning.py      — Coordinate scaling + build_ic_dataframe
     cell_types.py       — Name matching + keep/merge/delete bookkeeping
-    templates.py        — Reading host/user cell-parameter template files
+    templates.py        — Reading host/user cell template files
   gui/
     walkthrough.py      — Session state machine + Qt widget + step logic
     widgets.py          — Shared Qt widgets
@@ -147,14 +147,14 @@ mkdocs.yml
 - [x] Rename cell types with host name suggestions and duplicate blocking
 - [x] Cell counts (data counts, confluence, total count modes); a count of zero defines the cell type without placing any of it
 - [x] Coordinate placement (spatial scaling, random placement)
-- [x] Cell-parameter templates from the landing screen's library (seeded by the host, editable by the user, carried across imports) or loaded at the step; the step is always shown and always skippable
+- [x] Cell templates from the landing screen's library (seeded by the host, editable by the user, carried across imports) or loaded at the step; the step is always shown and always skippable
 - [x] BiwtResult assembly (coordinates, cell_type_map, domain, cell_templates)
 - [x] BIWT generates no framework XML and ships no framework-specific data — the host owns both
 - [x] `BiwtResult` carries no output path — the host owns *where* results go; `to_csv(path)` writes and records nothing
 - [x] 3-D spatial plot ⇧-drag writes the correct extent slots (the 3-D layout is `(x0, y0, z0, width, height, depth)`, not the 2-D `(x0, y0, width, height)`)
 - [x] Studio bridge (BiwtInput/BiwtResult, _biwt_complete callback)
 - [x] Host context resolved per run: `create_biwt_widget` accepts a `BiwtInput` or a callable returning one, snapshotted for the run
-- [x] Host cell types are cell-parameter candidates; a match returns `types.HOST_SOURCE` instead of a file path
+- [x] Host cell types are cell-template candidates; a match returns `types.HOST_SOURCE` instead of a file path
 - [x] Overwrite/Append/Browse/Cancel dialog for CSV output
 - [x] Append handles extra columns in existing CSV
 - [x] Session reset on reimport

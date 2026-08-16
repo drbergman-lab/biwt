@@ -37,7 +37,7 @@ src/biwt/
     positioning.py      — Coordinate scaling + build_ic_dataframe
     cell_types.py       — Name matching (default_name_matches, best_match,
                           suggest_name_mappings) + keep/merge/delete
-    templates.py        — Reading host/user cell-parameter template files
+    templates.py        — Reading host/user cell template files
   gui/
     walkthrough.py      — WalkthroughSession (pure-Python state machine),
                           BioinformaticsWalkthrough (Qt widget), create_biwt_widget,

@@ -2202,3 +2202,30 @@ session carries run state; this is not run state.
 same "host's predicate, else the default bound to the cutoff" rule, as a pure function. The widget
 calls it once at construction, so every match it ever scores is scored the same way, and the rule
 stays testable without Qt.
+
+---
+
+## 2026-08-16: "Cell parameter templates" is "Cell templates"
+
+The landing screen's section header drops "parameter". The object the header names is the one
+already called `cell_templates` on `BiwtResult` and `cell_template_paths` on
+`create_biwt_widget`, so the UI now says what the API says.
+
+The step's own label went with it — it read *Select parameter templates for your cell types* while
+the landing screen said *Cell parameter templates*, and after the header change would have been
+the only screen still calling them parameter templates. Two names for one library reads as two
+libraries. `TestNaming.test_both_screens_call_them_cell_templates` sweeps the labels **and** the
+buttons of both screens for the old wording, because `SectionHeader` is a disabled `QPushButton`
+and a `QLabel`-only sweep misses the header this whole change is about.
+
+The step keeps its own name. "Cell parameters" is the screen, `LoadCellParameters` the label,
+`load_cell_parameters.py` the module — none of them is the object being renamed, and the docs
+still say "the cell-parameters step" throughout.
+
+Nothing on the API moved: no field, argument or return shape changed, so a host needs no edit.
+
+`docs/assets/screenshots/import.png` (the header) and the three `templates-*.png` (the step label)
+are stale. Retaking them is a manual macOS window capture per image — `scripts/screenshot_host.py`,
+walk to the step, size the window, capture — and the four committed images differ in size because
+each was sized by hand, so an offscreen grab would not match them. Left for a docs pass, as with
+the last time this happened.

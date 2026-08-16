@@ -1,5 +1,5 @@
 """
-Cell-parameter template files.
+Cell template files.
 
 A template file is a TOML mapping of ``template_name = "content"``.  The content
 is **opaque to BIWT**: it is read as text, never parsed, validated or wrapped,

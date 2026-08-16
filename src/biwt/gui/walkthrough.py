@@ -839,7 +839,7 @@ class WalkthroughSession:
     plotted_cell_types_per_spot: list = field(default_factory=list)  # spot-deconv records
     positions_set: bool = False
 
-    # ---- cell-parameter library ------------------------------------------
+    # ---- cell-template library -------------------------------------------
     # Template files currently in play: set at import from the landing screen's
     # library, then edited by the user's Add / Remove at the step, which affects
     # this run only.  Deliberately absent from _STEP_FIELDS — loading a library
@@ -1397,13 +1397,13 @@ class BioinformaticsWalkthrough(QWidget):
 
         vbox.addLayout(self._build_format_chips())
 
-        # --- Cell-parameter templates ----------------------------------------
+        # --- Cell templates --------------------------------------------------
         # Loading a library is the one choice that has nothing to do with the file
         # being imported, so it is the one choice that should outlive the import.
         # Loaded at the cell-parameters step it is thrown away with the session on
         # the next import, and a user comparing two datasets against one library
         # reloads it every time.
-        vbox.addWidget(SectionHeader("Cell parameter templates"))
+        vbox.addWidget(SectionHeader("Cell templates"))
 
         hbox_tpl = QHBoxLayout()
         add_btn = QPushButton("Add files…")
@@ -1880,7 +1880,7 @@ def create_biwt_widget(
         Callback called with the ``BiwtResult`` when the user finishes the
         workflow.  Not called if the user never finishes.
     cell_template_paths:
-        Paths to ``.toml`` files of cell-parameter templates, each mapping a
+        Paths to ``.toml`` files of cell templates, each mapping a
         template name to an opaque content string (for a PhysiCell host, an XML
         ``<phenotype>`` block).  They seed the library listed on the landing
         screen, which the user then owns: files they add stay for every run, and

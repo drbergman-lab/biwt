@@ -7,7 +7,7 @@ If you have not run the wizard at all yet, do
 
 ## What the landing screen carries
 
-A **Cell parameter templates** list — seeded with your host's files, and yours to edit. It is the
+A **Cell templates** list — seeded with your host's files, and yours to edit. It is the
 library every import starts from, unlike files loaded at
 [the cell-parameters step](cell-parameters.md) itself, which a re-import discards. Everything
 else the wizard needs, it asks for at the step that needs it.

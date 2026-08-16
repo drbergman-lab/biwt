@@ -2,7 +2,7 @@
 
 Two host responsibilities that are easy to miss, because BIWT deliberately declines both:
 
-- **Parameter templates.** BIWT ships none and generates no config. It presents whatever
+- **Cell templates.** BIWT ships none and generates no config. It presents whatever
   library you give it and reports what the user picked.
 - **Deciding whether two names mean the same cell type.** BIWT has a default, but the decision
   is yours to take over.

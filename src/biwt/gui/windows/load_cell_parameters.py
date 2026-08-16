@@ -1,4 +1,4 @@
-"""Step: assign each final cell type a cell-parameter template, or none."""
+"""Step: assign each final cell type a cell template, or none."""
 
 from __future__ import annotations
 import os
@@ -56,7 +56,7 @@ _ICON_TIE = "ⓘ"
 
 
 class LoadCellParametersWindow(BiwinformaticsWalkthroughWindow):
-    """Let the user assign each final cell type a parameter template, or none.
+    """Let the user assign each final cell type a cell template, or none.
 
     BIWT ships no templates: they come from the landing screen's library and from
     files the user loads here.  Contents are opaque — read as text, handed
@@ -161,7 +161,7 @@ class LoadCellParametersWindow(BiwinformaticsWalkthroughWindow):
         hbox_bulk.addStretch()
         vbox.addLayout(hbox_bulk)
 
-        vbox.addWidget(QLabel("Select parameter templates for your cell types:"))
+        vbox.addWidget(QLabel("Select cell templates for your cell types:"))
 
         # Scrollable cell-type → dropdown rows, each with the same three actions
         # as the "Set all" row, scoped to that one type.

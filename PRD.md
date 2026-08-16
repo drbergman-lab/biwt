@@ -22,7 +22,7 @@ BIWT is intended for academic researchers at all career stages — from high sch
 | Persona | Background | Primary need |
 |---------|-----------|--------------|
 | **Undergrad / early grad student** | Basic bioinformatics coursework; new to PhysiCell | Step-by-step guidance; clear error messages; sensible defaults at every step |
-| **PhD candidate / postdoc** | Active bioinformatics analysis (Seurat, AnnData); moderate PhysiCell experience | Fast, repeatable import with control over cell-type mapping and parameter templates |
+| **PhD candidate / postdoc** | Active bioinformatics analysis (Seurat, AnnData); moderate PhysiCell experience | Fast, repeatable import with control over cell-type mapping and cell templates |
 | **Faculty / power user** | Deep PhysiCell and bioinformatics expertise | Fine-grained control over domain, counts, coordinate scaling, and XML parameter blocks |
 
 ---
@@ -57,7 +57,7 @@ The long-term plan is to split `biwt` into:
 - **`biwt-physicell`** (future) — a PhysiCell-specific layer, should one prove useful: curated template libraries, config assembly, framework-aware validation.
 - **`biwt-<framework>`** (future) — analogous packages for other ABM frameworks.
 
-The framework-coupled content is **already out** of this package: BIWT ships no cell-parameter templates and generates no XML. Templates arrive as opaque TOML content through `create_biwt_widget(cell_template_paths=…)` (from the host) or a file loader (from the user, on the landing screen or at the cell-parameters step), and come back as `BiwtResult.cell_templates` for the host to assemble. PhysiCell Studio owns the PhysiCell templates and the config assembly. A future `biwt-physicell` would be a convenience layer over that boundary, not a prerequisite for it.
+The framework-coupled content is **already out** of this package: BIWT ships no cell templates and generates no XML. Templates arrive as opaque TOML content through `create_biwt_widget(cell_template_paths=…)` (from the host) or a file loader (from the user, on the landing screen or at the cell-parameters step), and come back as `BiwtResult.cell_templates` for the host to assemble. PhysiCell Studio owns the PhysiCell templates and the config assembly. A future `biwt-physicell` would be a convenience layer over that boundary, not a prerequisite for it.
 
 ---
 
@@ -68,7 +68,7 @@ The framework-coupled content is **already out** of this package: BIWT ships no 
 **Behavioral specification:**
 - When the user clicks "Import file...", a file dialog offers `.h5ad`, `.rds`, `.rda`, `.rdata`, `.csv`. Dropping a single file of one of those extensions onto the landing screen's drop area takes the same path; anything else is ignored rather than reported, since a rejected drag never highlights the target in the first place.
 - The landing screen shows a chip per supported format with its **availability in this environment**, probed via `importlib.util.find_spec` (no import, no startup cost) by `core.data_loader.supported_formats`. An unavailable format's tooltip names the missing module, the pip extra that installs it, and the install docs. Without this, a missing optional dependency is discovered only by picking a file and reading the error dialog.
-- The landing screen carries the **Cell parameter templates** list — the library each run starts from, held on the widget rather than the session so it survives the reset an import performs. A library is the one choice on that screen with nothing to do with the file being imported, and loading it at the step means reloading it per dataset. *Add files…* and *Remove file…* edit it; the step's own *Remove templates from file…* edits the run, and the two do not reach each other. It is also the reason the landing screen is worth embedding in a host at all rather than replacing with a launch button: it is where state that outlives a run lives.
+- The landing screen carries the **Cell templates** list — the library each run starts from, held on the widget rather than the session so it survives the reset an import performs. A library is the one choice on that screen with nothing to do with the file being imported, and loading it at the step means reloading it per dataset. *Add files…* and *Remove file…* edit it; the step's own *Remove templates from file…* edits the run, and the two do not reach each other. It is also the reason the landing screen is worth embedding in a host at all rather than replacing with a launch button: it is where state that outlives a run lives.
 - **The host seeds that list once, at construction, and owns nothing after that.** `cell_template_paths` is an argument to `create_biwt_widget`, not a field of `BiwtInput`: the input is re-read at every run by design, so a library held there would put back the files the user removed, every run — and would be a field a host could set on a later resolution and have silently ignored. Nothing re-seeds, so a removal is permanent: the host's library is offered, not imposed. `session.template_library_paths` is set from the list on **every** import, empty included, since the step falls back to nothing rather than to the host.
 - **The landing screen names files and does not read them.** Contents are the step's business: parsing there would read files the user has asked nothing about yet, at the moment an embedding host is starting up — Studio builds the BIWT tab in `ICs.__init__`, before its main window is shown — and an unreadable one would raise a modal nobody prompted. The step already batches those failures into one dialog and drops the file, which is where a file that has gone bad since it was listed is reported. Files are labelled by the same minimal unique suffix the step uses (`core.templates.minimal_unique_suffixes`, shared for that reason), so one file is named one way throughout, and four are named before the rest collapse to a count.
 - `core.templates.normalize_template_paths` is the one repair point for paths — bare string to one entry, `str`/`os.PathLike` kept (a `pathlib.Path` as its string), everything else dropped with a warning, all made absolute and deduped. They reach `os.path.abspath` from a Qt slot, where a `TypeError` would abort the host process.
@@ -299,7 +299,7 @@ The framework-coupled content is **already out** of this package: BIWT ships no 
 
 ## F10: Load Cell Parameters
 
-**One-line description:** Assign each cell type a parameter template, or none.
+**One-line description:** Assign each cell type a cell template, or none.
 
 **Behavioral specification:**
 - BIWT ships **no** templates. The library offered is the landing screen's list — what the host seeded plus whatever the user added there, minus what they removed — and any file they load at this step via **Add templates from file…**.
@@ -507,7 +507,7 @@ When BIWT cannot complete a step:
 
 - Python >= 3.9 required.
 - `biwt.__version__` reads the installed distribution metadata, so `pyproject.toml` stays the single source of the version (a source tree that was never installed reports `0.0.0+unknown`). It is public API: a host may display or record it. BIWT surfaces it itself on the walkthrough's home screen — the one place it is visible when BIWT is embedded as a host tab, since an embedded widget's window title is never drawn — and in the window title for standalone use.
-- The wheel ships **no framework-specific data**: no cell-parameter templates, no XML scaffold. The only package data is the GUI's icons. `tomli` remains a hard dependency on 3.9/3.10 because template files supplied by the host or the user are read at runtime (stdlib `tomllib` is 3.11+).
+- The wheel ships **no framework-specific data**: no cell templates, no XML scaffold. The only package data is the GUI's icons. `tomli` remains a hard dependency on 3.9/3.10 because template files supplied by the host or the user are read at runtime (stdlib `tomllib` is 3.11+).
 - `anndata >= 0.12.2` required for `.h5ad` support (optional pip extra: `biwt[anndata]`).
 - `rpy2` + `anndata2ri` required for R object support (optional pip extra: `biwt[seurat]`), plus a working R with `Seurat` and `SingleCellExperiment`. Setup recipe and troubleshooting live in the docs site (`docs/getting-started/`).
 - `[project.urls]` in `pyproject.toml` publishes Homepage / Repository / Documentation / Issues so the PyPI page links back to the repo and docs.
@@ -539,7 +539,7 @@ The following fixture files are required for end-to-end and integration testing:
 | `tests/fixtures/spatial_cells.csv` | CSV | Cells with `x`/`y`/`z` columns; spatial placement test |
 | `tests/fixtures/test_adata.h5ad` | AnnData `.h5ad` | Full walkthrough with spatial coordinates and probability columns |
 | `tests/fixtures/test_object.rds` | R `.rds` | One of: Seurat, SingleCellExperiment, or SpatialExperiment object |
-| `tests/fixtures/templates_a.toml` | TOML | Cell-parameter templates, including a `default`; values deliberately non-XML so content round-trips prove BIWT never parses them |
+| `tests/fixtures/templates_a.toml` | TOML | Cell templates, including a `default`; values deliberately non-XML so content round-trips prove BIWT never parses them |
 | `tests/fixtures/templates_b.toml` | TOML | A second library: one name colliding with `templates_a`, one differing from a fixture cell type only by case |
 
 CSV fixtures should reside in `biwt/tests/fixtures/`. The `.h5ad` and `.rds` fixtures are to be created programmatically if possible; otherwise provided manually before release.

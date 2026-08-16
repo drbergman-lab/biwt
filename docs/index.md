@@ -58,7 +58,7 @@ The wizard ends by handing the host a [`BiwtResult`][biwt.types.BiwtResult]. Its
 | 42.0 | -310.5 | 0.0 | macrophage |
 
 Those column names are the PhysiCell convention — `type`, not `cell_type`. The result
-also reports which parameter template you picked for each cell type, if the host offered any;
+also reports which cell template you picked for each cell type, if the host offered any;
 turning those into a config is the host's job.
 
 **BIWT never writes to disk.** It returns the result in memory and the host decides where it

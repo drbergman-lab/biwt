@@ -89,7 +89,7 @@ an annulus of immune cells around it, a rectangle of stroma along one edge.
 
 ### Cell parameters
 
-Assign a parameter template per type, if your host supplied a template library or you load a
+Assign a cell template per type, if your host supplied a template library or you load a
 TOML file here. The step is skippable, and positions alone are a valid result.
 
 ## What you get

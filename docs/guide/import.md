@@ -8,7 +8,7 @@ The first screen has one button: **Import file…**. It offers `.h5ad`, `.rds`, 
   <figcaption>Everything else in the wizard follows from what you load here.</figcaption>
 </figure>
 
-## Cell parameter templates
+## Cell templates
 
 This list is the [template library](cell-parameters.md) every import starts from. **Add files…**
 puts a file on it; **Remove file…** takes one off. Your host's own files seed it, as ordinary

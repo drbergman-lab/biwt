@@ -254,7 +254,7 @@ class BiwtResult:
         ``domain_used.source`` tells the host whether this differs from
         what it passed in.
     cell_templates:
-        Maps a final cell-type name to the parameter template chosen for it:
+        Maps a final cell-type name to the cell template chosen for it:
         ``(path, name, content)`` — the absolute path of the ``.toml`` file it
         came from, its key in that file, and that key's value **verbatim**,
         surrounding whitespace included.

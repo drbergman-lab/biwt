@@ -4,7 +4,7 @@
 
 ## The question
 
-Each of your cell types can be assigned a **parameter template**: a block of text describing
+Each of your cell types can be assigned a **cell template**: a block of text describing
 how that cell behaves. For a PhysiCell host that block is a `<phenotype>` element — motility,
 mechanics, secretion, cycle, death rates — but BIWT never looks inside it.
 
@@ -27,7 +27,7 @@ leaves every type unassigned; so does picking `(none)` for individual types.
 so they are present before you arrive — listed on the landing screen, where you can drop any of
 them.
 
-**From the landing screen.** The **Cell parameter templates** list on the first screen is the
+**From the landing screen.** The **Cell templates** list on the first screen is the
 library every import starts from, so a library you work from all session is chosen once rather
 than at every run. The host's files seed it, and **Remove file…** takes any of them off for good.
 
