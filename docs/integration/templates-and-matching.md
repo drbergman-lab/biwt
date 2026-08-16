@@ -32,12 +32,12 @@ The content is **opaque to BIWT**: read as text, never parsed, validated or wrap
 example above is PhysiCell XML because that is what the reference host uses, but nothing in
 BIWT requires XML.
 
-Point BIWT at your files when you construct `BiwtInput`:
+Point BIWT at your files when you build the widget:
 
 ```python
-BiwtInput(
-    preferred_domain=domain,
-    host_name="My App",
+create_biwt_widget(
+    BiwtInput(preferred_domain=domain, host_name="My App"),
+    on_complete=save,
     cell_template_paths=["/path/to/my_templates.toml"],
 )
 ```

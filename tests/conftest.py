@@ -22,7 +22,7 @@ import pytest
 # tests/ on the path, so the modules can share plain helpers.
 sys.path.insert(0, str(Path(__file__).parent))
 
-from helpers import DOMAIN, FIXTURES        # noqa: F401 — re-exported
+from helpers import DOMAIN, FIXTURES, WIDGET_KWARGS   # noqa: F401 — re-exported
 
 
 @pytest.fixture(scope="session")
@@ -75,9 +75,11 @@ def make_widget(qapp):
     Returns ``(widget, completed)`` where *completed* is a one-element list that
     receives the ``BiwtResult`` passed to ``on_complete``.
 
-    Keyword arguments build the ``BiwtInput``.  Pass ``_source=`` instead to hand
-    ``create_biwt_widget`` something else entirely — a host provider callable — in
-    which case no ``BiwtInput`` is constructed here.
+    Keyword arguments build the ``BiwtInput``, except for the widget's own
+    construction settings (see ``WIDGET_KWARGS``), which are passed on to
+    ``create_biwt_widget``.  Pass ``_source=`` instead to
+    hand it something else entirely — a host provider callable — in which case no
+    ``BiwtInput`` is constructed here.
     """
     pytest.importorskip("PyQt5")
     from biwt.gui.walkthrough import create_biwt_widget
@@ -85,14 +87,19 @@ def make_widget(qapp):
 
     built = []
 
-    def _make(_source=None, **biwt_input_kwargs):
+    def _make(_source=None, **kwargs):
+        widget_kwargs = {
+            name: kwargs.pop(name) for name in WIDGET_KWARGS if name in kwargs
+        }
         if _source is None:
-            biwt_input_kwargs.setdefault("preferred_domain", DOMAIN)
-            _source = BiwtInput(**biwt_input_kwargs)
-        elif biwt_input_kwargs:
+            kwargs.setdefault("preferred_domain", DOMAIN)
+            _source = BiwtInput(**kwargs)
+        elif kwargs:
             raise TypeError("pass either _source or BiwtInput kwargs, not both")
         completed: list = []
-        widget = create_biwt_widget(_source, on_complete=completed.append)
+        widget = create_biwt_widget(
+            _source, on_complete=completed.append, **widget_kwargs
+        )
         built.append(widget)
         return widget, completed
 

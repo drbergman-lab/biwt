@@ -23,9 +23,13 @@ leaves every type unassigned; so does picking `(none)` for individual types.
 
 **BIWT ships none.** Templates reach the dropdowns two ways:
 
-**From the host.** An application embedding BIWT passes template files at launch through
-[`BiwtInput.cell_template_paths`][biwt.types.BiwtInput], so they are present before you
-arrive.
+**From the host.** An application embedding BIWT passes template files when it builds the widget,
+so they are present before you arrive — listed on the landing screen, where you can drop any of
+them.
+
+**From the landing screen.** The **Cell parameter templates** list on the first screen is the
+library every import starts from, so a library you work from all session is chosen once rather
+than at every run. The host's files seed it, and **Remove file…** takes any of them off for good.
 
 **From the wizard.** The **Add templates from file…** button at the bottom of the screen loads
 template files on the spot, whether or not the host supplied any — pick several at once, or drop
@@ -41,6 +45,9 @@ again, including the host's own library if you would rather work from yours.
 tagged with its name — `Tumor (Studio)`. Picking one assigns no template; it says *this is the cell
 type you already have*, and the host decides what to do about it. Where a name exists both ways,
 the host's wins.
+
+Removing a file here removes it from this run only. The landing screen's list is what the next
+import starts from, so remove it there to be rid of it for good.
 
 If nothing is supplied and you load nothing, every dropdown offers only `(none)`.
 

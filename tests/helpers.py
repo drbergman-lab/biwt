@@ -21,14 +21,23 @@ DOMAIN = DomainSpec(xmin=-500, xmax=500, ymin=-500, ymax=500)
 TEMPLATES_A = str(FIXTURES / "templates_a.toml")
 TEMPLATES_B = str(FIXTURES / "templates_b.toml")
 
+# Set up on the widget, not read off BiwtInput: the user edits them, so a per-run
+# re-read would undo that.  Split out here so a test can pass either kind.
+WIDGET_KWARGS = ("cell_template_paths",)
 
-def walkthrough_with_data(csv: str = "nonspatial.csv", **biwt_input_kwargs):
+
+def walkthrough_with_data(csv: str = "nonspatial.csv", **kwargs):
     """A real walkthrough whose session has *csv* loaded and nothing else done."""
     from biwt.gui.walkthrough import BioinformaticsWalkthrough
 
-    biwt_input_kwargs.setdefault("preferred_domain", DOMAIN)
-    w = BioinformaticsWalkthrough(BiwtInput(**biwt_input_kwargs))
+    widget_kwargs = {
+        name: kwargs.pop(name) for name in WIDGET_KWARGS if name in kwargs
+    }
+    kwargs.setdefault("preferred_domain", DOMAIN)
+    w = BioinformaticsWalkthrough(BiwtInput(**kwargs), **widget_kwargs)
     w.session.data = data_loader.load(str(FIXTURES / csv))
+    # What an import does: the landing screen's library is the run's seed.
+    w.session.template_library_paths = list(w._library_paths)
     return w
 
 
@@ -67,12 +76,11 @@ def session_through_rename(session, *, column: str = "type", spatial: bool = Fal
     return rename_to(session, rename)
 
 
-def window_at_rename(csv: str = "nonspatial.csv", *, rename=None,
-                     **biwt_input_kwargs):
+def window_at_rename(csv: str = "nonspatial.csv", *, rename=None, **kwargs):
     """A walkthrough driven to just past the rename step, ready for a later window.
 
     The non-spatial fixture's final cell types are Macrophage, T_cell and Tumor.
     """
-    w = walkthrough_with_data(csv, **biwt_input_kwargs)
+    w = walkthrough_with_data(csv, **kwargs)
     session_through_rename(w.session, rename=rename)
     return w

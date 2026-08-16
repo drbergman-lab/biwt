@@ -8,6 +8,15 @@ The first screen has one button: **Import file…**. It offers `.h5ad`, `.rds`, 
   <figcaption>Everything else in the wizard follows from what you load here.</figcaption>
 </figure>
 
+## Cell parameter templates
+
+This list is the [template library](cell-parameters.md) every import starts from. **Add files…**
+puts a file on it; **Remove file…** takes one off. Your host's own files seed it, as ordinary
+entries — remove one you do not want and it is gone for good.
+
+The files are only named here; they are read at the cell-parameters step, so a file that cannot
+be read is reported there.
+
 ## What BIWT reads from each format
 
 | Format | Read via | Supported objects |

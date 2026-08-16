@@ -147,7 +147,7 @@ mkdocs.yml
 - [x] Rename cell types with host name suggestions and duplicate blocking
 - [x] Cell counts (data counts, confluence, total count modes); a count of zero defines the cell type without placing any of it
 - [x] Coordinate placement (spatial scaling, random placement)
-- [x] Cell-parameter templates supplied by the host or loaded by the user; the step is always shown and always skippable
+- [x] Cell-parameter templates from the landing screen's library (seeded by the host, editable by the user, carried across imports) or loaded at the step; the step is always shown and always skippable
 - [x] BiwtResult assembly (coordinates, cell_type_map, domain, cell_templates)
 - [x] BIWT generates no framework XML and ships no framework-specific data — the host owns both
 - [x] `BiwtResult` carries no output path — the host owns *where* results go; `to_csv(path)` writes and records nothing

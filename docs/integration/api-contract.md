@@ -64,13 +64,15 @@ BiwtInput(
     preferred_domain=domain,              # optional; defaults to ±500 × ±500 × ±10 µm
     host_cell_type_names=[],              # optional
     host_name="Host",                     # optional
-    cell_template_paths=[],               # optional
     name_matches=None,                    # optional
     name_match_cutoff=0.85,               # optional
 )
 ```
 
 Every field has a default, so `BiwtInput()` is valid.
+
+This is your application's *state*, and every field is re-read at each run. How the widget itself
+is set up is passed to [`create_biwt_widget`](#widget-setup) instead.
 
 ### When BIWT reads it
 
@@ -108,16 +110,6 @@ at the [cell-parameters step](../guide/cell-parameters.md), where assigning one 
 **`host_name`** — appears in the domain editor as `Use <host_name> Domain`. Set it; the
 default `"Host"` reads like a placeholder.
 
-**`cell_template_paths`** — paths to TOML files, each mapping a template name to its content.
-The content is opaque to BIWT: read as text, never parsed, handed back verbatim.
-
-**BIWT ships no templates**, so these files are the parameter library — pass them if you want
-the [cell parameters step](../guide/cell-parameters.md) to offer anything. The user can also
-load further files there at runtime, which is why the result reports each template's source
-path. A non-string value in the file (a stray `[section]` header, a number) is rejected with a
-message naming the key. [Templates and name matching](templates-and-matching.md) covers the
-file rules and a worked assembly example.
-
 **`name_matches`** — a `Callable[[str, str], bool]` deciding whether two strings name the same
 cell type. Used for rename suggestions and template pre-selection. Supplying it replaces
 BIWT's default **and** `name_match_cutoff`.
@@ -134,6 +126,34 @@ template file is loaded or an auto-match button is pressed. Two requirements fol
 **`name_match_cutoff`** — similarity threshold for BIWT's default matcher only; ignored when
 `name_matches` is given. [Templates and name matching](templates-and-matching.md) spells that
 default out, with the cases it rejects and the one gap it does not cover.
+
+## Widget setup
+
+`create_biwt_widget` takes what belongs to the widget rather than to your application's current
+state. It is read once, when the widget is built, because the user edits it from then on —
+re-reading it per run would undo that.
+
+```python
+widget = create_biwt_widget(
+    host_input,
+    on_complete=save,
+    cell_template_paths=["/path/to/templates.toml"],
+)
+```
+
+**`cell_template_paths`** — paths to TOML files, each mapping a template name to its content.
+The content is opaque to BIWT: read as text, never parsed, handed back verbatim.
+
+**BIWT ships no templates**, so these files are the parameter library — pass them if you want the
+[cell parameters step](../guide/cell-parameters.md) to offer anything. They seed the library listed
+on the landing screen, which the user owns from then on: files they add stay for every run, files
+they remove — yours included — stay gone. The result reports each template's source path either way.
+
+Paths may be `str` or `os.PathLike`; anything else is dropped with a warning. The files are read at
+the cell-parameters step and nowhere else, so an unreadable one costs a warning dialog there rather
+than anything at startup. A non-string value in the file (a stray `[section]` header, a number) is
+rejected with a message naming the key. [Templates and name
+matching](templates-and-matching.md) covers the file rules and a worked assembly example.
 
 ## `BiwtResult` — BIWT to host
 

@@ -40,6 +40,7 @@ than chosen belongs in ``WalkthroughSession.reseed_derived_state`` instead.
 from __future__ import annotations
 
 import math
+import os
 from dataclasses import MISSING, dataclass, field, fields
 from html import escape
 from typing import Optional, Callable, NamedTuple
@@ -50,7 +51,7 @@ import numpy as np
 from PyQt5.QtWidgets import (
     QWidget, QDialog, QVBoxLayout, QHBoxLayout, QGridLayout, QFrame,
     QLabel, QPushButton, QLineEdit, QCheckBox, QToolButton,
-    QFileDialog, QMessageBox, QDialogButtonBox,
+    QFileDialog, QInputDialog, QMessageBox, QDialogButtonBox,
 )
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QDoubleValidator
@@ -64,6 +65,7 @@ from biwt.core.data_loader import (
     INSTALL_DOCS_URL, BiwtData, LoadError, supported_formats,
 )
 from biwt.core import domain as domain_module
+from biwt.core import templates as core_templates
 from biwt.core.cell_types import alpha_key, default_name_matches
 from biwt.core.positioning import build_ic_dataframe
 from biwt.gui.widgets import (
@@ -72,6 +74,10 @@ from biwt.gui.widgets import (
 )
 
 log = logging.getLogger(__name__)
+
+# Files named on the landing screen before the rest collapse to a count.
+_TEMPLATE_FILES_SHOWN = 4
+
 
 _LE_STYLE = (
     "background-color: white; border: 1px solid #555;"
@@ -829,11 +835,11 @@ class WalkthroughSession:
     positions_set: bool = False
 
     # ---- cell-parameter library ------------------------------------------
-    # Template files currently in play: seeded from BiwtInput.cell_template_paths
-    # the first time the step is built, then edited by the user's Add / Remove.
-    # Deliberately absent from _STEP_FIELDS — loading a library is an action, not
-    # an answer, so changing an earlier step must not silently undo it.  None
-    # means "not seeded yet".
+    # Template files currently in play: set at import from the landing screen's
+    # library, then edited by the user's Add / Remove at the step, which affects
+    # this run only.  Deliberately absent from _STEP_FIELDS — loading a library
+    # is an action, not an answer, so changing an earlier step must not silently
+    # undo it.  None means a session nobody imported into.
     template_library_paths: Optional[list] = None
 
     # ---- after load-cell-parameters step ---------------------------------
@@ -1229,17 +1235,23 @@ class BioinformaticsWalkthrough(QWidget):
     Parameters
     ----------
     biwt_input:
-        Everything the host supplies at launch (domain, cell-type names, etc.)
+        The host's state, re-read at the start of every run (domain, cell-type
+        names, etc.)
     on_complete:
         Callback receiving a ``BiwtResult`` when the user finishes.
         Called once, when the user finishes. There is no cancel callback: closing
         the widget is the host's own event to handle.
+    cell_template_paths:
+        How this widget is set up, as opposed to what the host currently is —
+        see :func:`create_biwt_widget`, which documents it.
     """
 
     def __init__(
         self,
         biwt_input: BiwtInputSource,
         on_complete: Optional[Callable[[BiwtResult], None]] = None,
+        *,
+        cell_template_paths=(),
     ):
         super().__init__()
         self.setWindowTitle(f"BioInformatics WalkThrough (BIWT) v{__version__}")
@@ -1280,6 +1292,16 @@ class BioinformaticsWalkthrough(QWidget):
         self.stale_futures: bool = False
         self.current_window_idx: int = -1
         self.window: Optional[QWidget] = None
+
+        # The template library the next run starts from.  The host seeds it here,
+        # once, and it is the user's from then on: the files they add stay, and the
+        # ones they remove — the host's included — stay gone.  That is why it is
+        # not part of BiwtInput, which is re-read at every run and would put a
+        # removed file back each time.  Contents are nobody's business here: the
+        # landing screen names files, and the step is where they are read.
+        self._library_paths = core_templates.normalize_template_paths(
+            cell_template_paths
+        )
 
         self._build_home_ui()
 
@@ -1375,7 +1397,91 @@ class BioinformaticsWalkthrough(QWidget):
 
         vbox.addLayout(self._build_format_chips())
 
+        # --- Cell-parameter templates ----------------------------------------
+        # Loading a library is the one choice that has nothing to do with the file
+        # being imported, so it is the one choice that should outlive the import.
+        # Loaded at the cell-parameters step it is thrown away with the session on
+        # the next import, and a user comparing two datasets against one library
+        # reloads it every time.
+        vbox.addWidget(SectionHeader("Cell parameter templates"))
+
+        hbox_tpl = QHBoxLayout()
+        add_btn = QPushButton("Add files…")
+        add_btn.clicked.connect(self._add_home_templates_cb)
+        self._remove_templates_btn = QPushButton("Remove file…")
+        self._remove_templates_btn.clicked.connect(self._remove_home_template_cb)
+        hbox_tpl.addWidget(add_btn)
+        hbox_tpl.addWidget(self._remove_templates_btn)
+        hbox_tpl.addStretch(1)
+        vbox.addLayout(hbox_tpl)
+
+        self._template_summary = self._caption("")
+        vbox.addWidget(self._template_summary)
+        self._refresh_template_summary()
+
         vbox.addStretch(1)
+
+    # ------------------------------------------------------------------
+    # Home-screen template library
+    # ------------------------------------------------------------------
+
+    def _add_home_templates_cb(self) -> None:
+        paths, _ = QFileDialog.getOpenFileNames(
+            self, "Open template files", "",
+            "TOML files (*.toml);;All files (*)",
+        )
+        for path in core_templates.normalize_template_paths(paths):
+            if path not in self._library_paths:
+                self._library_paths.append(path)
+        self._refresh_template_summary()
+
+    def _remove_home_template_cb(self) -> None:
+        """Drop one file from the library, the host's own included.
+
+        A file the host seeded is an entry like any other here: it is offered,
+        not imposed, and a user who does not want it needs a way to say so.
+        """
+        labels = core_templates.minimal_unique_suffixes(self._library_paths)
+        by_label = {labels[p]: p for p in self._library_paths}
+        if not by_label:
+            return
+        choice, ok = QInputDialog.getItem(
+            self, "Remove template file",
+            "Stop offering the templates from:",
+            sorted(by_label, key=alpha_key), 0, False,
+        )
+        if not ok or choice not in by_label:
+            return
+        self._library_paths.remove(by_label[choice])
+        self._refresh_template_summary()
+
+    def _refresh_template_summary(self) -> None:
+        """Name the files in the library, nothing more.
+
+        Their contents are read at the cell-parameters step and only there: a
+        landing screen that parsed them would be reading files the user has not
+        asked anything about yet, at the moment an embedding host is starting up.
+        """
+        paths = self._library_paths
+        self._remove_templates_btn.setEnabled(bool(paths))
+        if not paths:
+            self._template_summary.setText(
+                "Optional. Files listed here are offered at the cell-parameters "
+                "step of every import."
+            )
+            self._template_summary.setToolTip("")
+            return
+        # Same labels the step uses, so a file is named one way throughout.
+        labels = core_templates.minimal_unique_suffixes(paths)
+        lines = [labels[p] for p in paths[:_TEMPLATE_FILES_SHOWN]]
+        if len(paths) > _TEMPLATE_FILES_SHOWN:
+            lines.append(f"…and {len(paths) - _TEMPLATE_FILES_SHOWN} more")
+        lines.append(
+            f"{len(paths)} file{'' if len(paths) == 1 else 's'}, "
+            "carried into every import."
+        )
+        self._template_summary.setText("\n".join(lines))
+        self._template_summary.setToolTip("\n".join(paths))
 
     @staticmethod
     def _caption(text: str) -> QLabel:
@@ -1548,6 +1654,9 @@ class BioinformaticsWalkthrough(QWidget):
         # Reset session so stale state from a previous run doesn't survive reimport.
         self.session = WalkthroughSession(biwt_input=biwt_input)
         self.session.data = bdata
+
+        # The landing screen's list is the library this run starts from.
+        self.session.template_library_paths = list(self._library_paths)
 
         # Seed the scale factor (host-units per data unit) from what the file
         # supplied (currently only Visium µm/pixel); None → user enters one.
@@ -1747,6 +1856,8 @@ class BioinformaticsWalkthrough(QWidget):
 def create_biwt_widget(
     biwt_input: BiwtInputSource,
     on_complete: Optional[Callable[[BiwtResult], None]] = None,
+    *,
+    cell_template_paths=(),
 ) -> BioinformaticsWalkthrough:
     """Create and return a BIWT walkthrough widget, suitable for embedding or use as a popup.
 
@@ -1765,7 +1876,19 @@ def create_biwt_widget(
     on_complete:
         Callback called with the ``BiwtResult`` when the user finishes the
         workflow.  Not called if the user never finishes.
+    cell_template_paths:
+        Paths to ``.toml`` files of cell-parameter templates, each mapping a
+        template name to an opaque content string (for a PhysiCell host, an XML
+        ``<phenotype>`` block).  They seed the library listed on the landing
+        screen, which the user then owns: files they add stay for every run, and
+        files they remove — yours included — stay gone.  That is why this is an
+        argument here rather than a field of ``BiwtInput``: re-reading it per run
+        would put a removed file back every time.
 
+        BIWT ships no templates and never parses the contents; the files are read
+        at the cell-parameters step and nowhere else, so an unreadable one costs a
+        warning there rather than anything at startup.  ``str`` or ``os.PathLike``;
+        anything else is dropped with a warning.
     Example
     -------
     ::
@@ -1781,6 +1904,7 @@ def create_biwt_widget(
                 host_name="My App",
             ),
             on_complete=lambda result: print(result.coordinates.head()),
+            cell_template_paths=["/path/to/my_templates.toml"],
         )
         widget.show()
 
@@ -1797,4 +1921,8 @@ def create_biwt_widget(
     BIWT never writes to disk.  To persist the result, do it in
     ``on_complete`` — e.g. ``result.to_csv("cells.csv")``.
     """
-    return BioinformaticsWalkthrough(biwt_input=biwt_input, on_complete=on_complete)
+    return BioinformaticsWalkthrough(
+        biwt_input=biwt_input,
+        on_complete=on_complete,
+        cell_template_paths=cell_template_paths,
+    )

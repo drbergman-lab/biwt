@@ -7,15 +7,21 @@ and reaches the host verbatim in ``BiwtResult.cell_templates``.  For a PhysiCell
 host the content happens to be an XML ``<phenotype>`` block, but nothing here
 knows or cares about that.
 
-BIWT ships no templates of its own.  Files come from the host via
-``BiwtInput.cell_template_paths``, or from the user at the cell-parameters step.
+BIWT ships no templates of its own.  Files come from the landing screen's library
+— seeded by the host at widget construction, edited by the user — or from the
+user at the cell-parameters step.
 """
 
 from __future__ import annotations
 
+import logging
+import os
+from collections import Counter
 from typing import Callable, Optional
 
 from biwt.core.cell_types import alpha_key, best_match
+
+log = logging.getLogger(__name__)
 
 # A candidate with this name is the baseline for a cell type whose name matches
 # nothing.  Purely a convention: BIWT never creates one.  Which source's
@@ -52,6 +58,59 @@ def load_templates_from_file(path: str) -> dict[str, str]:
             "nested tables, which is the usual cause."
         )
     return data
+
+
+def normalize_template_paths(paths) -> list[str]:
+    """*paths* as absolute path strings: deduped, ordered, and nothing else.
+
+    Repairs rather than refuses, because each case has one reading: a bare string
+    is one path rather than a list of its characters, and a ``pathlib.Path`` is a
+    path.  Anything that is neither a string nor ``os.PathLike`` is dropped with a
+    warning — these reach ``os.path.abspath`` from a Qt slot, where a ``TypeError``
+    would take the host process with it.
+
+    Absolute, so a relative path is resolved once, against the working directory
+    of the moment it was named, rather than differently at every later read.
+    """
+    if isinstance(paths, (str, bytes)) or isinstance(paths, os.PathLike):
+        paths = [paths]
+
+    resolved = []
+    for entry in paths:
+        try:
+            path = os.fspath(entry)
+        except TypeError:
+            log.warning("Ignoring a cell template path that is not a path: %r", entry)
+            continue
+        if isinstance(path, bytes):
+            path = os.fsdecode(path)
+        path = path.strip()
+        if path:
+            resolved.append(os.path.abspath(path))
+    return list(dict.fromkeys(resolved))
+
+
+def minimal_unique_suffixes(filepaths: list[str]) -> dict[str, str]:
+    """Return the shortest path suffix that uniquely identifies each filepath.
+
+    Paths are shortened to the minimal trailing suffix (basename, then
+    parent/basename, etc.) that avoids collisions within this group.
+
+    Shared, so the landing screen's library list and the cell-parameters step
+    name the same file the same way.
+    """
+    if not filepaths:
+        return {}
+
+    parts = {fp: list(reversed(fp.replace("\\", "/").split("/"))) for fp in filepaths}
+    max_depth = max(len(p) for p in parts.values())
+
+    for depth in range(1, max_depth + 1):
+        candidate = {fp: "/".join(reversed(ps[:depth])) for fp, ps in parts.items()}
+        if max(Counter(candidate.values()).values()) == 1:
+            return candidate
+
+    return {fp: fp for fp in filepaths}      # fallback: full paths
 
 
 def matched_candidates(

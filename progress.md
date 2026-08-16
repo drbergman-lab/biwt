@@ -2135,3 +2135,45 @@ costs one click and settles that run.
 That leaves `BiwtInput` asking the host three questions about its state: which cell types it
 already holds, which domain it prefers, and (with the library, later in this series) which
 template files to offer. Everything else on it is identity (`host_name`) or matching behavior.
+
+---
+
+## 2026-08-15 (later): a template library on the landing screen
+
+**Add files…** under **Cell parameter templates** puts a file on the library every subsequent
+import starts from. The paths live on the widget, not the session, because the session is rebuilt
+from scratch at each import — which is the whole reason to put them there. A library is the one
+choice on that screen with nothing to do with the file being imported: a user comparing two
+datasets against one set of templates was reloading it per dataset.
+
+It also settles why the landing screen is embedded in the host at all, rather than being a button
+that launches the wizard. The screen is where state that outlives a run lives; with only an
+Import button on it, a launch button would have been the honest design.
+
+The host seeds the list once, at construction, through `create_biwt_widget(cell_template_paths=…)`
+rather than `BiwtInput`. That is the load-bearing part of the design. `BiwtInput` is the host's
+*state* and is re-read at the start of every run, so a library held there would put the user's
+removals back, every run — and the first attempt did exactly that, needing a `_host_paths_seen`
+set to suppress files that had already been offered. Moving the seed to construction deleted that
+machinery: nothing re-seeds, so a removal is simply permanent. It also means no field of
+`BiwtInput` can be set on a later resolution and silently ignored. The host's files are entries
+like any other in the list, and **Remove file…** takes any of them off.
+
+The landing screen names files and does not read them. Parsing there buys a template count on a
+screen where the count is not the question, and pays for it with file I/O and a possible error
+modal during an embedding host's startup: Studio builds the BIWT tab in `ICs.__init__`, before its
+main window is shown. The step already reads every file it is handed, batches the failures into
+one dialog and drops the file, so a file that has gone bad since it was listed is reported at the
+one screen that has something to say about it.
+
+`_minimal_unique_suffixes` moved to `core.templates` so the list and the step label a file the
+same way; two libraries both called `lib.toml` read as `mine/lib.toml` and `theirs/lib.toml` in
+both places. `normalize_template_paths` joins it there as the one repair point for paths: bare
+string to one entry, `str`/`os.PathLike` kept, everything else dropped with a warning, all
+absolute and deduped. They reach `os.path.abspath` from a Qt slot, and PyQt5 turns a raise in a
+slot into a fatal abort.
+
+`docs/assets/screenshots/import.png` is stale after both changes — it still shows the checkbox and
+the cell-type field, and none of the template list. Retaking it is a manual macOS window capture
+(`scripts/screenshot_host.py`, then capture the window), so it is left for a docs pass rather than
+approximated with an offscreen grab that would not match the other images.

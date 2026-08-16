@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 import os
-from collections import Counter
 from typing import Optional
 
 from PyQt5.QtWidgets import (
@@ -56,31 +55,11 @@ _TIP_NONE    = f"Assign {_NO_TEMPLATE_LABEL}"
 _ICON_TIE = "ⓘ"
 
 
-def _minimal_unique_suffixes(filepaths: list[str]) -> dict[str, str]:
-    """Return the shortest path suffix that uniquely identifies each filepath.
-
-    Paths are shortened to the minimal trailing suffix (basename, then
-    parent/basename, etc.) that avoids collisions within this group.
-    """
-    if not filepaths:
-        return {}
-
-    parts = {fp: list(reversed(fp.replace("\\", "/").split("/"))) for fp in filepaths}
-    max_depth = max(len(p) for p in parts.values())
-
-    for depth in range(1, max_depth + 1):
-        candidate = {fp: "/".join(reversed(ps[:depth])) for fp, ps in parts.items()}
-        if max(Counter(candidate.values()).values()) == 1:
-            return candidate
-
-    return {fp: fp for fp in filepaths}      # fallback: full paths
-
-
 class LoadCellParametersWindow(BiwinformaticsWalkthroughWindow):
     """Let the user assign each final cell type a parameter template, or none.
 
-    BIWT ships no templates: they come from ``BiwtInput.cell_template_paths`` and
-    from files the user loads here.  Contents are opaque — read as text, handed
+    BIWT ships no templates: they come from the landing screen's library and from
+    files the user loads here.  Contents are opaque — read as text, handed
     back to the host untouched.  Behavioral spec: PRD F10.
 
     Invariants this class maintains:
@@ -107,15 +86,12 @@ class LoadCellParametersWindow(BiwinformaticsWalkthroughWindow):
         # drops any that have become unreadable.
         self._template_db: dict[tuple[str, str], str] = {}
         self._load_errors: list[str] = []
-        seed = (
-            s.biwt_input.cell_template_paths
-            if s.template_library_paths is None
-            else s.template_library_paths
-        )
-        # dict.fromkeys dedupes while keeping order: a host that passes one path
-        # twice, or twice by different spellings of the same file, would otherwise
-        # list it twice — and removing it then took one entry out and left the other,
-        # so the templates came back on the next rebuild.
+        # The import fills this from the landing screen's library; None only
+        # happens for a session assembled without one.
+        seed = s.template_library_paths or []
+        # dict.fromkeys dedupes while keeping order: two spellings of one file
+        # would otherwise list it twice — and removing it then took one entry out
+        # and left the other, so the templates came back on the next rebuild.
         s.template_library_paths = list(dict.fromkeys(
             loaded for loaded in (self._load_template_file(p) for p in seed) if loaded
         ))
@@ -486,7 +462,7 @@ class LoadCellParametersWindow(BiwinformaticsWalkthroughWindow):
         ``Tumor (Studio)`` rather than exposing the reserved sentinel: the
         sentinel is an API signal, not something to show a user.
         """
-        labels = _minimal_unique_suffixes(self._library_paths())
+        labels = core_templates.minimal_unique_suffixes(self._library_paths())
         if any(fp == HOST_SOURCE for _, fp in self._template_db):
             labels[HOST_SOURCE] = self.walkthrough.session.biwt_input.host_name
         return labels

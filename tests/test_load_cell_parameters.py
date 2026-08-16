@@ -16,6 +16,7 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtTest import QTest
 from PyQt5.QtWidgets import QFileDialog, QInputDialog, QLabel, QMessageBox
 
+from biwt.core.templates import load_templates_from_file
 from biwt.gui.windows.load_cell_parameters import (
     _ICON_AUTO,
     _ICON_DEFAULT,
@@ -24,7 +25,14 @@ from biwt.gui.windows.load_cell_parameters import (
     _NO_TEMPLATE_LABEL,
     LoadCellParametersWindow,
 )
-from helpers import FIXTURES, TEMPLATES_A, TEMPLATES_B, window_at_rename
+from helpers import (
+    DOMAIN,
+    FIXTURES,
+    TEMPLATES_A,
+    TEMPLATES_B,
+    session_through_rename,
+    window_at_rename,
+)
 
 
 
@@ -1276,7 +1284,9 @@ class TestBadPathsAreReportedOnce:
         """A modal per bad path has to be dismissed before the step will open.
 
         `list("some/path.toml")` — a host meaning to pass one path — produces one
-        bad path per character, which is how this was found.
+        bad path per character, which is how this was found.  A bare string is
+        repaired to one path now, but a list of junk still has to arrive as one
+        complaint.
         """
         shown = []
         monkeypatch.setattr(QMessageBox, "warning",
@@ -1285,7 +1295,7 @@ class TestBadPathsAreReportedOnce:
         win = _params_window(bad)
 
         assert len(shown) == 1
-        assert f"Could not load {len(bad)} template files" in shown[0]
+        assert f"Could not load {len(set(bad))} template files" in shown[0]
         assert win._template_db == {}          # nothing loaded, step still opens
 
     def test_one_bad_path_still_names_it(self, qapp, monkeypatch):
@@ -1510,3 +1520,204 @@ class TestSourcesLineUpInAColumn:
         box, a screen reader and the rest of these tests read."""
         win, _, _ = self._two_libraries(tmp_path)
         assert "Tumor (a.toml)" in _row_labels(win)
+
+
+class TestLandingScreenLibrary:
+    """The landing screen holds the library each run starts from.
+
+    Its entries outlive the session, which every import rebuilds — and the host's
+    own files are entries like any other: listed, and removable.
+    """
+
+    @staticmethod
+    def _add_home(widget, monkeypatch, *paths):
+        monkeypatch.setattr(
+            QFileDialog, "getOpenFileNames",
+            staticmethod(lambda *a, **k: ([str(p) for p in paths], "")),
+        )
+        widget._add_home_templates_cb()
+
+    @staticmethod
+    def _remove_home(widget, monkeypatch, label, *, ok=True):
+        monkeypatch.setattr(
+            QInputDialog, "getItem",
+            staticmethod(lambda *a, **k: (label, ok)),
+        )
+        widget._remove_home_template_cb()
+
+    @staticmethod
+    def _params_step(widget):
+        session_through_rename(widget.session)
+        return LoadCellParametersWindow(widget)
+
+    @staticmethod
+    def _abandon_run(widget):
+        """What closing a step window does — importing again is refused otherwise."""
+        widget._allow_import(True)
+
+    def test_a_listed_file_reaches_the_step(self, make_widget, drive_import, monkeypatch):
+        w, _ = make_widget()
+        self._add_home(w, monkeypatch, TEMPLATES_A)
+        drive_import(w, "nonspatial.csv")
+
+        win = self._params_step(w)
+        assert ("Tumor", str(Path(TEMPLATES_A).resolve())) in win._template_db
+
+    def test_it_survives_a_second_import(self, make_widget, drive_import, monkeypatch):
+        w, _ = make_widget()
+        self._add_home(w, monkeypatch, TEMPLATES_A)
+        drive_import(w, "nonspatial.csv")
+        self._abandon_run(w)
+        drive_import(w, "nonspatial.csv")       # the session is rebuilt here
+
+        win = self._params_step(w)
+        assert ("Tumor", str(Path(TEMPLATES_A).resolve())) in win._template_db
+
+    def test_the_hosts_files_are_listed_from_the_start(self, make_widget):
+        """Before any import, so the user can see what they already have."""
+        w, _ = make_widget(cell_template_paths=[TEMPLATES_B])
+        assert w._library_paths == [str(Path(TEMPLATES_B).resolve())]
+        assert "templates_b.toml" in w._template_summary.text()
+
+    def test_host_files_come_first_and_the_users_follow(
+        self, make_widget, drive_import, monkeypatch
+    ):
+        w, _ = make_widget(cell_template_paths=[TEMPLATES_B])
+        self._add_home(w, monkeypatch, TEMPLATES_A)
+        drive_import(w, "nonspatial.csv")
+
+        assert w.session.template_library_paths == [
+            str(Path(TEMPLATES_B).resolve()), str(Path(TEMPLATES_A).resolve()),
+        ]
+
+    def test_a_removed_host_file_is_gone_for_good(
+        self, make_widget, drive_import, monkeypatch
+    ):
+        """Seeded, not imposed — and nothing re-seeds it, at this import or any."""
+        w, _ = make_widget(cell_template_paths=[TEMPLATES_B])
+        self._remove_home(w, monkeypatch, "templates_b.toml")
+        assert w._library_paths == []
+
+        drive_import(w, "nonspatial.csv")
+        assert w.session.template_library_paths == []
+        assert self._params_step(w)._template_db == {}
+
+        self._abandon_run(w)
+        drive_import(w, "nonspatial.csv")
+        assert w.session.template_library_paths == []
+
+    def test_a_cancelled_removal_changes_nothing(self, make_widget, monkeypatch):
+        w, _ = make_widget(cell_template_paths=[TEMPLATES_B])
+        self._remove_home(w, monkeypatch, "templates_b.toml", ok=False)
+        assert w._library_paths == [str(Path(TEMPLATES_B).resolve())]
+
+    def test_a_later_host_resolution_cannot_touch_the_library(
+        self, make_widget, drive_import
+    ):
+        """The library is the widget's, so a per-run value cannot rewrite it."""
+        from biwt.types import BiwtInput
+
+        w, _ = make_widget(
+            _source=lambda: BiwtInput(preferred_domain=DOMAIN, host_name="Studio"),
+            cell_template_paths=[TEMPLATES_B],
+        )
+        drive_import(w, "nonspatial.csv")
+        assert w.session.template_library_paths == [str(Path(TEMPLATES_B).resolve())]
+
+    def test_a_file_added_twice_is_listed_once(self, make_widget, monkeypatch):
+        w, _ = make_widget()
+        self._add_home(w, monkeypatch, TEMPLATES_A)
+        self._add_home(w, monkeypatch, TEMPLATES_A)
+        assert w._library_paths == [str(Path(TEMPLATES_A).resolve())]
+
+    def test_an_unreadable_file_is_reported_at_the_step_and_survives_it(
+        self, make_widget, drive_import, monkeypatch
+    ):
+        """The landing screen names files; reading them is the step's job.
+
+        So a file that has gone bad since it was picked has to land there as a
+        warning, not as a traceback.
+        """
+        w, _ = make_widget()
+        self._add_home(w, monkeypatch, FIXTURES / "no_such_templates.toml")
+        drive_import(w, "nonspatial.csv")
+
+        shown = []
+        monkeypatch.setattr(QMessageBox, "warning",
+                            staticmethod(lambda *a, **k: shown.append(a[2])))
+        win = self._params_step(w)
+
+        assert len(shown) == 1
+        assert "no_such_templates.toml" in shown[0]
+        assert win._template_db == {}                    # step built anyway
+        assert win.walkthrough.session.template_library_paths == []
+
+    def test_the_summary_names_each_file(self, make_widget, monkeypatch):
+        w, _ = make_widget()
+        assert "every import" in w._template_summary.text()
+        self._add_home(w, monkeypatch, TEMPLATES_A, TEMPLATES_B)
+
+        text = w._template_summary.text()
+        assert "templates_a.toml" in text
+        assert "templates_b.toml" in text
+        assert "2 files, carried into every import." in text
+        assert TEMPLATES_A in w._template_summary.toolTip()
+
+    def test_files_beyond_the_fourth_collapse_to_a_count(
+        self, make_widget, monkeypatch, tmp_path
+    ):
+        w, _ = make_widget()
+        files = []
+        for i in range(6):
+            f = tmp_path / f"lib_{i}.toml"
+            f.write_text(f'"Tumor_{i}" = "T"\n')
+            files.append(f)
+        self._add_home(w, monkeypatch, *files)
+
+        text = w._template_summary.text()
+        assert "lib_3.toml" in text
+        assert "lib_4.toml" not in text
+        assert "…and 2 more" in text
+        assert "6 files, carried" in text
+
+    def test_two_files_of_one_name_are_told_apart(
+        self, make_widget, monkeypatch, tmp_path
+    ):
+        """The step's labelling rule, so a file reads the same in both places."""
+        w, _ = make_widget()
+        paths = []
+        for parent in ("mine", "theirs"):
+            d = tmp_path / parent
+            d.mkdir()
+            (d / "lib.toml").write_text('"Tumor" = "T"\n')
+            paths.append(d / "lib.toml")
+        self._add_home(w, monkeypatch, *paths)
+
+        text = w._template_summary.text()
+        assert "mine/lib.toml" in text
+        assert "theirs/lib.toml" in text
+
+    def test_remove_is_disabled_with_nothing_to_remove(self, make_widget, monkeypatch):
+        w, _ = make_widget()
+        assert not w._remove_templates_btn.isEnabled()
+        self._add_home(w, monkeypatch, TEMPLATES_A)
+        assert w._remove_templates_btn.isEnabled()
+        self._remove_home(w, monkeypatch, "templates_a.toml")
+        assert not w._remove_templates_btn.isEnabled()
+
+    def test_removing_at_the_step_leaves_the_landing_list_alone(
+        self, make_widget, drive_import, monkeypatch
+    ):
+        """The step edits the run; the landing screen edits what runs start from."""
+        w, _ = make_widget()
+        self._add_home(w, monkeypatch, TEMPLATES_A)
+        drive_import(w, "nonspatial.csv")
+        win = self._params_step(w)
+        _remove_file(win, monkeypatch, "templates_a.toml")
+
+        assert win._template_db == {}
+        assert w._library_paths == [str(Path(TEMPLATES_A).resolve())]
+
+        self._abandon_run(w)
+        drive_import(w, "nonspatial.csv")
+        assert ("Tumor", str(Path(TEMPLATES_A).resolve())) in self._params_step(w)._template_db
