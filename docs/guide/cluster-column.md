@@ -1,6 +1,8 @@
 # Cluster column
 
-**Shown when:** you are not doing [spot deconvolution](spot-deconvolution.md).
+**Shown when:** you are not doing [spot deconvolution](spot-deconvolution.md), and the
+[cell-type column field](import.md#default-cell-type-column) — if your host offers it at all —
+does not name a column your data has.
 
 ## The question
 

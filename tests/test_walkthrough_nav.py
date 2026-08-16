@@ -14,6 +14,8 @@ import pytest
 
 pytest.importorskip("PyQt5")
 
+from PyQt5.QtWidgets import QLabel
+
 from biwt.gui.walkthrough import _STEP_FIELDS, _STEP_ORDER
 from helpers import FIXTURES
 
@@ -144,6 +146,44 @@ class TestNonDeconvolutionPaths:
         assert any(
             type(win).__name__ == "ClusterColumnWindow" for win in w.window_history
         )
+
+    def test_cluster_column_auto_continues_when_the_hint_matches(
+        self, make_widget, drive_import, qapp
+    ):
+        """The hint exists only where the host asked for the field."""
+        w, _ = make_widget(show_cell_type_column=True)
+        drive_import(w, "spatial.csv")     # has a "type" column
+        qapp.processEvents()               # let the auto-continue QTimer fire
+
+        assert _name(w) == "SpatialQueryWindow"
+        assert any(
+            type(win).__name__ == "ClusterColumnWindow" for win in w.window_history
+        )
+
+    def test_the_step_still_asks_when_the_hint_misses(
+        self, make_widget, drive_import, qapp
+    ):
+        """And says which name it looked for, since the user chose that name."""
+        w, _ = make_widget(show_cell_type_column=True)
+        w.column_line_edit.setText("celltype")
+        drive_import(w, "spatial.csv")
+        qapp.processEvents()
+
+        assert _name(w) == "ClusterColumnWindow"
+        assert w.window.auto_continue is False
+        prompt = w.window.findChildren(QLabel)[0].text()
+        assert "'celltype' was not found" in prompt
+
+    def test_no_field_means_no_hint_however_the_file_names_it(
+        self, make_widget, drive_import, qapp
+    ):
+        """spatial.csv has a "type" column; without the field nothing looks."""
+        w, _ = make_widget()
+        drive_import(w, "spatial.csv")
+        qapp.processEvents()
+
+        assert _name(w) == "ClusterColumnWindow"
+        assert w.window.auto_continue is False
 
     def test_changing_the_column_rebuilds_the_spatial_query(
         self, make_widget, drive_import, qapp

@@ -68,6 +68,7 @@ The framework-coupled content is **already out** of this package: BIWT ships no 
 **Behavioral specification:**
 - When the user clicks "Import file...", a file dialog offers `.h5ad`, `.rds`, `.rda`, `.rdata`, `.csv`. Dropping a single file of one of those extensions onto the landing screen's drop area takes the same path; anything else is ignored rather than reported, since a rejected drag never highlights the target in the first place.
 - The landing screen shows a chip per supported format with its **availability in this environment**, probed via `importlib.util.find_spec` (no import, no startup cost) by `core.data_loader.supported_formats`. An unavailable format's tooltip names the missing module, the pip extra that installs it, and the install docs. Without this, a missing optional dependency is discovered only by picking a file and reading the error dialog.
+- The landing screen carries a **Shortcuts** group holding the cell-type column hint, captioned with what it skips, because as a loose control it reads as a stray setting and its effect is invisible. It is shown only when the host passes `show_cell_type_column=True` to `create_biwt_widget`, and **the hint exists only when the field does** — no field, no name, and the cluster-column step always asks. A step skipped on a guess the user was never shown is worse than the question, and `"type"` is a guess: it is what PhysiCell writes out, not what annotation columns are usually called. It is a widget argument rather than a `BiwtInput` field because the user edits it, and `BiwtInput` is re-read at every run.
 - When a `.h5ad` file is selected, BIWT reads it via `anndata.read_h5ad`.
 - When a `.rds` / `.rda` / `.rdata` file is selected, BIWT reads it via `rpy2` + `anndata2ri`, supporting Seurat, SingleCellExperiment, and SpatialExperiment objects.
 - When a `.csv` file is selected, BIWT reads it via `pandas.read_csv`.
@@ -178,12 +179,15 @@ The framework-coupled content is **already out** of this package: BIWT ships no 
 **One-line description:** Let the user choose which metadata column contains cell-type labels.
 
 **Behavioral specification:**
-- When the user has not yet selected a column, a dropdown lists all columns in `obs`. The step always asks: nothing before the import pre-answers it, so no step is skipped on a guess the user was never shown.
+- When the user has not yet selected a column, a dropdown lists all columns in `obs`. `ClusterColumnWindow` reads the hint through `walkthrough.cell_type_column_hint`, which is `""` unless the host asked for the field, so the window depends on a name rather than on whether a control exists.
+- A hint the data has sets `auto_continue`, and the step advances without being shown. A hint it does not have leaves the step asking, with the name in the prompt — the user chose that name, so the failure has to name it back.
 - When a column is selected, BIWT extracts unique cell types and per-cell labels.
 - A "Go Back" button is available if the spot deconvolution query was shown.
 
 **Acceptance criteria:**
 - [x] All obs columns listed in the dropdown.
+- [x] With no field, no hint: a file with a `type` column still reaches the step.
+- [x] With the field, a matching name auto-continues and a missing one is named in the prompt.
 - [x] Selection populates `cell_types_list_original` and `cell_types_original`.
 - [x] Go Back available after spot deconv query.
 

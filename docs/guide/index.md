@@ -5,6 +5,14 @@ The walkthrough is a sequence of small screens, each asking one question.
 If you have not run the wizard at all yet, do
 [your first walkthrough](../getting-started/first-walkthrough.md) first.
 
+## A step you can pre-answer
+
+If your host turns it on, the landing screen carries a **Shortcuts** group:
+
+- **Cell-type column** — if the imported file has a column with this name, it is used as the
+  cell-type column and [that step](cluster-column.md) is skipped. Without the field there is no
+  name to match, and that step always asks.
+
 ## How steps are chosen
 
 Before each screen BIWT walks an ordered list of predicates and shows the first step whose

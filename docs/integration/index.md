@@ -55,6 +55,13 @@ your application can supply them:
 | `cell_template_paths` | TOML files of parameter templates. BIWT ships none, so this *is* the library offered at the [cell parameters step](../guide/cell-parameters.md) — though the user can load more files there themselves. See [templates and name matching](templates-and-matching.md). |
 | `name_matches` | Your own `(str, str) -> bool` for "do these name the same cell type?", replacing BIWT's default (and `name_match_cutoff`) for both rename suggestions and template pre-selection. See [templates and name matching](templates-and-matching.md). |
 
+One more goes to `create_biwt_widget` rather than `BiwtInput`, because the user edits it and a
+per-run re-read would undo that:
+
+| Argument | Effect |
+|---|---|
+| `show_cell_type_column` | Shows the **Cell-type column** field on the landing screen, naming the column that skips the [cluster-column step](../guide/cluster-column.md). Off by default, and then that step always asks. |
+
 If your host outlives one walkthrough, pass a **callable returning a `BiwtInput`** rather than an
 instance: BIWT calls it at each import, so these fields do not freeze at build time. See
 [when BIWT reads its input](api-contract.md#when-biwt-reads-it).

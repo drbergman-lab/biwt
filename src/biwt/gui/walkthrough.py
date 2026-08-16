@@ -1234,12 +1234,17 @@ class BioinformaticsWalkthrough(QWidget):
         Callback receiving a ``BiwtResult`` when the user finishes.
         Called once, when the user finishes. There is no cancel callback: closing
         the widget is the host's own event to handle.
+    show_cell_type_column:
+        How this widget is set up, as opposed to what the host currently is —
+        see :func:`create_biwt_widget`, which documents it.
     """
 
     def __init__(
         self,
         biwt_input: BiwtInputSource,
         on_complete: Optional[Callable[[BiwtResult], None]] = None,
+        *,
+        show_cell_type_column: bool = False,
     ):
         super().__init__()
         self.setWindowTitle(f"BioInformatics WalkThrough (BIWT) v{__version__}")
@@ -1256,6 +1261,7 @@ class BioinformaticsWalkthrough(QWidget):
         self._host_input_error = ""
 
         self.on_complete = on_complete or (lambda result: None)
+        self._show_cell_type_column = bool(show_cell_type_column)
         # This first resolution only seeds the home screen and stands in until
         # the first import; nothing derived, placed, or handed back to the host
         # comes out of it.
@@ -1375,7 +1381,35 @@ class BioinformaticsWalkthrough(QWidget):
 
         vbox.addLayout(self._build_format_chips())
 
+        # --- Shortcuts --------------------------------------------------------
+        # Off by default, and then there is no hint at all: a step skipped on a
+        # name the user was never shown is worse than the question.  A host whose
+        # users import many files of one schema knows the name; nobody else does.
+        if self._show_cell_type_column:
+            vbox.addWidget(SectionHeader("Shortcuts"))
+            self.column_line_edit = QLineEdit("type")
+            self.column_line_edit.setStyleSheet(_LE_STYLE)
+            self.column_line_edit.setToolTip(
+                "If the imported file has a column with this name, it is used as "
+                "the cell-type column and that step is skipped."
+            )
+            hbox_col = QHBoxLayout()
+            hbox_col.addWidget(QLabel("Cell-type column:"))
+            hbox_col.addWidget(self.column_line_edit, 1)
+            vbox.addLayout(hbox_col)
+            # Captioned, because as a loose control it reads as a stray setting
+            # and its effect is invisible: it skips a whole step.
+            vbox.addWidget(self._caption(
+                "Skips the cluster-column step when the imported file has this column."
+            ))
+
         vbox.addStretch(1)
+
+    @property
+    def cell_type_column_hint(self) -> str:
+        """The column name to look for, or "" when the screen offers no field."""
+        field = getattr(self, "column_line_edit", None)
+        return field.text().strip() if field is not None else ""
 
     @staticmethod
     def _caption(text: str) -> QLabel:
@@ -1747,6 +1781,8 @@ class BioinformaticsWalkthrough(QWidget):
 def create_biwt_widget(
     biwt_input: BiwtInputSource,
     on_complete: Optional[Callable[[BiwtResult], None]] = None,
+    *,
+    show_cell_type_column: bool = False,
 ) -> BioinformaticsWalkthrough:
     """Create and return a BIWT walkthrough widget, suitable for embedding or use as a popup.
 
@@ -1765,6 +1801,18 @@ def create_biwt_widget(
     on_complete:
         Callback called with the ``BiwtResult`` when the user finishes the
         workflow.  Not called if the user never finishes.
+    show_cell_type_column:
+        Show the "Cell-type column" field on the landing screen, seeded with
+        ``"type"``: name a column the imported file has, and it is taken as the
+        cell-type annotation, skipping that step.  Worth turning on for a host
+        whose users import many files sharing one schema.  Left off, there is no
+        hint at all and the cluster-column step always asks — a step skipped on a
+        guess the user never saw is worse than the question.
+
+        Read when the widget is built, since that is when the landing screen is
+        laid out, and the user edits it from then on.  That is why it is an
+        argument here rather than a field of ``BiwtInput``, which is re-read at
+        every run.
 
     Example
     -------
@@ -1797,4 +1845,8 @@ def create_biwt_widget(
     BIWT never writes to disk.  To persist the result, do it in
     ``on_complete`` — e.g. ``result.to_csv("cells.csv")``.
     """
-    return BioinformaticsWalkthrough(biwt_input=biwt_input, on_complete=on_complete)
+    return BioinformaticsWalkthrough(
+        biwt_input=biwt_input,
+        on_complete=on_complete,
+        show_cell_type_column=show_cell_type_column,
+    )

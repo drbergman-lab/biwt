@@ -2135,3 +2135,21 @@ costs one click and settles that run.
 That leaves `BiwtInput` asking the host three questions about its state: which cell types it
 already holds, which domain it prefers, and (with the library, later in this series) which
 template files to offer. Everything else on it is identity (`host_name`) or matching behavior.
+---
+
+## 2026-08-15 (later): the cell-type column field, host-opt-in
+
+Back as `create_biwt_widget(show_cell_type_column=True)`, off by default. A host whose users
+import many files of one schema knows the column name; nobody else does, which is why it is the
+host's switch and not a control everyone sees.
+
+The hint exists only when the field does. Reintroducing `"type"` as a silent default would put
+back exactly what the previous commit removed — a step skipped on a name the user never saw.
+
+`ClusterColumnWindow` reads `walkthrough.cell_type_column_hint` rather than reaching for the line
+edit, so the window depends on a name and not on whether a control was built. The alternative was
+an always-constructed, never-shown `QLineEdit`, which is a stray top-level widget and a worse
+thing to explain.
+
+It is a widget argument rather than a `BiwtInput` field for the same reason the library will be:
+`BiwtInput` is the host's state, re-read at every run, and the user edits this.

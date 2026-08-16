@@ -8,6 +8,17 @@ The first screen has one button: **Import file…**. It offers `.h5ad`, `.rds`, 
   <figcaption>Everything else in the wizard follows from what you load here.</figcaption>
 </figure>
 
+## Default cell-type column
+
+If your host turns on the **Cell-type column** field, the landing screen carries it under
+**Shortcuts**, seeded with `type`. Name a column your data has and it is used as the cell-type
+annotation straight away, so the [cluster column](cluster-column.md) screen never appears. Name
+one it does not have and BIWT tells you so, then asks you to choose:
+
+> `'type' was not found in the obs columns. Select from the following:`
+
+Without the field there is no name to look for, and that screen always asks.
+
 ## What BIWT reads from each format
 
 | Format | Read via | Supported objects |

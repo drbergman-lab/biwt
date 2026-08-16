@@ -246,12 +246,20 @@ def test_an_unavailable_format_says_how_to_install_it(widget, drive_import, monk
     assert INSTALL_DOCS_URL in chip.toolTip()
 
 
-def test_the_landing_screen_pre_answers_nothing(widget):
-    """Import is the only question on it; the rest of the wizard asks its own."""
+def test_the_cell_type_column_field_is_off_by_default(widget):
+    """And with no field there is no hint, so no step is skipped on a guess."""
     captions = " ".join(_labels(widget)).lower()
     assert "shortcuts" not in captions
     assert "cell-type column" not in captions
-    assert not hasattr(widget, "column_line_edit")
+    assert widget.cell_type_column_hint == ""
+
+
+def test_a_host_can_show_the_cell_type_column_field(make_widget):
+    w = make_widget(show_cell_type_column=True)[0]
+    captions = " ".join(_labels(w)).lower()
+    assert "cell-type column" in captions
+    assert "skips the cluster-column step" in captions
+    assert w.cell_type_column_hint == "type"
 
 
 def _drop(widget, *paths):

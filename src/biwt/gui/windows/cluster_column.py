@@ -2,26 +2,44 @@
 
 from __future__ import annotations
 from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout, QLabel, QComboBox
+from PyQt5.QtCore import QTimer
 from biwt.core.cell_types import alpha_key
 from biwt.gui.windows.base import BiwinformaticsWalkthroughWindow
 from biwt.gui.widgets import GoBackButton
 
 
 class ClusterColumnWindow(BiwinformaticsWalkthroughWindow):
-    """Ask the user which obs column holds cell-type labels."""
+    """Ask the user which obs column holds cell-type labels.
+
+    When the landing screen names a column and the data has it, the answer is
+    already known: ``auto_continue`` says so, and the walkthrough advances
+    without showing this step.  With no hint — the default — it always asks.
+    """
 
     def __init__(self, walkthrough):
         super().__init__(walkthrough)
         s = walkthrough.session
+        hint = walkthrough.cell_type_column_hint
 
         col_keys = sorted(s.data.obs.columns.tolist(), key=alpha_key)
 
+        self.auto_continue = bool(hint) and hint in col_keys
+        if hint and not self.auto_continue:
+            prompt = (
+                f"'{hint}' was not found in the obs columns.\n"
+                "Select from the following:"
+            )
+        else:
+            prompt = "Select column that contains cell type info:"
+
         vbox = QVBoxLayout()
-        vbox.addWidget(QLabel("Select column that contains cell type info:"))
+        vbox.addWidget(QLabel(prompt))
 
         self.column_combobox = QComboBox()
         for col in col_keys:
             self.column_combobox.addItem(col)
+        if self.auto_continue:
+            self.column_combobox.setCurrentIndex(self.column_combobox.findText(hint))
         self.column_combobox.currentIndexChanged.connect(
             lambda _: setattr(walkthrough, "stale_futures", True)
         )
@@ -33,6 +51,9 @@ class ClusterColumnWindow(BiwinformaticsWalkthroughWindow):
         hbox.addWidget(self.create_continue_button())
         vbox.addLayout(hbox)
         self.setLayout(vbox)
+
+        if self.auto_continue:
+            QTimer.singleShot(0, self.process_window)
 
     def process_window(self) -> None:
         s = self.walkthrough.session

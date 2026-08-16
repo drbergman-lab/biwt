@@ -72,6 +72,9 @@ BiwtInput(
 
 Every field has a default, so `BiwtInput()` is valid.
 
+This is your application's *state*, and every field is re-read at each run. How the widget itself
+is set up is passed to [`create_biwt_widget`](#widget-setup) instead.
+
 ### When BIWT reads it
 
 BIWT resolves its input at each import and holds a copy for that run, so a host change mid-run is
@@ -134,6 +137,22 @@ template file is loaded or an auto-match button is pressed. Two requirements fol
 **`name_match_cutoff`** — similarity threshold for BIWT's default matcher only; ignored when
 `name_matches` is given. [Templates and name matching](templates-and-matching.md) spells that
 default out, with the cases it rejects and the one gap it does not cover.
+
+## Widget setup
+
+`create_biwt_widget` takes the settings that belong to the widget rather than to your
+application's current state. They are read once, when it is built, because the user edits them
+from then on — re-reading them per run would undo that.
+
+```python
+widget = create_biwt_widget(host_input, on_complete=save, show_cell_type_column=True)
+```
+
+**`show_cell_type_column`** — set `True` to show the **Cell-type column** field on the landing
+screen, seeded with `type`. Name a column the imported file has and it is taken as the cell-type
+annotation, skipping the [cluster-column step](../guide/cluster-column.md). Left off, there is no
+hint at all and that step always asks: a step skipped on a guess the user never saw is worse than
+the question.
 
 ## `BiwtResult` — BIWT to host
 
