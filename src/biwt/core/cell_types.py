@@ -5,7 +5,7 @@ The decision is the host's: it can supply a predicate via
 ``create_biwt_widget(name_matches=…)``.  ``default_name_matches`` is the
 fallback BIWT ships,
 and ``best_match`` is the one selection routine used by both rename hints
-(``suggest_name_mappings``) and the cell-parameters step.
+(``suggest_name_mappings``) and the cell-templates step.
 """
 
 from __future__ import annotations

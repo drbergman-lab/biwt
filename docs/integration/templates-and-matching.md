@@ -2,7 +2,7 @@
 
 Two host responsibilities that are easy to miss, because BIWT deliberately declines both:
 
-- **Parameter templates.** BIWT ships none and generates no config. It presents whatever
+- **Cell templates.** BIWT ships none and generates no config. It presents whatever
   library you give it and reports what the user picked.
 - **Deciding whether two names mean the same cell type.** BIWT has a default, but the decision
   is yours to take over.
@@ -106,7 +106,7 @@ def on_complete(result):
 
 BIWT asks "do these two strings name the same cell type?" in two places: pre-filling
 [rename suggestions](../guide/rename-cell-types.md) from `host_cell_type_names`, and
-pre-selecting a candidate per cell type at the cell-parameters step — where the candidates are your
+pre-selecting a candidate per cell type at the cell-templates step — where the candidates are your
 template names *and* those same `host_cell_type_names`, pooled and matched on equal footing. One
 rule serves all of it, and you can replace it:
 

@@ -42,7 +42,7 @@ differ from what the host passed in, if you changed it in
 
 ### `cell_templates`
 
-The [parameter templates](cell-parameters.md) you assigned, as a mapping from final cell-type
+The [cell templates](cell-templates.md) you assigned, as a mapping from final cell-type
 name to `(path, name, content)` — the `.toml` file the template came from, its name in that
 file, and its content **verbatim**.
 

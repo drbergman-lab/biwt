@@ -67,7 +67,7 @@ back to.
 
 ## `biwt.core.templates`
 
-Reading cell-parameter template files, and choosing a starting template per cell type. BIWT
+Reading cell template files, and choosing a starting template per cell type. BIWT
 ships no templates of its own and never parses their content.
 
 ::: biwt.core.templates

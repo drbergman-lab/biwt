@@ -15,7 +15,7 @@ pre-filled with its first original name. Change any of them, or accept them all.
 
 The names you set here appear in the `type` column of the output, in
 [`cell_type_map`](result.md), and as the keys of
-[`cell_templates`](cell-parameters.md). Whether they become cell definitions in a
+[`cell_templates`](cell-templates.md). Whether they become cell definitions in a
 simulation config is the host's decision — BIWT generates none.
 
 ## Why bother

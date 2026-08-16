@@ -52,7 +52,7 @@ metastasis, a sensitivity sweep over one population's size.
 
 **Zero is allowed, and it is not the same as deleting.** A count of zero means *define this
 cell type, but place none of it*: the type still reaches the host — in `cell_type_map`, and
-with whatever [parameter template](cell-parameters.md) you assigned it — it just contributes no
+with whatever [cell template](cell-templates.md) you assigned it — it just contributes no
 rows to the coordinates. That is how you pull a phenotype into your model without seeding any
 of those cells, useful when the population is meant to appear later, through division or
 differentiation, rather than at t = 0.

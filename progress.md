@@ -2202,3 +2202,46 @@ session carries run state; this is not run state.
 same "host's predicate, else the default bound to the cutoff" rule, as a pure function. The widget
 calls it once at construction, so every match it ever scores is scored the same way, and the rule
 stays testable without Qt.
+
+---
+
+## 2026-08-16: "Cell parameter templates" is "Cell templates"
+
+The landing screen's section header drops "parameter". The object the header names is the one
+already called `cell_templates` on `BiwtResult` and `cell_template_paths` on
+`create_biwt_widget`, so the UI now says what the API says.
+
+The step's own label went with it — it read *Select parameter templates for your cell types* while
+the landing screen said *Cell parameter templates*, and after the header change would have been
+the only screen still calling them parameter templates. Two names for one library reads as two
+libraries. `TestNaming.test_both_screens_call_them_cell_templates` sweeps the labels **and** the
+buttons of both screens for the old wording, because `SectionHeader` is a disabled `QPushButton`
+and a `QLabel`-only sweep misses the header this whole change is about.
+
+The step took the name too. "Cell parameters" was the screen, `LoadCellParameters` the label,
+`LoadCellParametersWindow` the class, `load_cell_parameters.py` the module — a step named for
+parameters that loads, matches and hands back nothing but templates. It is now
+`LoadCellTemplates` / `LoadCellTemplatesWindow` / `load_cell_templates.py`, with
+`tests/test_load_cell_parameters.py` and `docs/guide/cell-parameters.md` following. That last
+one changes a published URL, and there is no redirects plugin in `mkdocs.yml` to soften it.
+
+`session.parameters_loaded` became `templates_assigned` rather than `templates_loaded`. The
+mechanical rename would have put it six lines under `template_library_paths`, where "loaded"
+already means *read off disk* — the flag is about the user having answered the step, not about
+any file. `positions_set` is the shape it follows.
+
+Nothing on the API moved: `BiwtInput`, `BiwtResult` and `create_biwt_widget` are untouched, so a
+host needs no edit. `WalkthroughSession` is internal, which is what makes the field rename cheap.
+
+`import.png` (the header) and the three `templates-*.png` (the step label) were retaken by hand.
+All four come in under the 1600 cap, so `sips -Z` stays away from them — on an under-cap capture
+it scales *up* and softens the text.
+
+They were normalized P3 → sRGB, which is the half of the rule the capture itself cannot satisfy:
+`screencapture` writes Display P3 with `cICP`, `iDOT` and a ~3 KB `iCCP`, and these are shots of a
+Qt UI specified in sRGB, so a P3-tagged file is genuinely wrong rather than merely heavy.
+`sips --matchTo "/System/Library/ColorSync/Profiles/sRGB Profile.icc"` converts and re-encodes to
+the compact `sRGB` chunk in one pass, dropping 7–10 KB each. That leaves the same chunk list the
+three step captures already carried — `IHDR sRGB eXIf pHYs iTXt IDAT IEND` — so the set is
+uniform for the first time: `import.png` had been the one file still tagged P3. No ICC profile is
+written, so the littleCMS wall-clock trap noted above does not apply to this route.

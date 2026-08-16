@@ -1,10 +1,10 @@
-# Cell parameters
+# Cell templates
 
 **Shown when:** always — the last step before BIWT hands back its result.
 
 ## The question
 
-Each of your cell types can be assigned a **parameter template**: a block of text describing
+Each of your cell types can be assigned a **cell template**: a block of text describing
 how that cell behaves. For a PhysiCell host that block is a `<phenotype>` element — motility,
 mechanics, secretion, cycle, death rates — but BIWT never looks inside it.
 
@@ -13,7 +13,7 @@ Continue straight away, and you can click Skip instead** — this step is never 
 leaves every type unassigned; so does picking `(none)` for individual types.
 
 <figure markdown>
-  ![The cell-parameters screen with no template libraries loaded](../assets/screenshots/templates-no-libraries.png)
+  ![The cell-templates screen with no template libraries loaded](../assets/screenshots/templates-no-libraries.png)
   <figcaption>With nothing loaded, every type sits on <strong>(none)</strong> and the actions that
   need a library are disabled. This is a complete, valid answer — <strong>Continue</strong> and
   <strong>Skip</strong> both hand back an empty set.</figcaption>
@@ -27,7 +27,7 @@ leaves every type unassigned; so does picking `(none)` for individual types.
 so they are present before you arrive — listed on the landing screen, where you can drop any of
 them.
 
-**From the landing screen.** The **Cell parameter templates** list on the first screen is the
+**From the landing screen.** The **Cell templates** list on the first screen is the
 library every import starts from, so a library you work from all session is chosen once rather
 than at every run. The host's files seed it, and **Remove file…** takes any of them off for good.
 

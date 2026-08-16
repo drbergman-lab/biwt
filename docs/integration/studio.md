@@ -70,7 +70,7 @@ Worth copying:
 Then, separately, if `result.cell_templates` is non-empty, Studio assembles a PhysiCell config
 from those templates and offers to save it. Studio also ships the PhysiCell template library
 itself and passes it in through `cell_template_paths` — BIWT holds no framework-specific
-parameters of its own. That arrangement is not Studio-specific; [templates and name
+templates of its own. That arrangement is not Studio-specific; [templates and name
 matching](templates-and-matching.md) describes it for any host.
 
 ## What the package path must match

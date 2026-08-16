@@ -156,7 +156,7 @@ class BiwtInput:
         Cell type names currently defined in the host (e.g. a cell-definitions
         tab).  BIWT does not require them, and never constrains the user to them.
         Used twice: as rename suggestions, and as candidates at the
-        cell-parameters step — assigning one means "the host already has this cell
+        cell-templates step — assigning one means "the host already has this cell
         type", which comes back marked with :data:`HOST_SOURCE` rather than a file
         path.  They match on equal footing with templates from files.
     """
@@ -254,7 +254,7 @@ class BiwtResult:
         ``domain_used.source`` tells the host whether this differs from
         what it passed in.
     cell_templates:
-        Maps a final cell-type name to the parameter template chosen for it:
+        Maps a final cell-type name to the cell template chosen for it:
         ``(path, name, content)`` — the absolute path of the ``.toml`` file it
         came from, its key in that file, and that key's value **verbatim**,
         surrounding whitespace included.

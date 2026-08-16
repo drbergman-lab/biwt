@@ -51,7 +51,7 @@ already defines, so imported types can line up with them instead of duplicating 
 case-insensitive exact match first, else the first host name the matcher accepts. It is a hint,
 not a ranking. Two caveats: the placeholder only renders in an *empty* field, so it sits hidden
 behind the pre-filled original name; and pass nothing and there are no suggestions at all. The
-names are also offered at the [cell-parameters step](../guide/cell-parameters.md), where assigning
+names are also offered at the [cell-templates step](../guide/cell-templates.md), where assigning
 one comes back marked `HOST_SOURCE`.
 
 Everything else goes to `create_biwt_widget`, because none of it is state that changes between
@@ -61,7 +61,7 @@ runs:
 |---|---|
 | `host_name` | Your application's name, used in the [domain editor](../guide/domain.md) UI ("Use Studio Domain"). Defaults to `"Host"`, which looks unfinished. |
 | `name_matches` | Your own `(str, str) -> bool` for "do these name the same cell type?", replacing BIWT's default (and `name_match_cutoff`) for both rename suggestions and template pre-selection. See [templates and name matching](templates-and-matching.md). |
-| `cell_template_paths` | TOML files of parameter templates. BIWT ships none, so these seed the library offered at the [cell parameters step](../guide/cell-parameters.md) — listed on the landing screen, where the user can add more or drop yours. See [templates and name matching](templates-and-matching.md). |
+| `cell_template_paths` | TOML files of cell templates. BIWT ships none, so these seed the library offered at the [cell-templates step](../guide/cell-templates.md) — listed on the landing screen, where the user can add more or drop yours. See [templates and name matching](templates-and-matching.md). |
 
 If your host outlives one walkthrough, pass a **callable returning a `BiwtInput`** rather than an
 instance: BIWT calls it at each import, so these fields do not freeze at build time. See
@@ -88,7 +88,7 @@ they reach for the feature.
 - **[The API contract](api-contract.md)** — `BiwtInput` and `BiwtResult` field by field,
   including what is reserved for future use.
 - **[Templates and name matching](templates-and-matching.md)** — the two jobs BIWT hands back
-  to you: supplying a parameter library and deciding when two names mean the same cell type.
+  to you: supplying a template library and deciding when two names mean the same cell type.
 - **[PhysiCell Studio](studio.md)** — a complete worked bridge, and the conventions it
   established.
 - **[API reference](../reference/index.md)** — generated signatures and docstrings.

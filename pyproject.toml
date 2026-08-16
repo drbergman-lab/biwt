@@ -81,7 +81,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 # Non-Python assets inside the package.  BIWT ships no framework-specific data
-# (cell-parameter templates come from the host or the user), so this is icons.
+# (cell templates come from the host or the user), so this is icons.
 "biwt.gui" = ["icons/*.svg", "icons/*.png"]
 
 [tool.pytest.ini_options]

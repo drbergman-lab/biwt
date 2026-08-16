@@ -752,13 +752,13 @@ class TestStepSequencing:
         assert not s.positions_set
         assert _next_step(s) == "Positions"
 
-    def test_after_positions_set_and_parameters_not_loaded_goes_to_load_parameters(self):
+    def test_after_positions_set_and_templates_unassigned_goes_to_load_templates(self):
         s = _session(NONSPATIAL_CSV)
         session_through_rename(s)
         s.cell_counts_confirmed = True
         s.positions_set = True
-        assert not s.parameters_loaded
-        assert _next_step(s) == "LoadCellParameters"
+        assert not s.templates_assigned
+        assert _next_step(s) == "LoadCellTemplates"
 
     def test_all_flags_done_returns_none(self):
         # All predicates False → workflow complete → None
@@ -766,7 +766,7 @@ class TestStepSequencing:
         session_through_rename(s)
         s.cell_counts_confirmed = True
         s.positions_set = True
-        s.parameters_loaded = True
+        s.templates_assigned = True
         assert _next_step(s) is None
 
 
