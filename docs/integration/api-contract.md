@@ -63,16 +63,14 @@ most one default PhysiCell voxel (20 µm). `DomainSpec.default()` builds the fal
 BiwtInput(
     preferred_domain=domain,              # optional; defaults to ±500 × ±500 × ±10 µm
     host_cell_type_names=[],              # optional
-    host_name="Host",                     # optional
-    name_matches=None,                    # optional
-    name_match_cutoff=0.85,               # optional
 )
 ```
 
-Every field has a default, so `BiwtInput()` is valid.
+Both fields have defaults, so `BiwtInput()` is valid.
 
-This is your application's *state*, and every field is re-read at each run. How the widget itself
-is set up is passed to [`create_biwt_widget`](#widget-setup) instead.
+Two questions, both about what your application currently holds: which cell types it defines, and
+what domain it wants. Everything else BIWT needs from a host is
+[widget setup](#widget-setup) — set once, not re-asked per run.
 
 ### When BIWT reads it
 
@@ -86,10 +84,9 @@ and you need no refresh hook:
 ```python
 def host_input():
     return BiwtInput(preferred_domain=my_app.current_domain(),
-                     host_cell_type_names=my_app.cell_type_names(),
-                     host_name="My App")
+                     host_cell_type_names=my_app.cell_type_names())
 
-widget = create_biwt_widget(host_input, on_complete=save)
+widget = create_biwt_widget(host_input, on_complete=save, host_name="My App")
 ```
 
 Keep it cheap and free of side effects; it runs inside the import path. If it raises, or returns
@@ -106,6 +103,36 @@ meaningful one.
 binding on the user. Used for [rename suggestions](../guide/rename-cell-types.md) and as candidates
 at the [cell-parameters step](../guide/cell-parameters.md), where assigning one comes back marked
 `HOST_SOURCE` (see `cell_templates` below). A name defined both ways resolves to the host.
+
+## Widget setup
+
+`create_biwt_widget` takes everything that is not your application's current state: its name, its
+template library, and how it decides two strings name the same cell type. All are read once, when
+the widget is built. None of them changes between runs, and the library is one the user edits, so
+re-asking per run would either be pointless or undo their work.
+
+```python
+widget = create_biwt_widget(
+    host_input,
+    on_complete=save,
+    host_name="My App",
+    cell_template_paths=["/path/to/templates.toml"],
+)
+```
+
+**`cell_template_paths`** — paths to TOML files, each mapping a template name to its content.
+The content is opaque to BIWT: read as text, never parsed, handed back verbatim.
+
+**BIWT ships no templates**, so these files are the parameter library — pass them if you want the
+[cell parameters step](../guide/cell-parameters.md) to offer anything. They seed the library listed
+on the landing screen, which the user owns from then on: files they add stay for every run, files
+they remove — yours included — stay gone. The result reports each template's source path either way.
+
+Paths may be `str` or `os.PathLike`; anything else is dropped with a warning. The files are read at
+the cell-parameters step and nowhere else, so an unreadable one costs a warning dialog there rather
+than anything at startup. A non-string value in the file (a stray `[section]` header, a number) is
+rejected with a message naming the key. [Templates and name
+matching](templates-and-matching.md) covers the file rules and a worked assembly example.
 
 **`host_name`** — appears in the domain editor as `Use <host_name> Domain`. Set it; the
 default `"Host"` reads like a placeholder.
@@ -126,34 +153,6 @@ template file is loaded or an auto-match button is pressed. Two requirements fol
 **`name_match_cutoff`** — similarity threshold for BIWT's default matcher only; ignored when
 `name_matches` is given. [Templates and name matching](templates-and-matching.md) spells that
 default out, with the cases it rejects and the one gap it does not cover.
-
-## Widget setup
-
-`create_biwt_widget` takes what belongs to the widget rather than to your application's current
-state. It is read once, when the widget is built, because the user edits it from then on —
-re-reading it per run would undo that.
-
-```python
-widget = create_biwt_widget(
-    host_input,
-    on_complete=save,
-    cell_template_paths=["/path/to/templates.toml"],
-)
-```
-
-**`cell_template_paths`** — paths to TOML files, each mapping a template name to its content.
-The content is opaque to BIWT: read as text, never parsed, handed back verbatim.
-
-**BIWT ships no templates**, so these files are the parameter library — pass them if you want the
-[cell parameters step](../guide/cell-parameters.md) to offer anything. They seed the library listed
-on the landing screen, which the user owns from then on: files they add stay for every run, files
-they remove — yours included — stay gone. The result reports each template's source path either way.
-
-Paths may be `str` or `os.PathLike`; anything else is dropped with a warning. The files are read at
-the cell-parameters step and nowhere else, so an unreadable one costs a warning dialog there rather
-than anything at startup. A non-string value in the file (a stray `[section]` header, a number) is
-rejected with a message naming the key. [Templates and name
-matching](templates-and-matching.md) covers the file rules and a worked assembly example.
 
 ## `BiwtResult` — BIWT to host
 
@@ -235,9 +234,9 @@ window.setCentralWidget(create_biwt_widget(
     BiwtInput(
         preferred_domain=DomainSpec(xmin=-500, xmax=500, ymin=-500, ymax=500),
         host_cell_type_names=["default", "tumor", "immune"],
-        host_name="My App",
     ),
     on_complete=on_complete,
+    host_name="My App",
 ))
 window.show()
 sys.exit(app.exec_())

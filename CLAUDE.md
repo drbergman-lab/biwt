@@ -138,7 +138,8 @@ A feature or fix is complete when ALL of the following are satisfied:
 2. **Edge cases**: Known edge cases are handled (empty data, missing columns, duplicate names, unit mismatches, etc.).
 3. **Tests**: New or modified behavior has corresponding tests in `tests/`. All tests pass (`PYTHONPATH=src python -m pytest tests/ -v`).
 4. **Documentation**: PRD.md updated with behavioral spec and acceptance criteria. README.md implementation status updated. progress.md updated with session decisions.
-5. **No regressions**: Existing tests still pass. Studio can still launch with `--biwt` flag.
+5. **No regressions**: Existing tests still pass.
+6. **Host handoff**: A change to `BiwtInput`, `BiwtResult` or `create_biwt_widget` comes with a note telling a host what to edit. BIWT does not test against a host, and a host is not gated on BIWT.
 
 ## Key Documents
 - [PRD.md](PRD.md) — Product Requirements Document (what BIWT should do)

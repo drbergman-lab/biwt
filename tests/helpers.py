@@ -23,7 +23,8 @@ TEMPLATES_B = str(FIXTURES / "templates_b.toml")
 
 # Set up on the widget, not read off BiwtInput: the user edits them, so a per-run
 # re-read would undo that.  Split out here so a test can pass either kind.
-WIDGET_KWARGS = ("cell_template_paths",)
+WIDGET_KWARGS = ("cell_template_paths", "host_name",
+                 "name_matches", "name_match_cutoff")
 
 
 def walkthrough_with_data(csv: str = "nonspatial.csv", **kwargs):

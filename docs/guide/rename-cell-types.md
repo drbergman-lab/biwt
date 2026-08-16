@@ -44,7 +44,7 @@ Digits are treated as significant rather than as spelling noise, so `M1 Macropha
 suggested for `M2 Macrophage`, nor a `CD4` type for a `CD8` one, even though those names are
 otherwise near-identical. Pairs distinguished by a non-numeric qualifier — `PD-1hi` versus
 `PD-1lo` — are not caught; a host with names of that shape can supply its own comparison via
-`BiwtInput.name_matches`, which replaces BIWT's rule entirely.
+`create_biwt_widget(name_matches=…)`, which replaces BIWT's rule entirely.
 
 Placeholder text only shows in an *empty* field, and every field arrives pre-filled with your
 original name. Clear a field and it appears, grayed out, as `Suggestion: <host name>`.

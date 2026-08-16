@@ -7,10 +7,10 @@ Three types form the public API boundary:
     BiwtInput   — the host's state, re-read at the start of every run.
     BiwtResult  — everything BIWT returns to the host on completion.
 
-How the widget itself is set up — its starting template library, which optional
-controls the landing screen carries — is passed to ``create_biwt_widget`` rather
-than living here: those belong to the widget for its lifetime, and the user edits
-them, so a per-run re-read would undo their work.
+How the widget itself is set up — the host's name, its starting template library,
+its name-matching rule — is passed to ``create_biwt_widget`` rather than living
+here.  Those belong to the widget for its lifetime; re-asking for them per run
+would either overwrite what the user has done to them or be ignored.
 
 Keeping these in one file makes the host ↔ package interface easy to audit.
 """
@@ -132,6 +132,11 @@ def _usable_domain(domain: DomainSpec) -> DomainSpec:
 class BiwtInput:
     """The host's state, as of the run about to start.
 
+    Two questions, both about what your application currently holds: which cell
+    types it defines, and what domain it wants.  Everything else BIWT needs from
+    a host — its name, its template library, how it decides two names mean the
+    same cell type — is set up once on the widget, not re-asked per run.
+
     A long-lived host builds the widget once but the user may not run the
     walkthrough until much later, so BIWT resolves its input **at the start of
     every run** — the moment the user imports a file — and holds a
@@ -139,12 +144,8 @@ class BiwtInput:
     change in the meantime passes a callable rather than an instance; see
     :data:`BiwtInputSource`.
 
-    Every field here is read afresh at each run, which is what keeps that
-    contract simple.  Settings the widget owns from the moment it is built — the
-    template library it starts from, which optional controls its landing screen
-    carries — are arguments to
-    :func:`~biwt.gui.walkthrough.create_biwt_widget` instead, since re-reading
-    them per run would mean overwriting whatever the user has since done to them.
+    Both fields are read afresh at each run, which is what keeps that contract
+    simple: nothing here can be set and then quietly ignored.
 
     Parameters
     ----------
@@ -158,29 +159,9 @@ class BiwtInput:
         cell-parameters step — assigning one means "the host already has this cell
         type", which comes back marked with :data:`HOST_SOURCE` rather than a file
         path.  They match on equal footing with templates from files.
-    host_name:
-        Your application's name, shown in BIWT's UI — the domain editor's
-        "Use <host_name> Domain" button, and the tag on your own cell types at the
-        cell-parameters step.  Blank is replaced with ``"Host"``.
-    name_matches:
-        Predicate deciding whether two strings name the same cell type, used
-        for rename suggestions and template pre-selection.  Supplying it
-        replaces BIWT's default **and** ``name_match_cutoff``.  ``None`` means
-        use ``biwt.core.cell_types.default_name_matches``.
-
-        Must be deterministic and free of side effects: it is called once per
-        (cell type, candidate) pair whenever matches are resolved, from inside
-        widget construction and Qt signal handlers, and the total number of
-        calls is not part of the contract.
-    name_match_cutoff:
-        Similarity threshold for that default only; ignored when
-        ``name_matches`` is supplied.
     """
     preferred_domain: DomainSpec = field(default_factory=lambda: DomainSpec.default())
     host_cell_type_names: list = field(default_factory=list)
-    host_name: str = "Host"
-    name_matches: Optional[Callable[[str, str], bool]] = None
-    name_match_cutoff: float = 0.85
 
     def __post_init__(self):
         """Normalize the host's input, or refuse it.
@@ -202,9 +183,6 @@ class BiwtInput:
         self.host_cell_type_names = [
             n for n in self.host_cell_type_names if isinstance(n, str) and n.strip()
         ]
-        # host_name reaches the screen — the domain editor's "Use <host_name>
-        # Domain", and the tag on the host's own cell types — so it cannot be blank.
-        self.host_name = self.host_name.strip() or "Host"
         self.preferred_domain = _usable_domain(self.preferred_domain)
 
     def snapshot(self) -> "BiwtInput":
@@ -214,9 +192,6 @@ class BiwtInput:
         is copied here because it is a mutable dataclass of its own.  A host that
         edits its own objects would otherwise rewrite ``BiwtResult.domain_used``
         after the cells were placed against the old numbers.
-
-        ``name_matches`` passes through unchanged: behavior cannot be copied, which
-        is why its contract asks for determinism.
         """
         return replace(self, preferred_domain=replace(self.preferred_domain))
 

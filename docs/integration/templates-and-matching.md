@@ -36,7 +36,8 @@ Point BIWT at your files when you build the widget:
 
 ```python
 create_biwt_widget(
-    BiwtInput(preferred_domain=domain, host_name="My App"),
+    BiwtInput(preferred_domain=domain),
+    host_name="My App",
     on_complete=save,
     cell_template_paths=["/path/to/my_templates.toml"],
 )

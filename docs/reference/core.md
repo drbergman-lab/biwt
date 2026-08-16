@@ -53,7 +53,7 @@ Coordinate scaling and assembly of the final cells DataFrame.
 
 Keep / merge / delete bookkeeping, and the name matching behind the rename suggestions and the
 template pre-selection. A host owns the "same cell type?" decision via
-[`BiwtInput.name_matches`][biwt.types.BiwtInput]; `default_name_matches` is what BIWT falls
+`create_biwt_widget(name_matches=…)`; `default_name_matches` is what BIWT falls
 back to.
 
 ::: biwt.core.cell_types

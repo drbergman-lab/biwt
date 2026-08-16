@@ -2,7 +2,8 @@
 Deciding whether two strings name the same cell type — purely data, no Qt.
 
 The decision is the host's: it can supply a predicate via
-``BiwtInput.name_matches``.  ``default_name_matches`` is the fallback BIWT ships,
+``create_biwt_widget(name_matches=…)``.  ``default_name_matches`` is the
+fallback BIWT ships,
 and ``best_match`` is the one selection routine used by both rename hints
 (``suggest_name_mappings``) and the cell-parameters step.
 """
@@ -41,13 +42,27 @@ def default_name_matches(a: str, b: str, cutoff: float = DEFAULT_NAME_MATCH_CUTO
     …``); a host curating such names supplies its own predicate.
 
     Hosts replace this wholesale — and the cutoff with it — via
-    ``BiwtInput.name_matches``.  Rationale and the rejection table:
+    ``create_biwt_widget(name_matches=…)``.  Rationale and the rejection table:
     docs/integration/templates-and-matching.md.
     """
     a_folded, b_folded = a.casefold(), b.casefold()
     if _DIGIT_RUN.findall(a_folded) != _DIGIT_RUN.findall(b_folded):
         return False
     return SequenceMatcher(None, a_folded, b_folded).ratio() >= cutoff
+
+
+def resolve_name_matcher(
+    name_matches: Optional[Callable[[str, str], bool]] = None,
+    cutoff: float = DEFAULT_NAME_MATCH_CUTOFF,
+) -> Callable[[str, str], bool]:
+    """The predicate to use: the host's if it supplied one, else BIWT's own.
+
+    A host predicate replaces the cutoff along with the default, since the cutoff
+    only ever meant anything to that default.
+    """
+    if name_matches is not None:
+        return name_matches
+    return lambda a, b: default_name_matches(a, b, cutoff=cutoff)
 
 
 def names_match(a: str, b: str,
@@ -97,7 +112,7 @@ def suggest_name_mappings(
     """Suggest a host cell-type name for each data label.
 
     Delegates to :func:`best_match`, so the notion of "same cell type" is the
-    one the host chose — see ``BiwtInput.name_matches``.
+    one the host chose — see ``create_biwt_widget(name_matches=…)``.
 
     Returns a dict ``{data_label: host_name | None}``.
     ``None`` means no suggestion was found.
