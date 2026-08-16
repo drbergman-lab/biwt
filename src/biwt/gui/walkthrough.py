@@ -66,7 +66,7 @@ from biwt.core.data_loader import (
 )
 from biwt.core import domain as domain_module
 from biwt.core import templates as core_templates
-from biwt.core.cell_types import alpha_key, default_name_matches
+from biwt.core.cell_types import alpha_key, resolve_name_matcher
 from biwt.core.positioning import build_ic_dataframe
 from biwt.gui.widgets import (
     biwt_icon,
@@ -776,6 +776,11 @@ class WalkthroughSession:
 
     Fields are populated progressively as the user advances through steps.
     ``None`` means "not yet determined".
+
+    ``biwt_input`` is the host's state for this run.  The widget's own setup —
+    its host name, its template library, its name matcher — is not here: it does
+    not change between runs, and copying it into every session would invite the
+    two to disagree.
     """
     biwt_input: BiwtInput
 
@@ -891,20 +896,6 @@ class WalkthroughSession:
         if self.apply_scale and self.scale_factor and self.scale_factor > 0:
             return self.scale_factor
         return 1.0
-
-    @property
-    def name_matcher(self) -> Callable[[str, str], bool]:
-        """The predicate deciding whether two strings name the same cell type.
-
-        The host's ``BiwtInput.name_matches`` if it supplied one — which
-        overrides ``name_match_cutoff`` along with the default itself — else
-        BIWT's default bound to that cutoff.
-        """
-        bi = self.biwt_input
-        if bi.name_matches is not None:
-            return bi.name_matches
-        cutoff = bi.name_match_cutoff
-        return lambda a, b: default_name_matches(a, b, cutoff=cutoff)
 
     @property
     def use_spatial_data(self) -> bool:
@@ -1241,9 +1232,9 @@ class BioinformaticsWalkthrough(QWidget):
         Callback receiving a ``BiwtResult`` when the user finishes.
         Called once, when the user finishes. There is no cancel callback: closing
         the widget is the host's own event to handle.
-    cell_template_paths:
+    cell_template_paths, host_name, name_matches, name_match_cutoff:
         How this widget is set up, as opposed to what the host currently is —
-        see :func:`create_biwt_widget`, which documents it.
+        see :func:`create_biwt_widget`, which documents them.
     """
 
     def __init__(
@@ -1252,6 +1243,9 @@ class BioinformaticsWalkthrough(QWidget):
         on_complete: Optional[Callable[[BiwtResult], None]] = None,
         *,
         cell_template_paths=(),
+        host_name: str = "Host",
+        name_matches: Optional[Callable[[str, str], bool]] = None,
+        name_match_cutoff: float = 0.85,
     ):
         super().__init__()
         self.setWindowTitle(f"BioInformatics WalkThrough (BIWT) v{__version__}")
@@ -1268,6 +1262,12 @@ class BioinformaticsWalkthrough(QWidget):
         self._host_input_error = ""
 
         self.on_complete = on_complete or (lambda result: None)
+        # Reaches the screen — the domain editor's "Use <host_name> Domain", and
+        # the tag on the host's own cell types — so it cannot be blank.
+        self.host_name = (host_name or "").strip() or "Host"
+        # Resolved once: the host cannot change it, and every match this widget
+        # ever resolves has to be scored the same way.
+        self.name_matcher = resolve_name_matcher(name_matches, name_match_cutoff)
         # This first resolution only seeds the home screen and stands in until
         # the first import; nothing derived, placed, or handed back to the host
         # comes out of it.
@@ -1647,7 +1647,7 @@ class BioinformaticsWalkthrough(QWidget):
         if biwt_input is None:
             QMessageBox.warning(
                 self, "Import cancelled",
-                f"{self.session.biwt_input.host_name} could not supply its settings, "
+                f"{self.host_name} could not supply its settings, "
                 f"so nothing was imported.\n\n{self._host_input_error}",
             )
             return
@@ -1858,6 +1858,9 @@ def create_biwt_widget(
     on_complete: Optional[Callable[[BiwtResult], None]] = None,
     *,
     cell_template_paths=(),
+    host_name: str = "Host",
+    name_matches: Optional[Callable[[str, str], bool]] = None,
+    name_match_cutoff: float = 0.85,
 ) -> BioinformaticsWalkthrough:
     """Create and return a BIWT walkthrough widget, suitable for embedding or use as a popup.
 
@@ -1889,6 +1892,24 @@ def create_biwt_widget(
         at the cell-parameters step and nowhere else, so an unreadable one costs a
         warning there rather than anything at startup.  ``str`` or ``os.PathLike``;
         anything else is dropped with a warning.
+    host_name:
+        Your application's name, shown in BIWT's UI — the domain editor's
+        "Use <host_name> Domain" button, and the tag on your own cell types at
+        the cell-parameters step.  Blank is replaced with ``"Host"``.
+    name_matches:
+        Predicate deciding whether two strings name the same cell type, used for
+        rename suggestions and template pre-selection.  Supplying it replaces
+        BIWT's default **and** ``name_match_cutoff``.  ``None`` means use
+        ``biwt.core.cell_types.default_name_matches``.
+
+        Must be deterministic and free of side effects: it is called once per
+        (cell type, candidate) pair whenever matches are resolved, from inside
+        widget construction and Qt signal handlers, and the total number of calls
+        is not part of the contract.
+    name_match_cutoff:
+        Similarity threshold for that default only; ignored when ``name_matches``
+        is supplied.
+
     Example
     -------
     ::
@@ -1901,9 +1922,9 @@ def create_biwt_widget(
                 preferred_domain=DomainSpec(xmin=-500, xmax=500,
                                             ymin=-500, ymax=500),
                 host_cell_type_names=["default", "tumor", "immune"],
-                host_name="My App",
             ),
             on_complete=lambda result: print(result.coordinates.head()),
+            host_name="My App",
             cell_template_paths=["/path/to/my_templates.toml"],
         )
         widget.show()
@@ -1913,10 +1934,10 @@ def create_biwt_widget(
 
         def host_input():
             return BiwtInput(preferred_domain=my_app.current_domain(),
-                             host_cell_type_names=my_app.cell_type_names(),
-                             host_name="My App")
+                             host_cell_type_names=my_app.cell_type_names())
 
-        widget = create_biwt_widget(host_input, on_complete=save)
+        widget = create_biwt_widget(host_input, on_complete=save,
+                                    host_name="My App")
 
     BIWT never writes to disk.  To persist the result, do it in
     ``on_complete`` — e.g. ``result.to_csv("cells.csv")``.
@@ -1925,4 +1946,7 @@ def create_biwt_widget(
         biwt_input=biwt_input,
         on_complete=on_complete,
         cell_template_paths=cell_template_paths,
+        host_name=host_name,
+        name_matches=name_matches,
+        name_match_cutoff=name_match_cutoff,
     )

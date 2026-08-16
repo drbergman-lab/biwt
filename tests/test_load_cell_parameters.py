@@ -1618,7 +1618,7 @@ class TestLandingScreenLibrary:
         from biwt.types import BiwtInput
 
         w, _ = make_widget(
-            _source=lambda: BiwtInput(preferred_domain=DOMAIN, host_name="Studio"),
+            _source=lambda: BiwtInput(preferred_domain=DOMAIN),
             cell_template_paths=[TEMPLATES_B],
         )
         drive_import(w, "nonspatial.csv")

@@ -223,7 +223,6 @@ class TestHostInputResolution:
                 preferred_domain=DomainSpec(xmin=-xmax, xmax=xmax,
                                             ymin=-xmax, ymax=xmax),
                 host_cell_type_names=list(names),
-                host_name="Studio",
             )
 
         return provide

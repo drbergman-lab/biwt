@@ -2177,3 +2177,28 @@ slot into a fatal abort.
 the cell-type field, and none of the template list. Retaking it is a manual macOS window capture
 (`scripts/screenshot_host.py`, then capture the window), so it is left for a docs pass rather than
 approximated with an offscreen grab that would not match the other images.
+
+---
+
+## 2026-08-15 (later still): `BiwtInput` is the host's state, and only that
+
+`host_name`, `name_matches` and `name_match_cutoff` moved to `create_biwt_widget`, leaving
+`BiwtInput` with `preferred_domain` and `host_cell_type_names` — two questions about what the
+host currently holds, both re-read at every run.
+
+The test is not "did the host supply it" but "does it change between runs". A host's name does
+not. Its matching rule does not. Its domain and its cell definitions do, which is the entire
+reason the provider callable exists. Anything in the first group sitting on a per-run value is
+either read once — a documented exception, and an invitation to set it on a later resolution and
+have it ignored — or re-read pointlessly.
+
+They live on the widget for its lifetime, and step windows read them from it. The first pass
+copied them onto each `WalkthroughSession` instead, to keep "a window reads its whole run from one
+object" — but the session is rebuilt per import, so that meant re-writing a setting that cannot
+change into every run, and holding the same value in two places that could then disagree. The
+session carries run state; this is not run state.
+
+`session.name_matcher` became `core.cell_types.resolve_name_matcher(name_matches, cutoff)` — the
+same "host's predicate, else the default bound to the cutoff" rule, as a pure function. The widget
+calls it once at construction, so every match it ever scores is scored the same way, and the rule
+stays testable without Qt.

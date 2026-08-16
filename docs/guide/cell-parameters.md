@@ -123,7 +123,7 @@ quietly picking up some other template.
 
 Numbers in a name are treated as significant, so `M1 Macrophage` never matches
 `M2 Macrophage`, nor `CD4 T Cell` a `CD8` one. A host can replace the whole rule by supplying
-its own predicate (see [`BiwtInput.name_matches`][biwt.types.BiwtInput]).
+its own predicate (the `name_matches` argument to `create_biwt_widget`).
 
 Pre-selection is a hint: nothing stops you assigning `Fibroblast` parameters to a type you named
 something else.

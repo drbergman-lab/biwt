@@ -250,7 +250,7 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
         if mismatch is None:
             s.domain_accepted = True
             return
-        host_name = s.biwt_input.host_name
+        host_name = self.walkthrough.host_name
         msg = _build_mismatch_message(mismatch, data_host, s.effective_domain, host_name)
         dlg = DomainEditorDialog(
             self, data_d, s.preferred_domain,
@@ -2173,7 +2173,7 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
             initial_domain=s.user_domain,   # revisit current domain if set
             initial_preset=(DomainSource.DATA if s.use_spatial_data
                             else DomainSource.HOST),
-            host_name=s.biwt_input.host_name,
+            host_name=self.walkthrough.host_name,
             file_factor=(s.data.host_units_per_data_unit if s.data else None),
             current_factor=s.scale_factor,
             apply_scale=s.apply_scale,

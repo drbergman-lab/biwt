@@ -464,7 +464,7 @@ class LoadCellParametersWindow(BiwinformaticsWalkthroughWindow):
         """
         labels = core_templates.minimal_unique_suffixes(self._library_paths())
         if any(fp == HOST_SOURCE for _, fp in self._template_db):
-            labels[HOST_SOURCE] = self.walkthrough.session.biwt_input.host_name
+            labels[HOST_SOURCE] = self.walkthrough.host_name
         return labels
 
     def _build_parts(self) -> dict:
@@ -689,7 +689,7 @@ class LoadCellParametersWindow(BiwinformaticsWalkthroughWindow):
         matched = core_templates.matched_candidates(
             s.cell_types_list_final if cell_types is None else cell_types,
             [name for name, fp in self._template_db if fp != HOST_SOURCE],
-            matches=s.name_matcher,
+            matches=self.walkthrough.name_matcher,
             host_names=[name for name, fp in self._template_db if fp == HOST_SOURCE],
         )
         best_source: dict[str, str] = {}
@@ -773,7 +773,7 @@ class LoadCellParametersWindow(BiwinformaticsWalkthroughWindow):
         """
         labels = self._source_display_names()
         ordered = sorted(self._template_db, key=self._preference_key)
-        matcher = self.walkthrough.session.name_matcher
+        matcher = self.walkthrough.name_matcher
 
         for cell_type, dd in self._dropdowns:
             key = self._current_key(dd)

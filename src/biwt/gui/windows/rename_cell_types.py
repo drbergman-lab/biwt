@@ -26,7 +26,7 @@ class RenameCellTypesWindow(BiwinformaticsWalkthroughWindow):
         suggestions = suggest_name_mappings(
             s.intermediate_types,
             s.biwt_input.host_cell_type_names,
-            matches=s.name_matcher,
+            matches=walkthrough.name_matcher,
         )
 
         vbox = QVBoxLayout()

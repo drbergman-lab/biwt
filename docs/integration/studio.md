@@ -36,6 +36,7 @@ def _create_biwt_package_tab(self):
         self._biwt_input,
         on_complete=self._biwt_complete,
         cell_template_paths=[TEMPLATES],
+        host_name="Studio",
     )
 
 def _biwt_input(self):
@@ -43,7 +44,6 @@ def _biwt_input(self):
     return BiwtInput(
         preferred_domain=domain or DomainSpec.default(),
         host_cell_type_names=list(self.xml_creator.celldef_tab.param_d.keys()),
-        host_name="Studio",
     )
 ```
 

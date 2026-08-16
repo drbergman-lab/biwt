@@ -1227,31 +1227,42 @@ class TestApiBoundary:
         assert frozen.preferred_domain.xmax == 1
         assert frozen.host_cell_type_names == ["tumor"]
 
-    def test_snapshot_passes_the_matcher_through(self):
-        # Behavior cannot be copied; the contract asks the host for purity instead.
-        def matcher(a, b):
-            return True
+    def test_the_name_matching_hook_is_widget_setup(self):
+        """Behavior, not state: nothing about it changes between runs."""
+        import inspect
 
-        assert BiwtInput(name_matches=matcher).snapshot().name_matches is matcher
+        from biwt.gui.walkthrough import create_biwt_widget
 
-    def test_biwt_input_exposes_the_name_matching_hook(self):
-        names = {f.name for f in dataclasses.fields(BiwtInput)}
-        assert {"name_matches", "name_match_cutoff"} <= names
-        assert BiwtInput().name_matches is None
-        assert BiwtInput().name_match_cutoff == 0.85
+        fields = {f.name for f in dataclasses.fields(BiwtInput)}
+        assert not fields & {"name_matches", "name_match_cutoff", "host_name"}
 
-    def test_session_matcher_defaults_to_biwts_own(self):
-        s = WalkthroughSession(biwt_input=BiwtInput())
-        assert s.name_matcher("Tumor", "tumour")
-        assert not s.name_matcher("M1 Macrophage", "M2 Macrophage")
+        params = inspect.signature(create_biwt_widget).parameters
+        assert {"name_matches", "name_match_cutoff", "host_name"} <= set(params)
+        assert params["name_matches"].default is None
+        assert params["name_match_cutoff"].default == 0.85
 
-    def test_session_matcher_honors_the_host_predicate(self):
-        s = WalkthroughSession(biwt_input=BiwtInput(name_matches=lambda a, b: True))
-        assert s.name_matcher("M1 Macrophage", "M2 Macrophage")
+    def test_the_matcher_defaults_to_biwts_own(self):
+        from biwt.core.cell_types import resolve_name_matcher
 
-    def test_session_matcher_honors_the_cutoff(self):
-        s = WalkthroughSession(biwt_input=BiwtInput(name_match_cutoff=0.99))
-        assert not s.name_matcher("Tumor", "tumour")
+        matcher = resolve_name_matcher()
+        assert matcher("Tumor", "tumour")
+        assert not matcher("M1 Macrophage", "M2 Macrophage")
+
+    def test_the_matcher_honors_the_host_predicate(self):
+        from biwt.core.cell_types import resolve_name_matcher
+
+        assert resolve_name_matcher(lambda a, b: True)("M1 Mac", "M2 Mac")
+
+    def test_the_matcher_honors_the_cutoff(self):
+        from biwt.core.cell_types import resolve_name_matcher
+
+        assert not resolve_name_matcher(cutoff=0.99)("Tumor", "tumour")
+
+    def test_the_widget_resolves_it_once_and_keeps_it(self, make_widget):
+        """Settled at construction: nothing per-run can make two rows disagree."""
+        w, _ = make_widget(name_matches=lambda a, b: True)
+        assert w.name_matcher("M1 Macrophage", "M2 Macrophage")
+        assert not hasattr(w.session, "name_matcher")
 
 
 # ---------------------------------------------------------------------------
