@@ -8,20 +8,6 @@ The first screen has one button: **Import file…**. It offers `.h5ad`, `.rds`, 
   <figcaption>Everything else in the wizard follows from what you load here.</figcaption>
 </figure>
 
-## Default cell-type column
-
-Next to the import button is a **Default cell-type column** field, pre-filled with `type`.
-
-If your data has a metadata column with that name, BIWT uses it as the cell-type annotation
-straight away and the [cluster column](cluster-column.md) screen never appears. If it does
-not — which is usual, since most objects call it `cell_type`, `celltype`, or
-`annotation` — BIWT tells you so and asks you to choose:
-
-> `'type' was not found in the obs columns. Select from the following:`
-
-Set it to your annotation column's name if you import many files with the same schema;
-otherwise leave it and pick from the dropdown.
-
 ## What BIWT reads from each format
 
 | Format | Read via | Supported objects |

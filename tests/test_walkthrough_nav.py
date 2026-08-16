@@ -32,6 +32,14 @@ def _answer(widget, yes: bool) -> None:
     (widget.window.yes_rb if yes else widget.window.no_rb).setChecked(True)
 
 
+def _pick_column(widget, name: str = "type") -> None:
+    """Answer the cluster-column step, which every import now reaches."""
+    assert _name(widget) == "ClusterColumnWindow"
+    combo = widget.window.column_combobox
+    combo.setCurrentIndex(combo.findText(name))
+    _continue(widget)
+
+
 # ---------------------------------------------------------------------------
 # Spot deconvolution ⇄ spatial query sequencing
 # ---------------------------------------------------------------------------
@@ -125,12 +133,13 @@ class TestNonDeconvolutionPaths:
         # ClusterColumn auto-continues on the next event loop turn.
         assert _name(w) in {"ClusterColumnWindow", "SpatialQueryWindow"}
 
-    def test_cluster_column_auto_continues_when_the_hint_matches(
+    def test_the_column_step_leads_to_the_spatial_query(
         self, make_widget, drive_import, qapp
     ):
         w, _ = make_widget()
         drive_import(w, "spatial.csv")
-        qapp.processEvents()          # let the auto-continue QTimer fire
+        _pick_column(w)
+        qapp.processEvents()
         assert _name(w) == "SpatialQueryWindow"
         assert any(
             type(win).__name__ == "ClusterColumnWindow" for win in w.window_history
@@ -141,6 +150,7 @@ class TestNonDeconvolutionPaths:
     ):
         w, _ = make_widget()
         drive_import(w, "spatial.csv")
+        _pick_column(w)
         qapp.processEvents()
         first = w.window
         assert _name(w) == "SpatialQueryWindow"
@@ -159,6 +169,7 @@ class TestNonDeconvolutionPaths:
     ):
         w, _ = make_widget()
         drive_import(w, "spatial.csv")
+        _pick_column(w)
         qapp.processEvents()
         spatial_win = w.window
 
@@ -982,6 +993,7 @@ class TestNonSpatialDoesNotLatchTheDomain:
         """
         w, _ = make_widget()
         drive_import(w, "spatial.csv")
+        _pick_column(w)
         qapp.processEvents()
         assert _name(w) == "SpatialQueryWindow"
         _answer(w, False)

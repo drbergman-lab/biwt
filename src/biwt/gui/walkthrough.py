@@ -1375,26 +1375,6 @@ class BioinformaticsWalkthrough(QWidget):
 
         vbox.addLayout(self._build_format_chips())
 
-        # --- Shortcuts --------------------------------------------------------
-        # These pre-answer a question the wizard would otherwise ask.  Grouped
-        # and captioned, because as loose controls they read as stray settings
-        # and their effect is invisible.
-        vbox.addWidget(SectionHeader("Shortcuts"))
-
-        hbox_col = QHBoxLayout()
-        hbox_col.addWidget(QLabel("Cell-type column:"))
-        self.column_line_edit = QLineEdit("type")
-        self.column_line_edit.setStyleSheet(_LE_STYLE)
-        self.column_line_edit.setToolTip(
-            "If the imported file has a column with this name, it is used as the "
-            "cell-type column and that step is skipped."
-        )
-        hbox_col.addWidget(self.column_line_edit, 1)
-        vbox.addLayout(hbox_col)
-        vbox.addWidget(self._caption(
-            "Skips the cluster-column step when the imported file has this column."
-        ))
-
         vbox.addStretch(1)
 
     @staticmethod

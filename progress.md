@@ -2117,5 +2117,12 @@ at each import like the rest of the host's input rather than only at constructio
 read-once rule existed to stop a later host value contradicting a box already on screen; with no
 box, a run simply sees what the host currently says.
 
-The cluster-column shortcut stays. It answers a question whose cost the user can predict — a long
-column list to scroll — without needing to see the file first.
+The cell-type column field goes with it, and the **Shortcuts** group with that. It looked like the
+defensible half — a long column list is a real cost — but it pre-answers a question about a file
+that has not been chosen yet, and it answered it with `"type"`, which is what PhysiCell writes
+out, not what annotation columns are usually called. What that bought was a whole step skipped on
+a guess the user never saw. The cluster-column step now always asks; it costs one dropdown, and
+the dropdown is built from the file.
+
+The landing screen is left with one question — which file — and every other question is asked by
+the step that owns it, against data it can see.

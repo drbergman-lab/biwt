@@ -68,7 +68,6 @@ The framework-coupled content is **already out** of this package: BIWT ships no 
 **Behavioral specification:**
 - When the user clicks "Import file...", a file dialog offers `.h5ad`, `.rds`, `.rda`, `.rdata`, `.csv`. Dropping a single file of one of those extensions onto the landing screen's drop area takes the same path; anything else is ignored rather than reported, since a rejected drag never highlights the target in the first place.
 - The landing screen shows a chip per supported format with its **availability in this environment**, probed via `importlib.util.find_spec` (no import, no startup cost) by `core.data_loader.supported_formats`. An unavailable format's tooltip names the missing module, the pip extra that installs it, and the install docs. Without this, a missing optional dependency is discovered only by picking a file and reading the error dialog.
-- The landing screen's **Shortcuts** group holds the two settings that pre-answer a later step — the cell-type column hint and the domain check — each captioned with what it skips. They are grouped because as loose controls they read as stray settings and their effect is invisible: the column hint silently skips a whole step.
 - When a `.h5ad` file is selected, BIWT reads it via `anndata.read_h5ad`.
 - When a `.rds` / `.rda` / `.rdata` file is selected, BIWT reads it via `rpy2` + `anndata2ri`, supporting Seurat, SingleCellExperiment, and SpatialExperiment objects.
 - When a `.csv` file is selected, BIWT reads it via `pandas.read_csv`.
@@ -179,8 +178,7 @@ The framework-coupled content is **already out** of this package: BIWT ships no 
 **One-line description:** Let the user choose which metadata column contains cell-type labels.
 
 **Behavioral specification:**
-- When the user has not yet selected a column, a dropdown lists all columns in `obs`.
-- The default cell-type column name can be pre-set from the launch widget.
+- When the user has not yet selected a column, a dropdown lists all columns in `obs`. The step always asks: nothing before the import pre-answers it, so no step is skipped on a guess the user was never shown.
 - When a column is selected, BIWT extracts unique cell types and per-cell labels.
 - A "Go Back" button is available if the spot deconvolution query was shown.
 

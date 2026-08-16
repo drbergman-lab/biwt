@@ -1,7 +1,6 @@
 # Cluster column
 
-**Shown when:** the [default cell-type column](import.md#default-cell-type-column) was not
-found in your data, and you are not doing [spot deconvolution](spot-deconvolution.md).
+**Shown when:** you are not doing [spot deconvolution](spot-deconvolution.md).
 
 ## The question
 
@@ -12,9 +11,6 @@ cell-type labels.
   ![The cluster column dropdown, listing every obs column](../assets/screenshots/cluster-column-dropdown.png){ width="291" }
   <figcaption>Every metadata column is offered, alphabetically.</figcaption>
 </figure>
-
-The message above the dropdown names the column BIWT looked for and did not find — `type` by
-default, or whatever you set on the [import screen](import.md#default-cell-type-column).
 
 Everything downstream — which types exist, what you can merge, how many cells of each go into
 the domain — derives from this column.
