@@ -32,14 +32,17 @@ than a value. BIWT calls it at each import:
 
 ```python
 def _create_biwt_package_tab(self):
-    return create_biwt_widget(self._biwt_input, on_complete=self._biwt_complete)
+    return create_biwt_widget(
+        self._biwt_input,
+        on_complete=self._biwt_complete,
+        cell_template_paths=[TEMPLATES],
+    )
 
 def _biwt_input(self):
     domain = self._domain_from_config_tab()          # None if unparseable
     return BiwtInput(
         preferred_domain=domain or DomainSpec.default(),
         host_cell_type_names=list(self.xml_creator.celldef_tab.param_d.keys()),
-        cell_template_paths=[TEMPLATES],
         host_name="Studio",
     )
 ```

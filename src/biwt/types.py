@@ -4,8 +4,13 @@ Shared data contracts between biwt.core, biwt.gui, and the host application.
 Three types form the public API boundary:
 
     DomainSpec  — spatial domain description passed IN to BIWT from the host.
-    BiwtInput   — everything the host provides at launch time.
+    BiwtInput   — the host's state, re-read at the start of every run.
     BiwtResult  — everything BIWT returns to the host on completion.
+
+How the widget itself is set up — its starting template library, which optional
+controls the landing screen carries — is passed to ``create_biwt_widget`` rather
+than living here: those belong to the widget for its lifetime, and the user edits
+them, so a per-run re-read would undo their work.
 
 Keeping these in one file makes the host ↔ package interface easy to audit.
 """
@@ -125,7 +130,7 @@ def _usable_domain(domain: DomainSpec) -> DomainSpec:
 
 @dataclass
 class BiwtInput:
-    """Everything the host application supplies when launching BIWT.
+    """The host's state, as of the run about to start.
 
     A long-lived host builds the widget once but the user may not run the
     walkthrough until much later, so BIWT resolves its input **at the start of
@@ -133,6 +138,13 @@ class BiwtInput:
     :meth:`snapshot` of it until that run completes.  A host whose values can
     change in the meantime passes a callable rather than an instance; see
     :data:`BiwtInputSource`.
+
+    Every field here is read afresh at each run, which is what keeps that
+    contract simple.  Settings the widget owns from the moment it is built — the
+    template library it starts from, which optional controls its landing screen
+    carries — are arguments to
+    :func:`~biwt.gui.walkthrough.create_biwt_widget` instead, since re-reading
+    them per run would mean overwriting whatever the user has since done to them.
 
     Parameters
     ----------
@@ -150,13 +162,6 @@ class BiwtInput:
         Your application's name, shown in BIWT's UI — the domain editor's
         "Use <host_name> Domain" button, and the tag on your own cell types at the
         cell-parameters step.  Blank is replaced with ``"Host"``.
-    cell_template_paths:
-        Paths to ``.toml`` files of cell-parameter templates, each mapping a
-        template name to an opaque content string (for a PhysiCell host, an XML
-        ``<phenotype>`` block).  Loaded at the cell-parameters step, where the
-        user assigns at most one template per cell type and can load further
-        files.  BIWT ships no templates and never parses the contents: with no
-        paths here and nothing loaded at the step, every type stays unassigned.
     name_matches:
         Predicate deciding whether two strings name the same cell type, used
         for rename suggestions and template pre-selection.  Supplying it
@@ -174,7 +179,6 @@ class BiwtInput:
     preferred_domain: DomainSpec = field(default_factory=lambda: DomainSpec.default())
     host_cell_type_names: list = field(default_factory=list)
     host_name: str = "Host"
-    cell_template_paths: list = field(default_factory=list)
     name_matches: Optional[Callable[[str, str], bool]] = None
     name_match_cutoff: float = 0.85
 
@@ -190,11 +194,10 @@ class BiwtInput:
         cannot repair raises, and ``_resolve_host_input`` catches that — this is
         reached from a Qt slot, which must not let an exception escape.
         """
-        for field_name in ("host_cell_type_names", "cell_template_paths"):
-            value = getattr(self, field_name)
-            setattr(self, field_name,
-                    [value] if isinstance(value, (str, bytes)) else list(value))
-
+        names = self.host_cell_type_names
+        self.host_cell_type_names = (
+            [names] if isinstance(names, (str, bytes)) else list(names)
+        )
         # Dropped, not coerced: str(None) would become a cell type named "None".
         self.host_cell_type_names = [
             n for n in self.host_cell_type_names if isinstance(n, str) and n.strip()
@@ -207,7 +210,7 @@ class BiwtInput:
     def snapshot(self) -> "BiwtInput":
         """A copy BIWT can hold for a whole run without it moving underneath.
 
-        ``replace`` re-runs ``__post_init__``, which copies both lists; the domain
+        ``replace`` re-runs ``__post_init__``, which copies the name list; the domain
         is copied here because it is a mutable dataclass of its own.  A host that
         edits its own objects would otherwise rewrite ``BiwtResult.domain_used``
         after the cells were placed against the old numbers.

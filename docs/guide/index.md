@@ -5,6 +5,13 @@ The walkthrough is a sequence of small screens, each asking one question.
 If you have not run the wizard at all yet, do
 [your first walkthrough](../getting-started/first-walkthrough.md) first.
 
+## What the landing screen carries
+
+A **Cell parameter templates** list — seeded with your host's files, and yours to edit. It is the
+library every import starts from, unlike files loaded at
+[the cell-parameters step](cell-parameters.md) itself, which a re-import discards. Everything
+else the wizard needs, it asks for at the step that needs it.
+
 ## How steps are chosen
 
 Before each screen BIWT walks an ordered list of predicates and shows the first step whose

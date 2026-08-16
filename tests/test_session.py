@@ -1186,10 +1186,25 @@ class TestApiBoundary:
             f.name for f in dataclasses.fields(BiwtResult)
         }
 
-    def test_biwt_input_names_the_template_paths_field(self):
-        names = {f.name for f in dataclasses.fields(BiwtInput)}
-        assert "cell_template_paths" in names
-        assert "extra_cell_template_paths" not in names
+    def test_biwt_input_is_only_what_a_run_re_reads(self):
+        """Widget setup is not host state, so it is not on the per-run value.
+
+        The library was a field here, and had to be documented as read once at
+        construction — which is the tell that it belongs to the widget: the user
+        edits it, and a per-run re-read would undo that.
+        """
+        assert "cell_template_paths" not in {
+            f.name for f in dataclasses.fields(BiwtInput)
+        }
+
+    def test_widget_setup_is_named_on_the_factory_instead(self):
+        import inspect
+
+        from biwt.gui.walkthrough import create_biwt_widget
+
+        assert "cell_template_paths" in inspect.signature(
+            create_biwt_widget
+        ).parameters
 
     def test_snapshot_is_independent_of_the_host_original(self):
         """A run holds a copy, so a host editing its own objects cannot reach it.
@@ -1203,17 +1218,14 @@ class TestApiBoundary:
         original = BiwtInput(
             preferred_domain=DomainSpec(xmin=-1, xmax=1, ymin=-1, ymax=1),
             host_cell_type_names=["tumor"],
-            cell_template_paths=["/a.toml"],
         )
         frozen = original.snapshot()
 
         original.preferred_domain.xmax = 999
         original.host_cell_type_names.append("macrophage")
-        original.cell_template_paths.append("/b.toml")
 
         assert frozen.preferred_domain.xmax == 1
         assert frozen.host_cell_type_names == ["tumor"]
-        assert frozen.cell_template_paths == ["/a.toml"]
 
     def test_snapshot_passes_the_matcher_through(self):
         # Behavior cannot be copied; the contract asks the host for purity instead.
@@ -1504,25 +1516,43 @@ class TestUsableDomain:
 
 
 class TestSingleValueFields:
-    """A bare string is one entry, not a list of its characters.
-
-    Unambiguous, so it is repaired rather than refused: a string is never a valid
-    list of paths, and `list("some/path.toml")` would otherwise become one failed
-    template load per character.
-    """
-
-    def test_a_string_of_paths_becomes_one_path(self):
-        bi = BiwtInput(cell_template_paths="tests/fixtures/templates_a.toml")
-        assert bi.cell_template_paths == ["tests/fixtures/templates_a.toml"]
+    """A bare string is one entry, not a list of its characters."""
 
     def test_a_string_of_names_becomes_one_name(self):
         assert BiwtInput(host_cell_type_names="Tumor").host_cell_type_names == ["Tumor"]
 
-    def test_a_list_is_left_alone(self):
-        paths = ["a.toml", "b.toml"]
-        bi = BiwtInput(cell_template_paths=paths)
-        assert bi.cell_template_paths == paths
-        assert bi.cell_template_paths is not paths      # copied, not aliased
+
+class TestTemplatePathNormalization:
+    """`core.templates.normalize_template_paths` — the one repair point.
+
+    These paths reach `os.path.abspath` from a Qt slot, where a raise aborts the
+    host process, so what is not a path has to be dropped before it gets there.
+    """
+
+    def test_a_bare_string_is_one_path(self):
+        """`list("some/path.toml")` would otherwise be one bad path per letter."""
+        from biwt.core.templates import normalize_template_paths
+
+        assert normalize_template_paths("a.toml") == [os.path.abspath("a.toml")]
+
+    def test_a_pathlib_path_is_kept_as_its_string(self):
+        from pathlib import Path
+
+        from biwt.core.templates import normalize_template_paths
+
+        assert normalize_template_paths([Path("/a/b.toml")]) == ["/a/b.toml"]
+
+    def test_what_is_not_a_path_is_dropped(self):
+        from biwt.core.templates import normalize_template_paths
+
+        assert normalize_template_paths(["/a.toml", None, 3, "", "   "]) == ["/a.toml"]
+
+    def test_paths_are_absolute_and_deduped_in_order(self):
+        from biwt.core.templates import normalize_template_paths
+
+        assert normalize_template_paths(
+            ["/b.toml", "  /a.toml  ", "/b.toml"]
+        ) == ["/b.toml", "/a.toml"]
 
 
 class TestEveryTypeDeletedSpatially:

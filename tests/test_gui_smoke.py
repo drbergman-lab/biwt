@@ -247,7 +247,7 @@ def test_an_unavailable_format_says_how_to_install_it(widget, drive_import, monk
 
 
 def test_the_landing_screen_pre_answers_nothing(widget):
-    """Import is the only question on it; the rest of the wizard asks its own."""
+    """Import and a library to carry; the wizard's own questions stay its own."""
     captions = " ".join(_labels(widget)).lower()
     assert "shortcuts" not in captions
     assert "cell-type column" not in captions
