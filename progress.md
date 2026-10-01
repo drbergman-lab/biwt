@@ -2283,4 +2283,5 @@ and in `positions-plotted.png` the Undo buttons are already creeping below their
 four rows. Both want retaking by hand on a Mac, under the sRGB rule above; they were not retaken
 here.
 
-No API change, so a host needs no edit.
+No API change, so a host needs no edit. Released as 0.6.1: a patch, since it fixes layout and
+changes no behavior a host or a test outside these windows can see.
