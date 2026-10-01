@@ -343,40 +343,38 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
             "Grayed out cell types have already been placed."
         ))
 
-        hbox_mid = QHBoxLayout()
-        vbox_checks = QVBoxLayout()
+        # One grid row per cell type, so a checkbox and its Undo button share a
+        # row. Two side-by-side columns size their rows independently, and the
+        # button being a few px taller than the checkbox compounds down the list.
+        grid = QGridLayout()
 
         self.cell_type_button_group = QButtonGroup(exclusive=False)
         self.cell_type_button_group.buttonClicked.connect(self._cell_type_cb)
 
+        _undo_style = (
+            "QPushButton:enabled  { background-color: yellow; }"
+            "QPushButton:disabled { background-color: gray; }"
+        )
         self.checkbox_dict: dict[str, QCheckBox_custom] = {}
-        for ct in s.cell_types_list_final:
+        self.undo_button: dict[str, QPushButton] = {}
+        for row, ct in enumerate(s.cell_types_list_final):
             cb = QCheckBox_custom("")
             set_elided_text(cb, ct)
             placeable = self._is_placeable(ct)
             # Pre-select all when the spatial plotter is the default.
             cb.setChecked(s.use_spatial_data and placeable)
             cb.setEnabled(placeable)
-            vbox_checks.addWidget(cb)
+            grid.addWidget(cb, row, 0, alignment=Qt.AlignVCenter)
             self.cell_type_button_group.addButton(cb)
             self.checkbox_dict[ct] = cb
 
-        _undo_style = (
-            "QPushButton:enabled  { background-color: yellow; }"
-            "QPushButton:disabled { background-color: gray; }"
-        )
-        vbox_undos = QVBoxLayout()
-        self.undo_button: dict[str, QPushButton] = {}
-        for ct in s.cell_types_list_final:
             btn = QPushButton("Undo", enabled=False, objectName=ct)
             btn.setStyleSheet(_undo_style)
             btn.clicked.connect(self._undo_button_cb)
+            grid.addWidget(btn, row, 1)
             self.undo_button[ct] = btn
-            vbox_undos.addWidget(btn)
 
-        hbox_mid.addLayout(vbox_checks)
-        hbox_mid.addLayout(vbox_undos)
-        vbox.addLayout(hbox_mid)
+        vbox.addLayout(grid)
 
         _btn_style = (
             "QPushButton:enabled  { background-color: lightgreen; }"

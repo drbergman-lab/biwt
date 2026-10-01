@@ -516,3 +516,44 @@ class TestBuildingOnAnAsymmetricDomain:
         x0, y0, w, h = win._default_rectangle_pars()
         assert (x0, y0) == win._default_center()
         assert (w, h) == win._default_wh(win._default_center())[:2]
+
+
+class TestCellTypeRowsLineUp:
+    """Each cell type's Undo button sits on its checkbox's row.
+
+    Reported from a real run with 22 cell types: the checkboxes and the Undo
+    buttons were two independent column layouts, and the button, a couple of px
+    taller than the checkbox, drifted further off its type with every row — most
+    of a row out by the bottom of the list.
+    """
+
+    N_TYPES = 22
+
+    @pytest.fixture
+    def win(self, qapp, tmp_path):
+        from helpers import window_at_rename
+
+        csv = tmp_path / "many_types.csv"
+        csv.write_text("type\n" + "\n".join(
+            str(i % self.N_TYPES) for i in range(10 * self.N_TYPES)) + "\n")
+        # An absolute path replaces the fixtures directory it is joined onto.
+        win = PositionsWindow(window_at_rename(str(csv)))
+        win.resize(1600, 1200)
+        win.show()
+        qapp.processEvents()
+        return win
+
+    @staticmethod
+    def _offsets(win) -> dict:
+        def mid_y(w):
+            return w.mapTo(win, w.rect().center()).y()
+
+        return {ct: mid_y(cb) - mid_y(win.undo_button[ct])
+                for ct, cb in win.checkbox_dict.items()}
+
+    def test_every_type_has_a_row(self, win):
+        assert len(win.checkbox_dict) == self.N_TYPES
+
+    def test_each_undo_button_shares_its_checkbox_row(self, win):
+        offsets = self._offsets(win)
+        assert all(abs(dy) <= 1 for dy in offsets.values()), offsets

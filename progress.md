@@ -2245,3 +2245,37 @@ the compact `sRGB` chunk in one pass, dropping 7–10 KB each. That leaves the s
 three step captures already carried — `IHDR sRGB eXIf pHYs iTXt IDAT IEND` — so the set is
 uniform for the first time: `import.png` had been the one file still tagged P3. No ICC profile is
 written, so the littleCMS wall-clock trap noted above does not apply to this route.
+
+---
+
+## 2026-10-01: cell-type rows share one grid row
+
+Reported from a real run with 22 cell types: at the positions step the Undo buttons drifted off
+their checkboxes, most of a row out by the bottom of the list. The checkboxes and the buttons were
+two `QVBoxLayout` columns side by side in a `QHBoxLayout`. Each column sizes its own rows, and a
+`QPushButton` is a couple of px taller than a `QCheckBox` (29 vs 27 under the offscreen platform),
+so every row added to the gap. It is now one `QGridLayout`, checkbox and Undo in the same row,
+the checkbox centred vertically against the taller button.
+
+The cell-counts table had the same construction — five `QVBoxLayout` columns — and was worse. The
+name labels are `QLabel`s, which stretch, while the `QLineEdit`s do not, so even three types put
+every name beside the previous type's numbers (Macrophage on the radio-button row). A merged name
+that `row_label` wraps onto several lines grew only its own column, and the PRD's existing "every
+field aligned" criterion had been checked against width alone. It is one grid as well: labels fill
+their cell and centre their own text, every other widget is placed left and centred vertically,
+and the dividers are `QVLine`s spanning every row of the odd columns.
+
+Alignment, not a fixed row height, is the fix: pinning heights would have held for checkbox vs
+button but not for a wrapped label, which has to grow its row. The rule is in the PRD under
+*Displaying Cell-Type Names*.
+
+The tests measure it: show the window offscreen, compare each row's widget centres. Both fail on
+the old layouts (21 px at positions with 22 types; 45 px at cell counts with three).
+
+The published screenshots show both drifts, which confirms it on macOS too:
+`docs/assets/screenshots/cell-counts-confluence.png` has each name half a row below its fields,
+and in `positions-plotted.png` the Undo buttons are already creeping below their checkboxes within
+four rows. Both want retaking by hand on a Mac, under the sRGB rule above; they were not retaken
+here.
+
+No API change, so a host needs no edit.

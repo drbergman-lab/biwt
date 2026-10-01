@@ -88,6 +88,50 @@ def test_a_long_cell_type_name_does_not_widen_the_counts_table(qapp):
     assert label.maximumWidth() == ROW_LABEL_MAX_WIDTH
 
 
+class TestRowsLineUp:
+    """A cell type's name sits on the row of its own fields.
+
+    The table was five side-by-side column layouts, each sizing its rows on its
+    own. The name labels stretched where the fields did not, so a name sat beside
+    the previous type's numbers, and a merged name wrapping onto several lines
+    grew only its own column, pushing every name below it further out.
+    """
+
+    @staticmethod
+    def _offsets(qapp, win) -> list:
+        from PyQt5.QtWidgets import QLabel
+
+        win.resize(900, 600)
+        win.show()
+        qapp.processEvents()
+        labels = {lbl.text(): lbl for lbl in win.findChildren(QLabel)}
+
+        def mid_y(w):
+            return w.mapTo(win, w.rect().center()).y()
+
+        return [
+            mid_y(labels[ct]) - mid_y(field)
+            for ct in win._cell_types
+            for field in (win._w_count[ct], win._w_prop[ct],
+                          win._w_confluence[ct], win._w_manual[ct])
+        ]
+
+    def test_each_name_shares_its_fields_row(self, qapp):
+        offsets = self._offsets(qapp, _counts_window())
+        assert all(abs(dy) <= 1 for dy in offsets), offsets
+
+    def test_a_wrapped_name_does_not_push_the_rows_below_it_off(self, qapp):
+        merged = "CD8_T_cell, CD4_T_cell, Treg, NK_cell, Macrophage_M1, Macrophage_M2"
+        win = _counts_window()
+        s = win.walkthrough.session
+        s.cell_types_list_final = [merged, "T_cell", "Tumor"]
+        s.cell_counts = {merged: 6, "T_cell": 5, "Tumor": 4}
+        rebuilt = CellCountsWindow(win.walkthrough)
+
+        offsets = self._offsets(qapp, rebuilt)
+        assert all(abs(dy) <= 1 for dy in offsets), offsets
+
+
 class TestEveryTypeDeleted:
     def test_the_total_is_zero_not_one(self, qapp):
         """`or 1` guards the proportion divisions; it must not reach the display."""
