@@ -98,19 +98,18 @@ class TestRowsLineUp:
     """
 
     @staticmethod
-    def _offsets(qapp, win) -> list:
+    def _mid_y(win, w) -> int:
+        return w.mapTo(win, w.rect().center()).y()
+
+    def _offsets(self, qapp, win) -> list:
         from PyQt5.QtWidgets import QLabel
 
         win.resize(900, 600)
         win.show()
         qapp.processEvents()
         labels = {lbl.text(): lbl for lbl in win.findChildren(QLabel)}
-
-        def mid_y(w):
-            return w.mapTo(win, w.rect().center()).y()
-
         return [
-            mid_y(labels[ct]) - mid_y(field)
+            self._mid_y(win, labels[ct]) - self._mid_y(win, field)
             for ct in win._cell_types
             for field in (win._w_count[ct], win._w_prop[ct],
                           win._w_confluence[ct], win._w_manual[ct])
@@ -119,6 +118,19 @@ class TestRowsLineUp:
     def test_each_name_shares_its_fields_row(self, qapp):
         offsets = self._offsets(qapp, _counts_window())
         assert all(abs(dy) <= 1 for dy in offsets), offsets
+
+    def test_the_mode_buttons_are_the_only_header_row(self, qapp):
+        """The radio buttons name their columns; a label row above them repeated it."""
+        from PyQt5.QtWidgets import QLabel
+
+        win = _counts_window()
+        self._offsets(qapp, win)                      # lay the window out
+        texts = {lbl.text() for lbl in win.findChildren(QLabel)}
+        assert texts.isdisjoint({"Count", "Proportion", "Confluence (%)", "Manual"})
+
+        header = next(lbl for lbl in win.findChildren(QLabel) if lbl.text() == "Cell Type")
+        for rb in win._mode_group.buttons():
+            assert abs(self._mid_y(win, rb) - self._mid_y(win, header)) <= 1
 
     def test_a_wrapped_name_does_not_push_the_rows_below_it_off(self, qapp):
         merged = "CD8_T_cell, CD4_T_cell, Treg, NK_cell, Macrophage_M1, Macrophage_M2"

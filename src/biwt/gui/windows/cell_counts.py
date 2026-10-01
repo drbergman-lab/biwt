@@ -70,14 +70,11 @@ class CellCountsWindow(BiwinformaticsWalkthroughWindow):
             align = Qt.Alignment() if isinstance(w, QLabel) else Qt.AlignLeft | Qt.AlignVCenter
             grid.addWidget(w, row, 2 * col, alignment=align)
 
-        # Column header row
-        for col, (key, lbl) in enumerate(zip(
-                self._COL_W, ["Cell Type", "Count", "Proportion", "Confluence (%)", "Manual"])):
-            header = QLabel(lbl)
-            header.setFixedWidth(self._COL_W[key])
-            put(0, col, header)
+        # Header row: the mode radio buttons name their own columns.
+        name_header = QLabel("Cell Type")
+        name_header.setFixedWidth(self._COL_W["name"])
+        put(0, 0, name_header)
 
-        # Radio buttons
         self._mode_group = QButtonGroup()
         self._rb_counts     = QRadioButton("Use counts");      self._rb_counts.setChecked(True)
         self._rb_props      = QRadioButton("Use proportions")
@@ -89,7 +86,7 @@ class CellCountsWindow(BiwinformaticsWalkthroughWindow):
         self._mode_group.idToggled.connect(self._mode_changed)
 
         for col, rb in enumerate(radios, start=1):
-            put(1, col, rb)
+            put(0, col, rb)
 
         # Per-type row widgets
         self._w_count:      dict[str, QLineEdit_custom] = {}
@@ -98,7 +95,7 @@ class CellCountsWindow(BiwinformaticsWalkthroughWindow):
         self._w_manual:     dict[str, QLineEdit_custom] = {}
 
         for idx, ct in enumerate(self._cell_types):
-            row = 2 + idx
+            row = 1 + idx
             put(row, 0, row_label(ct))
 
             wc = QLineEdit_custom(enabled=False)
@@ -134,7 +131,7 @@ class CellCountsWindow(BiwinformaticsWalkthroughWindow):
                 put(row, col, w)
 
         # Total row
-        total_row = 2 + len(self._cell_types)
+        total_row = 1 + len(self._cell_types)
         put(total_row, 0, QLabel("Total"))
         wc_total = QLineEdit_custom(enabled=False)
         wc_total.setText(str(n_cells))

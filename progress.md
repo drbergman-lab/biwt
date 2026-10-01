@@ -2272,6 +2272,11 @@ button but not for a wrapped label, which has to grow its row. The rule is in th
 The tests measure it: show the window offscreen, compare each row's widget centres. Both fail on
 the old layouts (21 px at positions with 22 types; 45 px at cell counts with three).
 
+In review, the cell-counts table lost its second header row. "Count / Proportion / Confluence (%) /
+Manual" sat above radio buttons reading "Use counts / Use proportions / Set confluence (%) / Set
+manually" — the same four names twice. The radio buttons are now the header, beside "Cell Type",
+which keeps its fixed width so the name column's minimum is unchanged.
+
 The published screenshots show both drifts, which confirms it on macOS too:
 `docs/assets/screenshots/cell-counts-confluence.png` has each name half a row below its fields,
 and in `positions-plotted.png` the Undo buttons are already creeping below their checkboxes within
