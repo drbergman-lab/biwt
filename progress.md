@@ -2283,5 +2283,16 @@ and in `positions-plotted.png` and `positions-suggested.png` the Undo buttons we
 creeping below their checkboxes within four rows. All three were retaken on a Mac with the fix,
 along with `import.png` for the 0.6.1 version label, and normalized to sRGB under the rule above.
 
+That first macOS retake showed something the offscreen platform could not: the grid closed the
+gap between each checkbox and its Undo button, so a placed type's gray band ran straight into the
+yellow button. A layout spaces each widget's *layout-item* rect, and the macOS style insets a push
+button's (and, slightly, a checkbox's) from the widget rect. These two are stylesheet-painted to
+the full widget rect, so the insets came straight out of the visible gap; the old side-by-side
+columns happened to leave room. The grid now sets its horizontal spacing to `_UNDO_GAP` (8 px)
+plus those insets, read from the style the way Qt reads them (`_layout_overhang`), so the visible
+gap is the same in every style. Fusion reports no inset, so Linux only moves from 6 px to 8. The
+tests reproduce the collapse with a proxy style carrying macOS-like insets: −4 px for the grid as
+first pushed, 8 now. The two positions screenshots need retaking once more for it.
+
 No API change, so a host needs no edit. Released as 0.6.1: a patch, since it fixes layout and
 changes no behavior a host or a test outside these windows can see.
