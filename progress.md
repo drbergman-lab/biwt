@@ -2292,7 +2292,8 @@ columns happened to leave room. The grid now sets its horizontal spacing to `_UN
 plus those insets, read from the style the way Qt reads them (`_layout_overhang`), so the visible
 gap is the same in every style. Fusion reports no inset, so Linux only moves from 6 px to 8. The
 tests reproduce the collapse with a proxy style carrying macOS-like insets: −4 px for the grid as
-first pushed, 8 now. The two positions screenshots need retaking once more for it.
+first pushed, 8 now. The two positions screenshots were retaken once more for it, which also
+showed the fix holding on a real Mac, and `import.png` with the window active.
 
 No API change, so a host needs no edit. Released as 0.6.1: a patch, since it fixes layout and
 changes no behavior a host or a test outside these windows can see.
