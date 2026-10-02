@@ -2277,11 +2277,11 @@ Manual" sat above radio buttons reading "Use counts / Use proportions / Set conf
 manually" — the same four names twice. The radio buttons are now the header, beside "Cell Type",
 which keeps its fixed width so the name column's minimum is unchanged.
 
-The published screenshots show both drifts, which confirms it on macOS too:
-`docs/assets/screenshots/cell-counts-confluence.png` has each name half a row below its fields,
-and in `positions-plotted.png` the Undo buttons are already creeping below their checkboxes within
-four rows. Both want retaking by hand on a Mac, under the sRGB rule above; they were not retaken
-here.
+The published screenshots showed both drifts, which confirmed it on macOS too:
+`docs/assets/screenshots/cell-counts-confluence.png` had each name half a row below its fields,
+and in `positions-plotted.png` and `positions-suggested.png` the Undo buttons were already
+creeping below their checkboxes within four rows. All three were retaken on a Mac with the fix,
+along with `import.png` for the 0.6.1 version label, and normalized to sRGB under the rule above.
 
 No API change, so a host needs no edit. Released as 0.6.1: a patch, since it fixes layout and
 changes no behavior a host or a test outside these windows can see.
