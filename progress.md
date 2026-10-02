@@ -2248,52 +2248,8 @@ written, so the littleCMS wall-clock trap noted above does not apply to this rou
 
 ---
 
-## 2026-10-01: cell-type rows share one grid row
+## 2026-10-01: cell-type rows share one grid row (v0.6.1)
 
-Reported from a real run with 22 cell types: at the positions step the Undo buttons drifted off
-their checkboxes, most of a row out by the bottom of the list. The checkboxes and the buttons were
-two `QVBoxLayout` columns side by side in a `QHBoxLayout`. Each column sizes its own rows, and a
-`QPushButton` is a couple of px taller than a `QCheckBox` (29 vs 27 under the offscreen platform),
-so every row added to the gap. It is now one `QGridLayout`, checkbox and Undo in the same row,
-the checkbox centred vertically against the taller button.
-
-The cell-counts table had the same construction — five `QVBoxLayout` columns — and was worse. The
-name labels are `QLabel`s, which stretch, while the `QLineEdit`s do not, so even three types put
-every name beside the previous type's numbers (Macrophage on the radio-button row). A merged name
-that `row_label` wraps onto several lines grew only its own column, and the PRD's existing "every
-field aligned" criterion had been checked against width alone. It is one grid as well: labels fill
-their cell and centre their own text, every other widget is placed left and centred vertically,
-and the dividers are `QVLine`s spanning every row of the odd columns.
-
-Alignment, not a fixed row height, is the fix: pinning heights would have held for checkbox vs
-button but not for a wrapped label, which has to grow its row. The rule is in the PRD under
-*Displaying Cell-Type Names*.
-
-The tests measure it: show the window offscreen, compare each row's widget centres. Both fail on
-the old layouts (21 px at positions with 22 types; 45 px at cell counts with three).
-
-In review, the cell-counts table lost its second header row. "Count / Proportion / Confluence (%) /
-Manual" sat above radio buttons reading "Use counts / Use proportions / Set confluence (%) / Set
-manually" — the same four names twice. The radio buttons are now the header, beside "Cell Type",
-which keeps its fixed width so the name column's minimum is unchanged.
-
-The published screenshots showed both drifts, which confirmed it on macOS too:
-`docs/assets/screenshots/cell-counts-confluence.png` had each name half a row below its fields,
-and in `positions-plotted.png` and `positions-suggested.png` the Undo buttons were already
-creeping below their checkboxes within four rows. All three were retaken on a Mac with the fix,
-along with `import.png` for the 0.6.1 version label, and normalized to sRGB under the rule above.
-
-That first macOS retake showed something the offscreen platform could not: the grid closed the
-gap between each checkbox and its Undo button, so a placed type's gray band ran straight into the
-yellow button. A layout spaces each widget's *layout-item* rect, and the macOS style insets a push
-button's (and, slightly, a checkbox's) from the widget rect. These two are stylesheet-painted to
-the full widget rect, so the insets came straight out of the visible gap; the old side-by-side
-columns happened to leave room. The grid now sets its horizontal spacing to `_UNDO_GAP` (8 px)
-plus those insets, read from the style the way Qt reads them (`_layout_overhang`), so the visible
-gap is the same in every style. Fusion reports no inset, so Linux only moves from 6 px to 8. The
-tests reproduce the collapse with a proxy style carrying macOS-like insets: −4 px for the grid as
-first pushed, 8 now. The two positions screenshots were retaken once more for it, which also
-showed the fix holding on a real Mac, and `import.png` with the window active.
-
-No API change, so a host needs no edit. Released as 0.6.1: a patch, since it fixes layout and
-changes no behavior a host or a test outside these windows can see.
+The positions checkbox/Undo list and the cell-counts table were side-by-side column layouts whose
+rows drifted apart; both are now one `QGridLayout`, and cell counts has a single header row. The
+positions grid adds the style's layout-item insets to its spacing so macOS keeps the Undo gap.
