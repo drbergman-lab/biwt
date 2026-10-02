@@ -2245,3 +2245,11 @@ the compact `sRGB` chunk in one pass, dropping 7–10 KB each. That leaves the s
 three step captures already carried — `IHDR sRGB eXIf pHYs iTXt IDAT IEND` — so the set is
 uniform for the first time: `import.png` had been the one file still tagged P3. No ICC profile is
 written, so the littleCMS wall-clock trap noted above does not apply to this route.
+
+---
+
+## 2026-10-01: cell-type rows share one grid row (v0.6.1)
+
+The positions checkbox/Undo list and the cell-counts table were side-by-side column layouts whose
+rows drifted apart; both are now one `QGridLayout`, and cell counts has a single header row. The
+positions grid adds the style's layout-item insets to its spacing so macOS keeps the Undo gap.

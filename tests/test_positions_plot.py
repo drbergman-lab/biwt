@@ -16,7 +16,7 @@ import pytest
 from pathlib import Path
 
 from biwt.core.positioning import compute_spatial_placement
-from biwt.gui.windows.positions import PositionsWindow
+from biwt.gui.windows.positions import PositionsWindow, _UNDO_GAP, _layout_overhang
 from biwt.types import DomainSpec
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -516,3 +516,91 @@ class TestBuildingOnAnAsymmetricDomain:
         x0, y0, w, h = win._default_rectangle_pars()
         assert (x0, y0) == win._default_center()
         assert (w, h) == win._default_wh(win._default_center())[:2]
+
+
+class TestCellTypeRowsLineUp:
+    """Each cell type's Undo button sits on its checkbox's row.
+
+    Reported from a real run with 22 cell types: the checkboxes and the Undo
+    buttons were two independent column layouts, and the button, a couple of px
+    taller than the checkbox, drifted further off its type with every row — most
+    of a row out by the bottom of the list.
+    """
+
+    N_TYPES = 22
+
+    @pytest.fixture
+    def make_win(self, qapp, tmp_path):
+        from helpers import window_at_rename
+
+        csv = tmp_path / "many_types.csv"
+        csv.write_text("type\n" + "\n".join(
+            str(i % self.N_TYPES) for i in range(10 * self.N_TYPES)) + "\n")
+
+        def _make():
+            # An absolute path replaces the fixtures directory it is joined onto.
+            win = PositionsWindow(window_at_rename(str(csv)))
+            win.resize(1600, 1200)
+            win.show()
+            qapp.processEvents()
+            return win
+
+        return _make
+
+    @pytest.fixture
+    def win(self, make_win):
+        return make_win()
+
+    @staticmethod
+    def _offsets(win) -> dict:
+        def mid_y(w):
+            return w.mapTo(win, w.rect().center()).y()
+
+        return {ct: mid_y(cb) - mid_y(win.undo_button[ct])
+                for ct, cb in win.checkbox_dict.items()}
+
+    @staticmethod
+    def _gaps(win) -> dict:
+        """Visible px from each checkbox's right edge to its Undo button."""
+        from PyQt5.QtCore import QPoint
+
+        return {ct: win.undo_button[ct].mapTo(win, QPoint(0, 0)).x()
+                - cb.mapTo(win, QPoint(cb.width(), 0)).x()
+                for ct, cb in win.checkbox_dict.items()}
+
+    def test_every_type_has_a_row(self, win):
+        assert len(win.checkbox_dict) == self.N_TYPES
+
+    def test_each_undo_button_shares_its_checkbox_row(self, win):
+        offsets = self._offsets(win)
+        assert all(abs(dy) <= 1 for dy in offsets.values()), offsets
+
+    def test_a_gap_separates_each_checkbox_from_its_undo_button(self, win):
+        assert set(self._gaps(win).values()) == {_UNDO_GAP}
+
+    def test_the_gap_survives_a_style_that_insets_layout_rects(self, qapp, make_win):
+        """macOS spaces push buttons and checkboxes by layout-item rects inset
+        from the widget rect. Both are stylesheet-painted to the full widget rect,
+        so uncorrected, the insets ate the gap and the checkbox's gray band ran
+        into its Undo button. This style insets them the same way."""
+        from PyQt5.QtWidgets import QApplication, QProxyStyle, QStyle
+
+        class _InsetStyle(QProxyStyle):
+            def subElementRect(self, element, opt, widget=None):
+                if element == QStyle.SE_PushButtonLayoutItem:
+                    return opt.rect.adjusted(7, 3, -7, -4)
+                if element == QStyle.SE_CheckBoxLayoutItem:
+                    return opt.rect.adjusted(2, 2, -3, -2)
+                return super().subElementRect(element, opt, widget)
+
+        original = qapp.style().objectName()
+        QApplication.setStyle(_InsetStyle(original))
+        try:
+            win = make_win()
+            btn = next(iter(win.undo_button.values()))
+            # Guard the premise: the insets reach the stylesheet-painted button.
+            assert _layout_overhang(btn, QStyle.SE_PushButtonLayoutItem) == (7, 7)
+            assert set(self._gaps(win).values()) == {_UNDO_GAP}
+            assert all(abs(dy) <= 1 for dy in self._offsets(win).values())
+        finally:
+            QApplication.setStyle(original)

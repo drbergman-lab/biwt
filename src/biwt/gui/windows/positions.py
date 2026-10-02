@@ -16,7 +16,7 @@ from PyQt5 import QtCore, QtGui
 from PyQt5.QtWidgets import (
     QApplication, QDialog, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QScrollArea, QButtonGroup, QGridLayout,
-    QSplitter, QSpinBox, QMessageBox, QShortcut,
+    QSplitter, QSpinBox, QMessageBox, QShortcut, QStyle, QStyleOptionButton,
 )
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QIcon, QKeySequence
@@ -29,6 +29,9 @@ from biwt.core.domain import classify_domain_mismatch
 from biwt.core.positioning import apportion_spot_cells, compute_spatial_placement
 from biwt.gui.walkthrough import DomainEditorDialog, _build_mismatch_message, _scale_domain
 from biwt.types import DomainSource
+
+# Visible px between a cell type's checkbox and its Undo button.
+_UNDO_GAP = 8
 
 
 # ---------------------------------------------------------------------------
@@ -343,40 +346,50 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
             "Grayed out cell types have already been placed."
         ))
 
-        hbox_mid = QHBoxLayout()
-        vbox_checks = QVBoxLayout()
+        # One grid row per cell type, so a checkbox and its Undo button share a
+        # row. Two side-by-side columns size their rows independently, and the
+        # button being a few px taller than the checkbox compounds down the list.
+        grid = QGridLayout()
 
         self.cell_type_button_group = QButtonGroup(exclusive=False)
         self.cell_type_button_group.buttonClicked.connect(self._cell_type_cb)
 
+        _undo_style = (
+            "QPushButton:enabled  { background-color: yellow; }"
+            "QPushButton:disabled { background-color: gray; }"
+        )
         self.checkbox_dict: dict[str, QCheckBox_custom] = {}
-        for ct in s.cell_types_list_final:
+        self.undo_button: dict[str, QPushButton] = {}
+        for row, ct in enumerate(s.cell_types_list_final):
             cb = QCheckBox_custom("")
             set_elided_text(cb, ct)
             placeable = self._is_placeable(ct)
             # Pre-select all when the spatial plotter is the default.
             cb.setChecked(s.use_spatial_data and placeable)
             cb.setEnabled(placeable)
-            vbox_checks.addWidget(cb)
+            grid.addWidget(cb, row, 0, alignment=Qt.AlignVCenter)
             self.cell_type_button_group.addButton(cb)
             self.checkbox_dict[ct] = cb
 
-        _undo_style = (
-            "QPushButton:enabled  { background-color: yellow; }"
-            "QPushButton:disabled { background-color: gray; }"
-        )
-        vbox_undos = QVBoxLayout()
-        self.undo_button: dict[str, QPushButton] = {}
-        for ct in s.cell_types_list_final:
             btn = QPushButton("Undo", enabled=False, objectName=ct)
             btn.setStyleSheet(_undo_style)
             btn.clicked.connect(self._undo_button_cb)
+            grid.addWidget(btn, row, 1)
             self.undo_button[ct] = btn
-            vbox_undos.addWidget(btn)
 
-        hbox_mid.addLayout(vbox_checks)
-        hbox_mid.addLayout(vbox_undos)
-        vbox.addLayout(hbox_mid)
+        if self.checkbox_dict:
+            # The layout spaces each widget's layout-item rect, which macOS insets
+            # from the widget rect. Both widgets here are stylesheet-painted to the
+            # full widget rect, so the insets came out of the gap and the gray band
+            # ran into the Undo button. Add them back so the visible gap is the same
+            # in every style.
+            grid.setHorizontalSpacing(
+                _UNDO_GAP
+                + _layout_overhang(cb, QStyle.SE_CheckBoxLayoutItem)[1]
+                + _layout_overhang(btn, QStyle.SE_PushButtonLayoutItem)[0]
+            )
+
+        vbox.addLayout(grid)
 
         _btn_style = (
             "QPushButton:enabled  { background-color: lightgreen; }"
@@ -2381,6 +2394,22 @@ class PositionsWindow(BiwinformaticsWalkthroughWindow):
 # ---------------------------------------------------------------------------
 # Module-level geometry helpers (standalone functions)
 # ---------------------------------------------------------------------------
+
+def _layout_overhang(widget, element) -> tuple[int, int]:
+    """How far *widget* extends past its layout-item rect, as (left, right) px.
+
+    Mirrors ``QWidgetPrivate::setLayoutItemMargins``: the style's *element* rect
+    is the one a layout spaces, and a style that does not inset it returns an
+    invalid rect, meaning no overhang.
+    """
+    opt = QStyleOptionButton()
+    widget.initStyleOption(opt)
+    item = widget.style().subElementRect(element, opt, widget)
+    if not item.isValid():
+        return 0, 0
+    return (max(0, item.left() - opt.rect.left()),
+            max(0, opt.rect.right() - item.right()))
+
 
 def _random_rectangle_3d(x0, y0, z0, w, h, d, N: int) -> np.ndarray:
     return np.concatenate([

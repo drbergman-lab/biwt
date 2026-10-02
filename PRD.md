@@ -485,10 +485,20 @@ chosen by whether the widget's text can wrap:
 A row's `⇒` is a separate widget in its own column rather than a suffix on the label, so it stays
 beside the field it points at instead of drifting to the end of the last wrapped line.
 
+**Alignment.** A cell type's widgets share one layout row: a `QGridLayout` (or one `QHBoxLayout` per
+row), never side-by-side `QVBoxLayout` columns. Columns size their rows independently, so any
+difference in widget height — a checkbox a few px shorter than its button, a label that stretches
+where a field does not, a name that wraps — compounds down the list and puts a name beside another
+type's controls. The positions step's checkbox/Undo list and the cell-counts table are both grids
+for this reason.
+
 **Acceptance criteria:**
 - [x] A 100-character cell-type name leaves every field aligned and the window no wider.
 - [x] Wrapped labels keep every character; elided ones carry the full name in a tooltip.
 - [x] An appended annotation survives clipping, including for code that reads it back.
+- [x] With 22 cell types, every Undo button at the positions step is centred on its own checkbox.
+- [x] Every cell-counts name is centred on its own four fields, including below a name wrapped onto
+  several lines.
 
 ---
 

@@ -3,8 +3,9 @@
 from __future__ import annotations
 import numpy as np
 from PyQt5 import QtGui
+from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
-    QVBoxLayout, QHBoxLayout, QLabel, QScrollArea, QWidget,
+    QVBoxLayout, QGridLayout, QLabel, QScrollArea, QWidget,
     QButtonGroup, QRadioButton, QMessageBox,
 )
 from biwt.gui.windows.base import BiwinformaticsWalkthroughWindow
@@ -57,29 +58,35 @@ class CellCountsWindow(BiwinformaticsWalkthroughWindow):
         int_validator = QtGui.QIntValidator()
         int_validator.setBottom(0)
 
-        # Column header row
-        cols = [QVBoxLayout() for _ in range(5)]
-        for c, lbl in zip(cols, ["Cell Type", "Count", "Proportion", "Confluence (%)", "Manual"]):
-            header = QLabel(lbl)
-            header.setFixedWidth(list(self._COL_W.values())[list(self._COL_W.keys()).index(
-                ["name", "count", "prop", "conf", "manual"][cols.index(c)])])
-            cols[cols.index(c)].addWidget(header)
+        # One grid, so a cell type's name and its fields share a row.  Five
+        # side-by-side column layouts sized their rows independently: the name
+        # labels stretched while the fields did not, and a wrapped name only grew
+        # its own column, so names drifted off their numbers.
+        grid = QGridLayout()
 
-        # Radio buttons
+        def put(row: int, col: int, w) -> None:
+            # Odd grid columns hold the dividers.  A label fills its cell and
+            # centres its own text; anything else is centred in the row too.
+            align = Qt.Alignment() if isinstance(w, QLabel) else Qt.AlignLeft | Qt.AlignVCenter
+            grid.addWidget(w, row, 2 * col, alignment=align)
+
+        # Header row: the mode radio buttons name their own columns.
+        name_header = QLabel("Cell Type")
+        name_header.setFixedWidth(self._COL_W["name"])
+        put(0, 0, name_header)
+
         self._mode_group = QButtonGroup()
         self._rb_counts     = QRadioButton("Use counts");      self._rb_counts.setChecked(True)
         self._rb_props      = QRadioButton("Use proportions")
         self._rb_confluence = QRadioButton("Set confluence (%)")
         self._rb_manual     = QRadioButton("Set manually")
-        for i, rb in enumerate([self._rb_counts, self._rb_props, self._rb_confluence, self._rb_manual]):
+        radios = [self._rb_counts, self._rb_props, self._rb_confluence, self._rb_manual]
+        for i, rb in enumerate(radios):
             self._mode_group.addButton(rb, i)
         self._mode_group.idToggled.connect(self._mode_changed)
 
-        cols[0].addWidget(QLabel(""))  # spacer under "Cell Type"
-        cols[1].addWidget(self._rb_counts)
-        cols[2].addWidget(self._rb_props)
-        cols[3].addWidget(self._rb_confluence)
-        cols[4].addWidget(self._rb_manual)
+        for col, rb in enumerate(radios, start=1):
+            put(0, col, rb)
 
         # Per-type row widgets
         self._w_count:      dict[str, QLineEdit_custom] = {}
@@ -88,7 +95,8 @@ class CellCountsWindow(BiwinformaticsWalkthroughWindow):
         self._w_manual:     dict[str, QLineEdit_custom] = {}
 
         for idx, ct in enumerate(self._cell_types):
-            cols[0].addWidget(row_label(ct))
+            row = 1 + idx
+            put(row, 0, row_label(ct))
 
             wc = QLineEdit_custom(enabled=False)
             wc.setText(str(s.cell_counts[ct]))
@@ -119,15 +127,16 @@ class CellCountsWindow(BiwinformaticsWalkthroughWindow):
             wm.textEdited.connect(self._manual_edited)
             self._w_manual[ct] = wm
 
-            for col, w in zip(cols[1:], [wc, wp, wconf, wm]):
-                col.addWidget(w)
+            for col, w in enumerate([wc, wp, wconf, wm], start=1):
+                put(row, col, w)
 
         # Total row
-        cols[0].addWidget(QLabel("Total"))
+        total_row = 1 + len(self._cell_types)
+        put(total_row, 0, QLabel("Total"))
         wc_total = QLineEdit_custom(enabled=False)
         wc_total.setText(str(n_cells))
         wc_total.setFixedWidth(self._COL_W["count"])
-        cols[1].addWidget(wc_total)
+        put(total_row, 1, wc_total)
 
         self._total_prop = QLineEdit_custom(enabled=False)
         self._total_prop.setText(str(n_cells_total))
@@ -135,7 +144,7 @@ class CellCountsWindow(BiwinformaticsWalkthroughWindow):
         self._total_prop.setValidator(int_validator)
         self._total_prop.setObjectName("total_prop")
         self._total_prop.textEdited.connect(self._prop_edited)
-        cols[2].addWidget(self._total_prop)
+        put(total_row, 2, self._total_prop)
 
         self._total_conf = QLineEdit_custom(enabled=False)
         self._total_conf.setObjectName("total_conf")
@@ -144,21 +153,18 @@ class CellCountsWindow(BiwinformaticsWalkthroughWindow):
         self._total_conf.textEdited.connect(self._conf_edited)
         self._total_conf.set_formatter(ndigits=2)
         self._total_conf.setText("100")
-        cols[3].addWidget(self._total_conf)
+        put(total_row, 3, self._total_conf)
 
         self._total_manual = QLineEdit_custom(enabled=False)
         self._total_manual.setText(str(n_cells_total))
         self._total_manual.setFixedWidth(self._COL_W["manual"])
-        cols[4].addWidget(self._total_manual)
+        put(total_row, 4, self._total_manual)
 
         self._update_confluence_from_counts()  # initialize confluence values from counts
 
-        hbox_cols = QHBoxLayout()
-        for i, c in enumerate(cols):
-            hbox_cols.addLayout(c)
-            if i < len(cols) - 1:
-                hbox_cols.addWidget(QVLine())
-        vbox.addLayout(hbox_cols)
+        for col in range(len(self._COL_W) - 1):
+            grid.addWidget(QVLine(), 0, 2 * col + 1, total_row + 1, 1)
+        vbox.addLayout(grid)
 
         # Scroll if many cell types
         if len(self._cell_types) > 8:
