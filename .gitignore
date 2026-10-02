@@ -40,9 +40,11 @@ site/
 # Social-card renderer cache (fonts, rendered cards)
 .cache/
 
-# Generated documentation-screenshot data (see scripts/make_screenshot_data.py)
+# Generated documentation-screenshot data (see scripts/make_screenshot_data.py),
+# including the template libraries it writes beside the .h5ad
 screenshot_data.h5ad
 screenshot_deconv.h5ad
+screenshot_templates_*.toml
 
 # Handoff note for the PhysiCell Studio session — an artifact of the 0.5 API
 # change, not documentation. See docs/integration/ for the durable host guide.
